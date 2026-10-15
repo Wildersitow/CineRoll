@@ -1,11 +1,36 @@
 from collections.abc import Iterable, Mapping
 from datetime import date, datetime, time
+import unicodedata
 import re
 from typing import TypedDict
 from zoneinfo import ZoneInfo
 
+from media.models import Media
+
 
 COLOMBIA_TIMEZONE = ZoneInfo("America/Bogota")
+TITLE_QUALIFIERS = {
+    "2d",
+    "3d",
+    "4dx",
+    "atmos",
+    "dob",
+    "doblada",
+    "doblado",
+    "dublado",
+    "dublada",
+    "espanol",
+    "castellano",
+    "hd",
+    "imax",
+    "lat",
+    "latino",
+    "sub",
+    "subtitulada",
+    "subtitulado",
+    "vose",
+    "xd",
+}
 
 
 class NormalizedShowtime(TypedDict):
@@ -19,6 +44,36 @@ class NormalizedShowtime(TypedDict):
     fuente_scraping: str
     cine_id_origen: str
     funcion_id_origen: str
+
+
+def normalize_title(title: str) -> str:
+    """Normalize title accents, punctuation, and exhibition-format suffixes."""
+    decomposed = unicodedata.normalize("NFKD", title.casefold())
+    without_accents = "".join(
+        character for character in decomposed if not unicodedata.combining(character)
+    )
+    tokens = re.findall(r"[a-z0-9]+", without_accents)
+    while tokens and tokens[-1] in TITLE_QUALIFIERS:
+        tokens.pop()
+    return " ".join(tokens)
+
+
+def match_media_title(title: str, catalog: Iterable[Media] | None = None) -> Media | None:
+    """Return a unique movie matching title/original title, or None if uncertain."""
+    normalized = normalize_title(title)
+    if not normalized:
+        return None
+
+    movies = catalog if catalog is not None else Media.objects.filter(tipo=Media.Tipo.PELICULA)
+    matches: dict[int, Media] = {}
+    for movie in movies:
+        candidates = (movie.titulo, movie.titulo_original)
+        if any(value and normalize_title(value) == normalized for value in candidates):
+            matches[movie.pk] = movie
+
+    if len(matches) != 1:
+        return None
+    return next(iter(matches.values()))
 
 
 def normalize_showtimes(

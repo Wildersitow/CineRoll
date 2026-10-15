@@ -25,3 +25,19 @@ abrir cada cartelera en un navegador con acceso, seleccionar ciudad cuando
 corresponda y registrar en Network la URL, método, parámetros, respuesta y
 requisitos de sesión de las solicitudes que contienen las funciones. Mantener
 las consultas manuales y espaciadas.
+
+## Importar cartelera de Cinemark manualmente
+
+Desde `backend`, ejecutar:
+
+```powershell
+python manage.py migrate
+python manage.py scrape_cartelera --cine cinemark --ciudad bogota
+```
+
+El comando guarda únicamente las funciones cuyo título coincide de forma
+inequívoca con una película del catálogo. Los títulos sin coincidencia (o con
+coincidencias ambiguas) quedan en `TituloPendiente` para revisión; no se crean
+fichas ficticias. Las ejecuciones posteriores actualizan las funciones
+existentes en vez de duplicarlas. Se puede consultar otra ciudad pasando su slug
+de Cinemark en `--ciudad`.
