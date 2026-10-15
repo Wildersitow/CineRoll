@@ -62,13 +62,6 @@ class CatalogApiTests(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(response.data["results"][0]["nombre"], "Drama")
 
-    def test_media_list_does_not_allow_writes(self):
-        response = self.client.post(
-            reverse("media-list"), {"titulo": "No permitido"}
-        )
-
-        self.assertEqual(response.status_code, status.HTTP_405_METHOD_NOT_ALLOWED)
-
     def test_media_list_requires_staff_for_write_requests(self):
         url = reverse("media-list")
         data = {"titulo": "No permitido", "tipo": Media.Tipo.PELICULA}
