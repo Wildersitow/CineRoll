@@ -1,35 +1,23 @@
 import json
 import re
-from datetime import datetime
-from typing import TypedDict
 from urllib.error import URLError
 from urllib.request import Request, urlopen
-from zoneinfo import ZoneInfo
+
+from cines.services import NormalizedShowtime, normalize_showtimes
 
 
 CINEMARK_CARTELERA_URL = "https://www.cinemark.com.co/cartelera"
 USER_AGENT = "CineRoll cartelera scraper/0.1 (development project)"
-COLOMBIA_TIMEZONE = ZoneInfo("America/Bogota")
 MAX_RESPONSE_BYTES = 8 * 1024 * 1024
-
-
-class ScrapedShowtime(TypedDict):
-    titulo: str
-    cine: str
-    ciudad: str
-    fecha_hora: datetime
-    sala: str
-    formato: str
-    fuente_scraping: str
-    cine_id_origen: str
-    funcion_id_origen: str
 
 
 class CinemarkScraperError(RuntimeError):
     """Raised when Cinemark's cartelera cannot be fetched or parsed."""
 
 
-def scrape_cartelera(city_slug: str = "bogota", timeout: float = 20.0) -> list[ScrapedShowtime]:
+def scrape_cartelera(
+    city_slug: str = "bogota", timeout: float = 20.0
+) -> list[NormalizedShowtime]:
     """Fetch one city's server-rendered Cinemark cartelera and extract showtimes."""
     city_slug = city_slug.strip().lower()
     if not re.fullmatch(r"[a-z0-9-]+", city_slug):
@@ -67,7 +55,7 @@ def parse_cartelera_page(
     html: str,
     city_slug: str,
     source_url: str,
-) -> list[ScrapedShowtime]:
+) -> list[NormalizedShowtime]:
     """Parse the __NEXT_DATA__ JSON embedded in Cinemark's cartelera HTML."""
     next_data = re.search(
         r'<script\b[^>]*\bid=["\']__NEXT_DATA__["\'][^>]*>(.*?)</script>',
@@ -92,7 +80,7 @@ def parse_cartelera_page(
             f"Cinemark no devolvió datos para la ciudad solicitada: {city_slug}."
         )
 
-    showtimes: list[ScrapedShowtime] = []
+    showtimes: list[dict[str, object]] = []
     for section in ("PremieresBillboard", "Presales"):
         movies = page_props.get(section, [])
         if not isinstance(movies, list):
@@ -129,7 +117,10 @@ def parse_cartelera_page(
                     )
                 )
 
-    return showtimes
+    try:
+        return normalize_showtimes(showtimes)
+    except ValueError as exc:
+        raise CinemarkScraperError(f"No se pudo normalizar la cartelera: {exc}") from exc
 
 
 def _parse_session(
@@ -140,7 +131,7 @@ def _parse_session(
     cinema_id: str,
     city_slug: str,
     source_url: str,
-) -> ScrapedShowtime:
+) -> dict[str, object]:
     if not isinstance(session, dict):
         raise CinemarkScraperError(f"Se encontró una función inválida para {title}.")
 
@@ -152,38 +143,17 @@ def _parse_session(
             f"Cinemark devolvió datos incompletos o inconsistentes para {title}."
         )
 
-    try:
-        showtime = datetime.fromisoformat(raw_showtime)
-    except (TypeError, ValueError) as exc:
-        raise CinemarkScraperError(
-            f"La fecha de una función de {title} no está en formato ISO."
-        ) from exc
-    if showtime.tzinfo is None:
-        showtime = showtime.replace(tzinfo=COLOMBIA_TIMEZONE)
-    else:
-        showtime = showtime.astimezone(COLOMBIA_TIMEZONE)
-
     attributes = session.get("Attributes", [])
     if not isinstance(attributes, list):
         raise CinemarkScraperError(f"El formato de la función de {title} no es válido.")
-    format_parts = list(
-        dict.fromkeys(
-            attribute["Description"].strip()
-            for attribute in attributes
-            if isinstance(attribute, dict)
-            and isinstance(attribute.get("Description"), str)
-            and attribute["Description"].strip()
-        )
-    )
-
     screen_name = session.get("ScreenName") or session.get("ScreenNumber") or ""
     return {
         "titulo": title.strip(),
         "cine": cinema_name.strip(),
         "ciudad": city_slug,
-        "fecha_hora": showtime,
+        "fecha_hora": raw_showtime,
         "sala": str(screen_name).strip(),
-        "formato": ", ".join(format_parts),
+        "formato": attributes,
         "fuente_scraping": source_url,
         "cine_id_origen": cinema_id,
         "funcion_id_origen": str(session_id),

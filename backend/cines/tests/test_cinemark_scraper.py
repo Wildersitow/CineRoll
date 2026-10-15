@@ -1,5 +1,5 @@
 import json
-from datetime import datetime
+from datetime import date, time
 from unittest import TestCase
 from zoneinfo import ZoneInfo
 
@@ -57,14 +57,8 @@ class CinemarkScraperTests(TestCase):
                 "titulo": "Película",
                 "cine": "Cinemark Gran Plaza",
                 "ciudad": "bogota",
-                "fecha_hora": datetime(
-                    2026,
-                    10,
-                    15,
-                    19,
-                    30,
-                    tzinfo=ZoneInfo("America/Bogota"),
-                ),
+                "fecha": date(2026, 10, 15),
+                "hora": time(19, 30, tzinfo=ZoneInfo("America/Bogota")),
                 "sala": "Sala 3",
                 "formato": "2D, Doblada",
                 "fuente_scraping": source_url,
