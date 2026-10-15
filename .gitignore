@@ -1,19 +1,9 @@
-desktop.ini
-.DS_Store
-
-# Local environments and secrets
-.env
-.venv/
 venv/
-backend/.env
-backend/venv/
-
-# Local databases and generated Python files
-*.sqlite3
-*.db
+.venv/
+.env
 __pycache__/
-*.py[cod]
-
-# Frontend dependencies and build output
-frontend/node_modules/
-frontend/dist/
+*.pyc
+db.sqlite3
+.idea/
+.vscode/yo
+CineRoll Responsabilidades.pdf
