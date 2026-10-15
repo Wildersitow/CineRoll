@@ -5,4 +5,4 @@ __pycache__/
 *.pyc
 db.sqlite3
 .idea/
-.vscode/
+.vscode/yo
