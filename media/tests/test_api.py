@@ -1,3 +1,5 @@
+from datetime import date
+
 from django.urls import reverse
 from rest_framework import status
 from rest_framework.test import APITestCase
@@ -62,3 +64,54 @@ class CatalogApiTests(APITestCase):
         )
 
         self.assertEqual(response.status_code, status.HTTP_405_METHOD_NOT_ALLOWED)
+
+    def test_search_matches_title_original_and_synopsis(self):
+        response = self.client.get(reverse("media-list"), {"search": "TEST"})
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["count"], 1)
+        self.assertEqual(response.data["results"][0]["id"], self.media.pk)
+
+    def test_filters_can_be_combined_and_genre_ignores_accents(self):
+        genero = Genero.objects.create(nombre="Acción")
+        media = Media.objects.create(
+            titulo="Acción de prueba",
+            titulo_original="Action test",
+            tipo=Media.Tipo.PELICULA,
+            fecha_estreno=date(2025, 5, 2),
+            estado=Media.Estado.EN_CARTELERA,
+        )
+        media.generos.add(genero)
+
+        response = self.client.get(
+            reverse("media-list"),
+            {
+                "genero": "accion",
+                "tipo": "pelicula",
+                "anio": "2025",
+                "estado": "en_cartelera",
+            },
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["count"], 1)
+        self.assertEqual(response.data["results"][0]["id"], media.pk)
+
+    def test_media_list_uses_configured_pagination(self):
+        for index in range(21):
+            Media.objects.create(
+                titulo=f"Ficha adicional {index:02}",
+                tipo=Media.Tipo.PELICULA,
+            )
+
+        first_page = self.client.get(reverse("media-list"))
+        second_page = self.client.get(reverse("media-list"), {"page": 2})
+
+        self.assertEqual(first_page.data["count"], 22)
+        self.assertEqual(len(first_page.data["results"]), 20)
+        self.assertEqual(len(second_page.data["results"]), 2)
+
+    def test_invalid_year_returns_bad_request(self):
+        response = self.client.get(reverse("media-list"), {"anio": "dosmil"})
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
