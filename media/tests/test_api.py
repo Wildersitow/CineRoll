@@ -5,6 +5,7 @@ from rest_framework import status
 from rest_framework.test import APITestCase
 
 from media.models import Credito, Genero, Media, Persona
+from usuarios.models import Usuario
 
 
 class CatalogApiTests(APITestCase):
@@ -46,6 +47,9 @@ class CatalogApiTests(APITestCase):
         )
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["id"], self.media.pk)
+        self.assertEqual(response.data["titulo"], "Ficha de prueba")
+        self.assertEqual(response.data["titulo_original"], "Test title")
         self.assertEqual(response.data["generos"][0]["nombre"], "Drama")
         self.assertEqual(response.data["reparto"][0]["nombre"], "Actor de prueba")
         self.assertEqual(
@@ -64,6 +68,33 @@ class CatalogApiTests(APITestCase):
         )
 
         self.assertEqual(response.status_code, status.HTTP_405_METHOD_NOT_ALLOWED)
+
+    def test_media_list_requires_staff_for_write_requests(self):
+        url = reverse("media-list")
+        data = {"titulo": "No permitido", "tipo": Media.Tipo.PELICULA}
+
+        anonymous_response = self.client.post(url, data)
+        self.assertEqual(
+            anonymous_response.status_code, status.HTTP_401_UNAUTHORIZED
+        )
+
+        regular_user = Usuario.objects.create_user(
+            username="lector", password="test-password"
+        )
+        self.client.force_authenticate(user=regular_user)
+        user_response = self.client.post(url, data)
+        self.assertEqual(user_response.status_code, status.HTTP_403_FORBIDDEN)
+
+        admin_user = Usuario.objects.create_user(
+            username="admin-catalogo",
+            password="test-password",
+            is_staff=True,
+        )
+        self.client.force_authenticate(user=admin_user)
+        admin_response = self.client.post(url, data)
+        self.assertEqual(
+            admin_response.status_code, status.HTTP_405_METHOD_NOT_ALLOWED
+        )
 
     def test_search_matches_title_original_and_synopsis(self):
         response = self.client.get(reverse("media-list"), {"search": "TEST"})
@@ -96,6 +127,35 @@ class CatalogApiTests(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(response.data["count"], 1)
         self.assertEqual(response.data["results"][0]["id"], media.pk)
+
+    def test_each_catalog_filter_selects_matching_media(self):
+        genero = Genero.objects.create(nombre="Comedia")
+        target = Media.objects.create(
+            titulo="Serie filtrable",
+            tipo=Media.Tipo.SERIE,
+            fecha_estreno=date(2024, 7, 12),
+            estado=Media.Estado.EN_CARTELERA,
+        )
+        target.generos.add(genero)
+        Media.objects.create(
+            titulo="Anime alternativo",
+            tipo=Media.Tipo.ANIME,
+            fecha_estreno=date(2023, 4, 1),
+            estado=Media.Estado.FUERA_CARTELERA,
+        )
+
+        for filter_params in (
+            {"genero": "Comedia"},
+            {"tipo": Media.Tipo.SERIE},
+            {"anio": "2024"},
+            {"estado": Media.Estado.EN_CARTELERA},
+        ):
+            with self.subTest(filter=filter_params):
+                response = self.client.get(reverse("media-list"), filter_params)
+
+                self.assertEqual(response.status_code, status.HTTP_200_OK)
+                self.assertEqual(response.data["count"], 1)
+                self.assertEqual(response.data["results"][0]["id"], target.pk)
 
     def test_media_list_uses_configured_pagination(self):
         for index in range(21):
