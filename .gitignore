@@ -1,0 +1,19 @@
+desktop.ini
+.DS_Store
+
+# Local environments and secrets
+.env
+.venv/
+venv/
+backend/.env
+backend/venv/
+
+# Local databases and generated Python files
+*.sqlite3
+*.db
+__pycache__/
+*.py[cod]
+
+# Frontend dependencies and build output
+frontend/node_modules/
+frontend/dist/
