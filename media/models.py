@@ -19,10 +19,24 @@ class Media(models.Model):
 		SERIE = "serie", "Serie"
 		ANIME = "anime", "Anime"
 
+	class Estado(models.TextChoices):
+		EN_CARTELERA = "en_cartelera", "En cartelera"
+		PROXIMO_ESTRENO = "proximo_estreno", "Próximo estreno"
+		FUERA_CARTELERA = "fuera_cartelera", "Fuera de cartelera"
+
 	titulo = models.CharField(max_length=200)
+	titulo_original = models.CharField(max_length=200, blank=True)
 	tipo = models.CharField(max_length=10, choices=Tipo.choices)
 	sinopsis = models.TextField(blank=True)
 	fecha_estreno = models.DateField(blank=True, null=True)
+	duracion = models.PositiveSmallIntegerField(blank=True, null=True)
+	poster_url = models.URLField(blank=True)
+	trailer_url = models.URLField(blank=True)
+	estado = models.CharField(
+		max_length=20,
+		choices=Estado.choices,
+		default=Estado.PROXIMO_ESTRENO,
+	)
 	generos = models.ManyToManyField(Genero, related_name="medias", blank=True)
 	personas = models.ManyToManyField(
 		"Persona", through="Credito", related_name="medias", blank=True
