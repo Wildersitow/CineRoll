@@ -41,3 +41,13 @@ coincidencias ambiguas) quedan en `TituloPendiente` para revisión; no se crean
 fichas ficticias. Las ejecuciones posteriores actualizan las funciones
 existentes en vez de duplicarlas. Se puede consultar otra ciudad pasando su slug
 de Cinemark en `--ciudad`.
+
+## Endpoints de lectura
+
+- `GET /api/cines/` devuelve el catálogo paginado de cines.
+- `GET /api/media/<id>/funciones/` devuelve funciones con la hora, la sala, el
+  formato y la información del cine, junto con `ultima_actualizacion`.
+- Se puede filtrar con `?cine=<id>&fecha=AAAA-MM-DD`. La fecha filtra las
+  funciones; `ultima_actualizacion` representa la última actualización del
+  conjunto de funciones de esa película y, si se especifica, ese cine. Cuando no
+  existen funciones para la película (o cine) es `null`.
