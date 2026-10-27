@@ -1,22 +1,31 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import './App.css'
+import { loginUser, getCurrentUser, clearStoredAuth, getStoredAuth } from './services/api'
 
 
 export default function App() {
-  const [currentUser, setCurrentUser] = useState(() => {
-    try {
-      const saved = localStorage.getItem('cineroll_auth')
-      return saved ? JSON.parse(saved) : null
-    } catch {
-      return null
-    }
-  })
+  const [currentUser, setCurrentUser] = useState(() => getStoredAuth())
   const [activeTab, setActiveTab] = useState('login') // 'login' | 'register'
   const [showPassword, setShowPassword] = useState(false)
   const [showConfirmPassword, setShowConfirmPassword] = useState(false)
   const [demoNotice, setDemoNotice] = useState('')
   const [authError, setAuthError] = useState('')
   const [isLoading, setIsLoading] = useState(false)
+
+  // Validar sesión activa al cargar la app
+  useEffect(() => {
+    if (currentUser?.token) {
+      getCurrentUser()
+        .then((userData) => {
+          setCurrentUser((prev) => ({ ...prev, ...userData }))
+        })
+        .catch(() => {
+          // Token expirado o revocado
+          setCurrentUser(null)
+          clearStoredAuth()
+        })
+    }
+  }, [])
 
   // Form states
   const [loginEmail, setLoginEmail] = useState('')
@@ -45,33 +54,12 @@ export default function App() {
     setAuthError('')
 
     try {
-      const response = await fetch('http://localhost:8000/api/usuario/login/', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          usuario: loginEmail,
-          clave: loginPassword
-        })
-      })
-
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => null)
-        throw new Error(errorData?.error || 'Credenciales incorrectas')
-      }
-
-      const data = await response.json()
+      const data = await loginUser(loginEmail, loginPassword)
       setCurrentUser(data)
       setDemoNotice(`¡Bienvenido, ${data.nombre}!`)
       setTimeout(() => setDemoNotice(''), 3500)
-      localStorage.setItem('cineroll_auth', JSON.stringify(data))
     } catch (err) {
-      if (err.message.includes('Failed to fetch') || err.message.includes('NetworkError')) {
-        setAuthError('No se pudo conectar con el servidor Django (puerto 8000). Asegúrate de tener levantado el backend con: python manage.py runserver')
-      } else {
-        setAuthError(err.message || 'Error en las credenciales.')
-      }
+      setAuthError(err.message || 'Error en las credenciales.')
     } finally {
       setIsLoading(false)
     }
@@ -79,7 +67,7 @@ export default function App() {
 
   const handleLogout = () => {
     setCurrentUser(null)
-    localStorage.removeItem('cineroll_auth')
+    clearStoredAuth()
     setDemoNotice('Sesión cerrada')
     setTimeout(() => setDemoNotice(''), 2500)
   }
