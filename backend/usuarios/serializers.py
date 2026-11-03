@@ -19,7 +19,9 @@ class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
     @classmethod
     def get_token(cls, user):
         token = super().get_token(user)
-        token["nombre"] = f"{user.first_name} {user.last_name}".strip() or user.username
+        nombre_completo = f"{user.first_name} {user.last_name}".strip() or user.username
+        token["username"] = user.username
+        token["nombre"] = nombre_completo
         token["email"] = user.email
         return token
 
@@ -27,8 +29,8 @@ class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
         data = super().validate(attrs)
         nombre_completo = f"{self.user.first_name} {self.user.last_name}".strip() or self.user.username
         data["id"] = self.user.id
+        data["username"] = self.user.username
         data["nombre"] = nombre_completo
         data["email"] = self.user.email
-        data["codigo"] = "ABDE456-Lk"
         data["token"] = data["access"]  # Para compatibilidad directa con el frontend
         return data

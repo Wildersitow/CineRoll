@@ -59,21 +59,48 @@ class LoginView(APIView):
                 status=status.HTTP_403_FORBIDDEN,
             )
 
-        # Generar tokens con SimpleJWT
-        refresh = RefreshToken.for_user(user)
-        access_token = str(refresh.access_token)
-
         nombre_completo = f"{user.first_name} {user.last_name}".strip() or user.username
+
+        # Generar tokens con SimpleJWT usando claims personalizados
+        refresh = CustomTokenObtainPairSerializer.get_token(user)
+        access_token = refresh.access_token
+        access_token["username"] = user.username
+        access_token["nombre"] = nombre_completo
+        access_token["email"] = user.email
 
         return Response(
             {
                 "id": user.id,
+                "username": user.username,
                 "nombre": nombre_completo,
                 "email": user.email,
-                "codigo": "ABDE456-Lk",
-                "token": access_token,
+                "token": str(access_token),
+                "access": str(access_token),
                 "refresh": str(refresh),
             },
             status=status.HTTP_200_OK,
         )
+
+
+class CurrentUserView(APIView):
+    """
+    Endpoint para obtener el perfil del usuario autenticado (/api/usuario/me/).
+    Requiere encabezado: Authorization: Bearer <access_token>
+    """
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        user = request.user
+        nombre_completo = f"{user.first_name} {user.last_name}".strip() or user.username
+        return Response(
+            {
+                "id": user.id,
+                "username": user.username,
+                "nombre": nombre_completo,
+                "email": user.email,
+                "is_staff": user.is_staff,
+            },
+            status=status.HTTP_200_OK,
+        )
+
 

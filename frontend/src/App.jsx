@@ -1,22 +1,31 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import './App.css'
+import { loginUser, getCurrentUser, clearStoredAuth, getStoredAuth } from './services/api'
 
 
 export default function App() {
-  const [currentUser, setCurrentUser] = useState(() => {
-    try {
-      const saved = localStorage.getItem('cineroll_auth')
-      return saved ? JSON.parse(saved) : null
-    } catch {
-      return null
-    }
-  })
+  const [currentUser, setCurrentUser] = useState(() => getStoredAuth())
   const [activeTab, setActiveTab] = useState('login') // 'login' | 'register'
   const [showPassword, setShowPassword] = useState(false)
   const [showConfirmPassword, setShowConfirmPassword] = useState(false)
   const [demoNotice, setDemoNotice] = useState('')
   const [authError, setAuthError] = useState('')
   const [isLoading, setIsLoading] = useState(false)
+
+  // Validar sesión activa al cargar la app
+  useEffect(() => {
+    if (currentUser?.token) {
+      getCurrentUser()
+        .then((userData) => {
+          setCurrentUser((prev) => ({ ...prev, ...userData }))
+        })
+        .catch(() => {
+          // Token expirado o revocado
+          setCurrentUser(null)
+          clearStoredAuth()
+        })
+    }
+  }, [])
 
   // Form states
   const [loginEmail, setLoginEmail] = useState('')
@@ -79,7 +88,7 @@ export default function App() {
 
   const handleLogout = () => {
     setCurrentUser(null)
-    localStorage.removeItem('cineroll_auth')
+    clearStoredAuth()
     setDemoNotice('Sesión cerrada')
     setTimeout(() => setDemoNotice(''), 2500)
   }
