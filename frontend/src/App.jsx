@@ -54,12 +54,33 @@ export default function App() {
     setAuthError('')
 
     try {
-      const data = await loginUser(loginEmail, loginPassword)
+      const response = await fetch('http://localhost:8000/api/usuario/login/', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          usuario: loginEmail,
+          clave: loginPassword
+        })
+      })
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => null)
+        throw new Error(errorData?.error || 'Credenciales incorrectas')
+      }
+
+      const data = await response.json()
       setCurrentUser(data)
       setDemoNotice(`¡Bienvenido, ${data.nombre}!`)
       setTimeout(() => setDemoNotice(''), 3500)
+      localStorage.setItem('cineroll_auth', JSON.stringify(data))
     } catch (err) {
-      setAuthError(err.message || 'Error en las credenciales.')
+      if (err.message.includes('Failed to fetch') || err.message.includes('NetworkError')) {
+        setAuthError('No se pudo conectar con el servidor Django (puerto 8000). Asegúrate de tener levantado el backend con: python manage.py runserver')
+      } else {
+        setAuthError(err.message || 'Error en las credenciales.')
+      }
     } finally {
       setIsLoading(false)
     }
