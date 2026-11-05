@@ -1,6 +1,7 @@
 from rest_framework import serializers
 
 from media.models import Credito, Genero, Media, Persona
+from social.services import resumen_puntuacion
 
 
 class GeneroSerializer(serializers.ModelSerializer):
@@ -17,6 +18,8 @@ class PersonaSerializer(serializers.ModelSerializer):
 
 class MediaListSerializer(serializers.ModelSerializer):
 	generos = GeneroSerializer(many=True, read_only=True)
+	promedio_puntuacion = serializers.SerializerMethodField()
+	total_votos = serializers.SerializerMethodField()
 
 	class Meta:
 		model = Media
@@ -32,7 +35,26 @@ class MediaListSerializer(serializers.ModelSerializer):
 			"tipo",
 			"estado",
 			"generos",
+			"promedio_puntuacion",
+			"total_votos",
 		)
+
+	def get_promedio_puntuacion(self, obj):
+		return self._resumen(obj)["promedio"]
+
+	def get_total_votos(self, obj):
+		return self._resumen(obj)["total_votos"]
+
+	@staticmethod
+	def _resumen(obj):
+		"""Usa las anotaciones de la vista; si no existen, consulta el servicio."""
+		if hasattr(obj, "total_votos") and hasattr(obj, "promedio_puntuacion"):
+			promedio = obj.promedio_puntuacion
+			return {
+				"promedio": None if promedio is None else round(promedio, 2),
+				"total_votos": obj.total_votos,
+			}
+		return resumen_puntuacion(obj.pk)
 
 
 class MediaDetailSerializer(MediaListSerializer):

@@ -11,10 +11,11 @@ from media.serializers import (
 	MediaDetailSerializer,
 	MediaListSerializer,
 )
+from social.services import anotar_puntuacion
 
 
 class MediaListView(ListAPIView):
-	queryset = Media.objects.prefetch_related("generos")
+	queryset = anotar_puntuacion(Media.objects.prefetch_related("generos"))
 	serializer_class = MediaListSerializer
 	permission_classes = (IsAdminOrReadOnly,)
 	filter_backends = (SearchFilter,)
@@ -68,7 +69,9 @@ class MediaListView(ListAPIView):
 
 
 class MediaDetailView(RetrieveAPIView):
-	queryset = Media.objects.prefetch_related("generos", "creditos__persona")
+	queryset = anotar_puntuacion(
+		Media.objects.prefetch_related("generos", "creditos__persona")
+	)
 	serializer_class = MediaDetailSerializer
 	permission_classes = (IsAdminOrReadOnly,)
 
