@@ -59,7 +59,8 @@ class JWTAuthTestCase(APITestCase):
         response = self.client.post(url, {"usuario": self.username, "clave": "WrongPassword"})
 
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertIn("error", response.data)
+        self.assertEqual(response.data["error"]["codigo"], "credenciales_invalidas")
+        self.assertEqual(response.data["error"]["mensaje"], "Credenciales incorrectas.")
 
     def test_token_obtain_pair_endpoint(self):
         """Prueba endpoint estándar /api/token/ con CustomTokenObtainPairSerializer"""

@@ -62,14 +62,14 @@ class RegistroTests(APITestCase):
             with self.subTest(clave=clave):
                 response = self.client.post(self.url, {**self.datos, "password": clave})
                 self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
-                self.assertIn("password", response.data)
+                self.assertIn("password", response.data["error"]["campos"])
         self.assertFalse(Usuario.objects.filter(username="nueva").exists())
 
     def test_rechaza_clave_parecida_al_usuario(self):
         response = self.client.post(self.url, {**self.datos, "password": "nueva2026"})
 
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertIn("password", response.data)
+        self.assertIn("password", response.data["error"]["campos"])
 
     def test_rechaza_usuario_repetido(self):
         Usuario.objects.create_user(username="nueva", email="otra@example.com", password=CLAVE_VALIDA)
@@ -77,7 +77,7 @@ class RegistroTests(APITestCase):
         response = self.client.post(self.url, self.datos)
 
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertIn("username", response.data)
+        self.assertIn("username", response.data["error"]["campos"])
 
     def test_rechaza_correo_repetido_sin_distinguir_mayusculas(self):
         Usuario.objects.create_user(username="otra", email="nueva@example.com", password=CLAVE_VALIDA)
@@ -85,7 +85,7 @@ class RegistroTests(APITestCase):
         response = self.client.post(self.url, self.datos)
 
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertIn("email", response.data)
+        self.assertIn("email", response.data["error"]["campos"])
 
     def test_exige_usuario_correo_valido_y_clave(self):
         for campo in ("username", "email", "password"):
