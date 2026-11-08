@@ -138,7 +138,14 @@ de Cinemark en `--ciudad`.
 
 ## Endpoints de lectura
 
-- `GET /api/cines/` devuelve el catálogo paginado de cines.
+- `GET /api/cines/` devuelve el catálogo paginado de cines. `POST` en esa ruta y
+  `PUT`, `PATCH` o `DELETE /api/cines/<id>/` requieren un usuario administrador
+  (`is_staff`); las lecturas siguen siendo públicas.
+- `GET /api/cines/<id>/funciones/` devuelve la cartelera paginada de ese cine;
+  acepta `?fecha=AAAA-MM-DD`.
+- `GET /api/funciones/` devuelve funciones paginadas y acepta los filtros
+  `?fecha=AAAA-MM-DD&ciudad=<ciudad>`. La ciudad se compara sin distinguir
+  mayúsculas y minúsculas con `Cine.ciudad`.
 - `GET /api/media/<id>/funciones/` devuelve funciones con la hora, la sala, el
   formato y la información del cine, junto con `ultima_actualizacion`.
 - Se puede filtrar con `?cine=<id>&fecha=AAAA-MM-DD`. La fecha filtra las

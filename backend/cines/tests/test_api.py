@@ -1,5 +1,6 @@
 from datetime import datetime, timezone
 
+from django.contrib.auth import get_user_model
 from django.urls import reverse
 from rest_framework import status
 from rest_framework.test import APITestCase
@@ -50,6 +51,90 @@ class CarteleraApiTests(APITestCase):
             {cine["nombre"] for cine in response.data["results"]},
             {"Cine de prueba", "Otro cine"},
         )
+
+    def test_cinema_detail_and_showtimes_are_public(self):
+        response = self.client.get(reverse("cine-detail", kwargs={"pk": self.cine.pk}))
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["id"], self.cine.pk)
+        self.assertEqual(response.data["nombre"], "Cine de prueba")
+
+        response = self.client.get(
+            reverse("cine-funciones", kwargs={"cine_id": self.cine.pk})
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["count"], 1)
+        self.assertEqual(response.data["results"][0]["id"], self.function.pk)
+
+    def test_cinema_showtimes_can_filter_by_date(self):
+        response = self.client.get(
+            reverse("cine-funciones", kwargs={"cine_id": self.other_cine.pk}),
+            {"fecha": "2026-10-15"},
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["results"], [])
+
+    def test_unknown_cinema_showtimes_return_not_found(self):
+        response = self.client.get(
+            reverse("cine-funciones", kwargs={"cine_id": 999999})
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+
+    def test_all_showtimes_can_filter_by_date_and_city(self):
+        response = self.client.get(
+            reverse("funcion-list"),
+            {"fecha": "2026-10-15", "ciudad": "bogotá"},
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["count"], 1)
+        self.assertEqual(response.data["results"][0]["id"], self.function.pk)
+
+    def test_invalid_showtime_filters_return_bad_request(self):
+        invalid_date = self.client.get(reverse("funcion-list"), {"fecha": "tomorrow"})
+        invalid_city = self.client.get(reverse("funcion-list"), {"ciudad": "  "})
+
+        self.assertEqual(invalid_date.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(invalid_city.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_cine_writes_are_forbidden_for_anonymous_and_regular_users(self):
+        url = reverse("cine-list")
+        payload = {"nombre": "Nuevo cine", "ciudad": "Bogotá"}
+
+        anonymous_response = self.client.post(url, payload)
+
+        regular_user = get_user_model().objects.create_user(
+            username="regular", password="test-password"
+        )
+        self.client.force_authenticate(user=regular_user)
+        regular_response = self.client.post(url, payload)
+
+        self.assertEqual(anonymous_response.status_code, status.HTTP_401_UNAUTHORIZED)
+        self.assertEqual(regular_response.status_code, status.HTTP_403_FORBIDDEN)
+        self.assertFalse(Cine.objects.filter(nombre="Nuevo cine").exists())
+
+    def test_staff_user_can_write_cines(self):
+        admin = get_user_model().objects.create_user(
+            username="staff", password="test-password", is_staff=True
+        )
+        self.client.force_authenticate(user=admin)
+
+        create_response = self.client.post(
+            reverse("cine-list"),
+            {"nombre": "Nuevo cine", "ciudad": "Valledupar"},
+        )
+
+        self.assertEqual(create_response.status_code, status.HTTP_201_CREATED)
+        cine_id = create_response.data["id"]
+        update_response = self.client.patch(
+            reverse("cine-detail", kwargs={"pk": cine_id}),
+            {"direccion": "Calle 10"},
+        )
+        self.assertEqual(update_response.status_code, status.HTTP_200_OK)
+        self.assertEqual(update_response.data["direccion"], "Calle 10")
 
     def test_movie_showtimes_are_public_and_include_freshness(self):
         response = self.client.get(
