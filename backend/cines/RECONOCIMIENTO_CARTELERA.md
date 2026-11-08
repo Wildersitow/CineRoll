@@ -152,3 +152,7 @@ de Cinemark en `--ciudad`.
   funciones; `ultima_actualizacion` representa la última actualización del
   conjunto de funciones de esa película y, si se especifica, ese cine. Cuando no
   existen funciones para la película (o cine) es `null`.
+- El listado de catálogo `GET /api/media/?cine=<id>` filtra películas a través
+  de la relación `Media.funciones` → `Funcion.cine`; el identificador debe ser
+  un entero positivo y el resultado no repite películas aunque tengan varias
+  funciones en ese cine.

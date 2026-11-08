@@ -56,6 +56,12 @@ class MediaListView(ListAPIView):
 				raise ValidationError({"estado": "Estado de media no válido."})
 			queryset = queryset.filter(estado=estado)
 
+		cine = params.get("cine")
+		if cine is not None:
+			if not cine.isdecimal() or int(cine) < 1:
+				raise ValidationError({"cine": "Debe ser un identificador de cine válido."})
+			queryset = queryset.filter(funciones__cine_id=int(cine)).distinct()
+
 		return queryset
 
 	@staticmethod
