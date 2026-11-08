@@ -5,6 +5,11 @@ import re
 from typing import TypedDict
 from zoneinfo import ZoneInfo
 
+from django.db import transaction
+from django.db.models import Exists, OuterRef
+from django.utils import timezone
+
+from cines.models import Funcion
 from media.models import Media
 
 
@@ -74,6 +79,31 @@ def match_media_title(title: str, catalog: Iterable[Media] | None = None) -> Med
     if len(matches) != 1:
         return None
     return next(iter(matches.values()))
+
+
+@transaction.atomic
+def cleanup_expired_showtimes(now: datetime | None = None) -> tuple[int, int]:
+    """Delete past showtimes and move movies without future functions off the billboard."""
+    current_time = now or timezone.now()
+    expired_functions = Funcion.objects.filter(fecha_hora__lt=current_time)
+    deleted_count = expired_functions.count()
+    expired_functions.delete()
+
+    media_without_future_showtimes = Media.objects.filter(
+        tipo=Media.Tipo.PELICULA,
+        estado=Media.Estado.EN_CARTELERA,
+    ).filter(
+        ~Exists(
+            Funcion.objects.filter(
+                media_id=OuterRef("pk"),
+                fecha_hora__gte=current_time,
+            )
+        )
+    )
+    moved_off_billboard = media_without_future_showtimes.update(
+        estado=Media.Estado.FUERA_CARTELERA
+    )
+    return deleted_count, moved_off_billboard
 
 
 def normalize_showtimes(

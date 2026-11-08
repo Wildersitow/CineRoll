@@ -12,6 +12,12 @@ de `UpcomingReleases` y actualiza esos campos solo si el título coincide de
 forma única con una película existente; no crea películas nuevas cuando no hay
 coincidencia.
 
+Al final de cada ejecución, el comando elimina globalmente las funciones cuya
+fecha y hora ya pasaron. Una película `EN_CARTELERA` pasa a `FUERA_CARTELERA`
+solo si no le quedan funciones futuras en ningún cine; las películas
+`PROXIMO_ESTRENO` no cambian por esta limpieza. La regla está en
+`cines.services.cleanup_expired_showtimes`, reutilizable por una tarea programada.
+
 | Cine | URL consultada y evidencia | Datos de funciones / endpoint JSON | ¿Playwright? | Dificultad inicial |
 |---|---|---|---|---|
 | Cinemark | [Cartelera por ciudad](https://www.cinemark.com.co/cartelera/bogota) respondió HTTP 200. El HTML de Next.js contiene `__NEXT_DATA__` con `PremieresBillboard` y `Presales`. | La respuesta incrustada incluye título (`TitleAlt`/`Title`), cine (`CinemaName`, `CinemaId`), identificador de función, hora ISO (`Showtime`), sala (`ScreenName`) y formato/idioma (`Attributes`). No se confirmó un endpoint JSON separado: la fuente del scraper es el HTML de cartelera. | No hace falta para la cartelera observada: una petición HTTP entrega los datos renderizados por el servidor. | Baja-media; la página por ciudad ya incluye sesiones. |
@@ -114,6 +120,10 @@ Desde `backend`, ejecutar:
 python manage.py migrate
 python manage.py scrape_cartelera --cine cinemark --ciudad bogota
 ```
+
+Cada ejecución también elimina funciones vencidas y recalcula el estado de
+cartelera según las funciones futuras que queden en todos los cines. Esta
+limpieza es inmediata; no depende de Celery.
 
 El comando guarda únicamente las funciones cuyo título coincide de forma
 inequívoca con una película del catálogo. Los títulos sin coincidencia (o con

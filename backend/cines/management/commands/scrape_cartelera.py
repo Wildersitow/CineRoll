@@ -11,7 +11,12 @@ from cines.scrapers.cinemark import (
     CinemarkScraperError,
     scrape_cartelera_completa,
 )
-from cines.services import NormalizedShowtime, match_media_title, normalize_title
+from cines.services import (
+    NormalizedShowtime,
+    cleanup_expired_showtimes,
+    match_media_title,
+    normalize_title,
+)
 from media.models import Media
 
 
@@ -50,6 +55,8 @@ class Command(BaseCommand):
         matched_media_ids: set[int] = set()
         matched_releases = 0
         unmatched_releases: list[str] = []
+        deleted_functions = 0
+        expired_media = 0
 
         with transaction.atomic():
             for release in cartelera.proximos_estrenos:
@@ -99,6 +106,7 @@ class Command(BaseCommand):
                     updated_functions += 1
 
             now_showing = self._mark_now_showing(matched_media_ids)
+            deleted_functions, expired_media = cleanup_expired_showtimes()
 
         self.stdout.write(
             self.style.SUCCESS(
@@ -108,7 +116,9 @@ class Command(BaseCommand):
                 f"{pending} pendientes de revisión, "
                 f"{now_showing} películas pasadas a 'en cartelera', "
                 f"{len(cartelera.proximos_estrenos)} próximos estrenos leídos, "
-                f"{matched_releases} asociados a Media."
+                f"{matched_releases} asociados a Media, "
+                f"{deleted_functions} funciones vencidas eliminadas, "
+                f"{expired_media} películas pasadas a 'fuera de cartelera'."
             )
         )
         if unmatched_releases:
@@ -149,10 +159,17 @@ class Command(BaseCommand):
         }
 
     def _mark_now_showing(self, media_ids: set[int]) -> int:
-        """Marca 'en cartelera' las películas con funciones, salvo estrenos futuros."""
+        """Mark as showing only matched movies that retain a future showtime."""
+        if not media_ids:
+            return 0
+
         today = timezone.localdate()
+        future_media_ids = Funcion.objects.filter(
+            media_id__in=media_ids,
+            fecha_hora__gte=timezone.now(),
+        ).values("media_id")
         return (
-            Media.objects.filter(pk__in=media_ids)
+            Media.objects.filter(pk__in=future_media_ids)
             .exclude(estado=Media.Estado.EN_CARTELERA)
             .exclude(fecha_estreno__gt=today)
             .update(estado=Media.Estado.EN_CARTELERA)
