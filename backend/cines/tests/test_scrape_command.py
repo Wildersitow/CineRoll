@@ -1,12 +1,14 @@
+from io import StringIO
 from datetime import date, timedelta
 from unittest.mock import patch
 
-from django.core.management import call_command
+from django.core.management import CommandError, call_command
 from django.test import TestCase
 from django.utils import timezone
 
 from cines.models import Cine, Funcion, TituloPendiente
-from cines.scrapers.cinemark import CinemarkCartelera
+from cines.scrapers.cinemark import CinemarkCartelera, CinemarkScraperError
+from cines.services import CarteleraScrapeResult
 from media.models import Media
 
 
@@ -30,7 +32,7 @@ class ScrapeCarteleraCommandTests(TestCase):
             proximos_estrenos=[],
         )
 
-    @patch("cines.management.commands.scrape_cartelera.scrape_cartelera_completa")
+    @patch("cines.scrapers.cinemark.scrape_cartelera_completa")
     def test_matches_and_saves_function_idempotently(self, scrape):
         scrape.return_value = self.cartelera
         media = Media.objects.create(
@@ -49,7 +51,7 @@ class ScrapeCarteleraCommandTests(TestCase):
         self.assertEqual(function.formato, "2D, Doblada")
         self.assertEqual(TituloPendiente.objects.count(), 0)
 
-    @patch("cines.management.commands.scrape_cartelera.scrape_cartelera_completa")
+    @patch("cines.scrapers.cinemark.scrape_cartelera_completa")
     def test_unknown_title_is_recorded_for_manual_review(self, scrape):
         scrape.return_value = self.cartelera
 
@@ -64,7 +66,7 @@ class ScrapeCarteleraCommandTests(TestCase):
         self.assertEqual(pending.estado, TituloPendiente.Estado.PENDIENTE)
         self.assertEqual(pending.apariciones_detectadas, 2)
 
-    @patch("cines.management.commands.scrape_cartelera.scrape_cartelera_completa")
+    @patch("cines.scrapers.cinemark.scrape_cartelera_completa")
     def test_manually_resolved_title_saves_functions(self, scrape):
         scrape.return_value = self.cartelera
         media = Media.objects.create(
@@ -83,7 +85,7 @@ class ScrapeCarteleraCommandTests(TestCase):
         self.assertEqual(Funcion.objects.count(), 1)
         self.assertEqual(Funcion.objects.get().media, media)
 
-    @patch("cines.management.commands.scrape_cartelera.scrape_cartelera_completa")
+    @patch("cines.scrapers.cinemark.scrape_cartelera_completa")
     def test_matched_movie_is_marked_now_showing(self, scrape):
         scrape.return_value = self.cartelera
         media = Media.objects.create(
@@ -98,7 +100,7 @@ class ScrapeCarteleraCommandTests(TestCase):
         media.refresh_from_db()
         self.assertEqual(media.estado, Media.Estado.EN_CARTELERA)
 
-    @patch("cines.management.commands.scrape_cartelera.scrape_cartelera_completa")
+    @patch("cines.scrapers.cinemark.scrape_cartelera_completa")
     def test_future_premiere_stays_upcoming(self, scrape):
         scrape.return_value = self.cartelera
         media = Media.objects.create(
@@ -113,7 +115,7 @@ class ScrapeCarteleraCommandTests(TestCase):
         media.refresh_from_db()
         self.assertEqual(media.estado, Media.Estado.PROXIMO_ESTRENO)
 
-    @patch("cines.management.commands.scrape_cartelera.scrape_cartelera_completa")
+    @patch("cines.scrapers.cinemark.scrape_cartelera_completa")
     def test_scrape_deletes_expired_functions_and_updates_status_globally(self, scrape):
         scrape.return_value = CinemarkCartelera(funciones=[], proximos_estrenos=[])
         past_only = Media.objects.create(
@@ -169,7 +171,7 @@ class ScrapeCarteleraCommandTests(TestCase):
         self.assertEqual(still_showing.estado, Media.Estado.EN_CARTELERA)
         self.assertEqual(upcoming.estado, Media.Estado.PROXIMO_ESTRENO)
 
-    @patch("cines.management.commands.scrape_cartelera.scrape_cartelera_completa")
+    @patch("cines.scrapers.cinemark.scrape_cartelera_completa")
     def test_upcoming_release_updates_matched_media_without_creating_movies(self, scrape):
         scrape.return_value = CinemarkCartelera(
             funciones=[],
@@ -199,3 +201,42 @@ class ScrapeCarteleraCommandTests(TestCase):
         self.assertEqual(media.estado, Media.Estado.PROXIMO_ESTRENO)
         self.assertEqual(Media.objects.count(), 1)
         self.assertEqual(Funcion.objects.count(), 0)
+
+    @patch("cines.management.commands.scrape_cartelera.scrape_and_save_cartelera")
+    def test_command_delegates_to_service_and_formats_result(self, scrape):
+        scrape.return_value = CarteleraScrapeResult(
+            cine="cinemark",
+            ciudad="bogota",
+            funciones_leidas=10,
+            funciones_asociadas=8,
+            funciones_creadas=3,
+            funciones_actualizadas=5,
+            titulos_pendientes=1,
+            peliculas_en_cartelera=2,
+            estrenos_leidos=4,
+            estrenos_asociados=3,
+            funciones_vencidas_eliminadas=6,
+            peliculas_fuera_cartelera=1,
+            estrenos_sin_coincidencia=("Película sin catálogo",),
+            titulos_pendientes_mostrar=("#1 Película — Cine (bogota)",),
+        )
+
+        output = StringIO()
+        call_command(
+            "scrape_cartelera",
+            cine="cinemark",
+            ciudad="BOGOTA",
+            stdout=output,
+        )
+
+        scrape.assert_called_once_with(cinema_provider="cinemark", city_slug="BOGOTA")
+        self.assertIn("10 funciones leídas", output.getvalue())
+        self.assertIn("Película sin catálogo", output.getvalue())
+        self.assertIn("#1 Película — Cine (bogota)", output.getvalue())
+
+    @patch("cines.management.commands.scrape_cartelera.scrape_and_save_cartelera")
+    def test_command_converts_scraper_errors_to_command_error(self, scrape):
+        scrape.side_effect = CinemarkScraperError("Fallo de lectura")
+
+        with self.assertRaisesMessage(CommandError, "Fallo de lectura"):
+            call_command("scrape_cartelera", cine="cinemark", ciudad="bogota")

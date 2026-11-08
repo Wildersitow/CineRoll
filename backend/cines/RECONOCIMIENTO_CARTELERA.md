@@ -17,6 +17,10 @@ fecha y hora ya pasaron. Una película `EN_CARTELERA` pasa a `FUERA_CARTELERA`
 solo si no le quedan funciones futuras en ningún cine; las películas
 `PROXIMO_ESTRENO` no cambian por esta limpieza. La regla está en
 `cines.services.cleanup_expired_showtimes`, reutilizable por una tarea programada.
+La orquestación completa de scraping y persistencia está en
+`cines.services.scrape_and_save_cartelera`; el comando de gestión solo la invoca
+y presenta el resultado, y una futura tarea de Celery puede llamar al mismo
+servicio.
 
 | Cine | URL consultada y evidencia | Datos de funciones / endpoint JSON | ¿Playwright? | Dificultad inicial |
 |---|---|---|---|---|
