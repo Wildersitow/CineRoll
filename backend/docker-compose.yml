@@ -1,0 +1,23 @@
+# PostgreSQL para desarrollo local. Lee DB_NAME, DB_USER, DB_PASSWORD y DB_PORT
+# del archivo backend/.env (el mismo que usa Django), así hay una sola fuente de verdad.
+services:
+  db:
+    image: postgres:16
+    container_name: cineroll-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${DB_NAME:-cineroll}
+      POSTGRES_USER: ${DB_USER:-cineroll}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?Define DB_PASSWORD en backend/.env}
+    ports:
+      - "${DB_PORT:-5432}:5432"
+    volumes:
+      - cineroll_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-cineroll} -d ${DB_NAME:-cineroll}"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  cineroll_pgdata:
