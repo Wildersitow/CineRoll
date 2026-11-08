@@ -1,7 +1,8 @@
-from datetime import datetime, timezone
+from datetime import datetime, time, timedelta, timezone
 
 from django.contrib.auth import get_user_model
 from django.urls import reverse
+from django.utils import timezone as django_timezone
 from rest_framework import status
 from rest_framework.test import APITestCase
 
@@ -60,12 +61,13 @@ class CarteleraApiTests(APITestCase):
         self.assertEqual(response.data["nombre"], "Cine de prueba")
 
         response = self.client.get(
-            reverse("cine-funciones", kwargs={"cine_id": self.cine.pk})
+            reverse("cine-funciones", kwargs={"cine_id": self.cine.pk}),
+            {"fecha": "2026-10-15"},
         )
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(response.data["count"], 1)
-        self.assertEqual(response.data["results"][0]["id"], self.function.pk)
+        self.assertEqual(len(response.data["resultados"]), 1)
+        self.assertEqual(response.data["resultados"][0]["id"], self.function.pk)
 
     def test_cinema_showtimes_can_filter_by_date(self):
         response = self.client.get(
@@ -74,7 +76,35 @@ class CarteleraApiTests(APITestCase):
         )
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(response.data["results"], [])
+        self.assertEqual(response.data["resultados"], [])
+
+    def test_home_showtime_endpoints_return_all_todays_results_in_one_response(self):
+        today = django_timezone.localdate()
+        start = django_timezone.make_aware(datetime.combine(today, time.min))
+        for index in range(25):
+            Funcion.objects.create(
+                media=self.media,
+                cine=self.cine,
+                fecha_hora=start + timedelta(minutes=index),
+                sala=f"Sala {index}",
+                formato="2D",
+            )
+
+        city_url = reverse("funcion-list")
+        city_response = self.client.get(city_url, {"ciudad": "bogotá"})
+        today_alias_response = self.client.get(
+            city_url,
+            {"fecha": "hoy", "ciudad": "bogotá"},
+        )
+        cinema_response = self.client.get(
+            reverse("cine-funciones", kwargs={"cine_id": self.cine.pk})
+        )
+
+        self.assertEqual(city_response.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(city_response.data["resultados"]), 25)
+        self.assertEqual(len(today_alias_response.data["resultados"]), 25)
+        self.assertEqual(cinema_response.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(cinema_response.data["resultados"]), 25)
 
     def test_unknown_cinema_showtimes_return_not_found(self):
         response = self.client.get(
@@ -90,8 +120,8 @@ class CarteleraApiTests(APITestCase):
         )
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(response.data["count"], 1)
-        self.assertEqual(response.data["results"][0]["id"], self.function.pk)
+        self.assertEqual(len(response.data["resultados"]), 1)
+        self.assertEqual(response.data["resultados"][0]["id"], self.function.pk)
 
     def test_invalid_showtime_filters_return_bad_request(self):
         invalid_date = self.client.get(reverse("funcion-list"), {"fecha": "tomorrow"})

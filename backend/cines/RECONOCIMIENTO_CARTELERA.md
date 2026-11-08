@@ -3,8 +3,13 @@
 Este reconocimiento cubre los pasos 1 y 2 asignados a la Persona 3. Se
 consultaron los sitios públicos el 8 de noviembre de 2026. Para Cinépolis y Royal
 Films se observó en Network la solicitud que entrega funciones y su respuesta.
-En Cineland se llegó a la cartelera de Valledupar, pero no se pudo conservar y
-verificar el cuerpo de la respuesta que alimenta los horarios.
+En Cineland también se capturó en Network una respuesta de cartelera no vacía
+para Valledupar, con títulos, fechas, formatos, salas y funciones.
+
+El segundo scraper de la Fase 3 queda elegido: **Cinépolis**. La llamada de
+Valledupar entrega películas, formatos y horarios agrupados por fecha en una
+sola respuesta JSON, mientras que Royal Films requiere una llamada de funciones
+por cada película.
 
 Para los próximos estrenos de Cinemark, el modelo `Media` ya dispone de
 `fecha_estreno` y del estado `PROXIMO_ESTRENO`. El scraper toma `OpeningDate`
@@ -25,9 +30,9 @@ servicio.
 | Cine | URL consultada y evidencia | Datos de funciones / endpoint JSON | ¿Playwright? | Dificultad inicial |
 |---|---|---|---|---|
 | Cinemark | [Cartelera por ciudad](https://www.cinemark.com.co/cartelera/bogota) respondió HTTP 200. El HTML de Next.js contiene `__NEXT_DATA__` con `PremieresBillboard` y `Presales`. | La respuesta incrustada incluye título (`TitleAlt`/`Title`), cine (`CinemaName`, `CinemaId`), identificador de función, hora ISO (`Showtime`), sala (`ScreenName`) y formato/idioma (`Attributes`). No se confirmó un endpoint JSON separado: la fuente del scraper es el HTML de cartelera. | No hace falta para la cartelera observada: una petición HTTP entrega los datos renderizados por el servidor. | Baja-media; la página por ciudad ya incluye sesiones. |
-| Cinépolis | [Cartelera de Valledupar](https://cinepolis.com.co/cartelera/valledupar-colombia). | `POST /Cartelera.aspx/GetNowPlayingByCity` devuelve JSON con películas, formatos y funciones: 18 fechas, 41 películas y 176 horarios en la captura. Detalle abajo. | Sí para seleccionar la ciudad; la respuesta de cartelera observada es JSON y puede consultarse directamente. | Media; se requiere la clave de ciudad. |
+| Cinépolis | [Cartelera de Valledupar](https://cinepolis.com.co/cartelera/valledupar-colombia). | `POST /Cartelera.aspx/GetNowPlayingByCity` devuelve JSON con películas, formatos y funciones: 18 fechas, 41 películas y 176 horarios en la captura. Elegido para el segundo scraper de Fase 3. Detalle abajo. | Sí para seleccionar la ciudad; la respuesta de cartelera observada es JSON y puede consultarse directamente. | Media; se requiere la clave de ciudad. |
 | Royal Films | [Cartelera de Valledupar](https://cinemasroyalfilms.com/cartelera/valledupar). | `GET /api/billboard/city/1006` devuelve 13 películas. La aplicación consulta `/api/movies/functions/{peliculaId}/city/1006` por película; las respuestas contienen funciones en JSON. | Sí para seleccionar Colombia y Valledupar; luego las solicitudes observadas son GET. | Media; requiere varias solicitudes, una por película. |
-| Cineland | [Aplicación web](https://home.cineland.co/), ruta observada `#/cartelera/valledupar`. | La cartelera muestra funciones. Se observó el endpoint genérico `POST https://cineland.website/api_point_back.php`, pero no se verificó el cuerpo de respuesta asociado a las funciones. Detalle abajo. | Sí para seleccionar la ciudad y abrir los horarios. | Pendiente de confirmar una respuesta de funciones reutilizable. |
+| Cineland | [Aplicación web](https://home.cineland.co/), ruta observada `#/cartelera/valledupar`. | `POST https://cineland.website/api_point_back.php` recibe rango de fechas y código de teatro; la respuesta contiene 9 películas con fechas, formatos, salas y horarios. Detalle abajo. | Sí para seleccionar la ciudad; la respuesta de cartelera es JSON y puede consultarse directamente. | Media; endpoint genérico compartido con otras operaciones, y respuesta servida como JSON con content type `text/html`. |
 
 ## Evidencia de Network
 
@@ -86,17 +91,29 @@ usa `OpeningDate` como fecha local de estreno.
 1. El dominio que cargó la aplicación fue `https://home.cineland.co/`. Al
    seleccionar Valledupar se abrió `#/cartelera/valledupar`. La página mostró
    títulos, fechas, cine (C.C. Mayales), formatos, salas y horarios.
-2. Al abrir una película se observó
+2. Al seleccionar Valledupar el navegador envió
+   `POST https://cineland.website/api_point_back.php`, con JSON
+   `{"fechacon1":"2026-11-08","fechacon2":"2026-11-08","codteatro":"0051"}`.
+   La respuesta observada en esa primera carga fue
+   `200 text/html; charset=UTF-8`, con claves `data`, `count` y
+   `transaction_status`; `data` fue `[]` en esa consulta inicial.
+3. Al abrir una película se observó
    `POST https://cineland.website/api_point_back.php` con parámetro JSON
    `codpel` (ejemplo `260920`). Respondió `200 text/html; charset=UTF-8` con un
    objeto JSON de metadatos de película (`data`, `count`,
    `transaction_status`); esta llamada no era la respuesta de horarios.
-3. Durante la selección de ciudad también se observó un POST al mismo endpoint
-   con los campos `usrlock`, `fechacon1`, `fechacon2` y `codteatro`, que respondió
-   200. La respuesta de funciones no se conservó, así que todavía no se pueden
-   confirmar sus campos ni recomendar esa llamada para un scraper. No se anotan
-   valores de sesión.
-4. Las solicitudes `GET https://cms.cineland.co/api/slider` y
+4. Al volver a seleccionar Valledupar desde otra ciudad, el mismo endpoint
+   respondió `200 text/html; charset=UTF-8` con 9 películas. La forma de cada
+   película es `nombre_pelicula_original`, `url_imagen_pelicula`, `genero`,
+   `clasificacion`, `movie_status` y `fechas[]`. Cada fecha tiene `date`,
+   `preventa` y `atributos[]`; cada atributo contiene `codigo_pelicula`,
+   `nombre_pelicula`, `atributos_pelicula` y `salas[]`. Cada sala contiene
+   `codigo_sala`, `nombre_sala` y `funciones_y_tarifas[]`, con `funcion` y
+   `tarifa`.
+5. Ejemplo observado: *AVENGERS DOOMSDAY*, fecha `2026-11-08`, con formatos
+   `3D DOBLADA` y `DIGITAL DOBLADA`, salas 2, 3 y HS, y horarios entre 13:30 y
+   20:50. No se anotan valores de sesión.
+6. Las solicitudes `GET https://cms.cineland.co/api/slider` y
    `GET https://cms.cineland.co/api/banners` respondieron 504 en esa sesión; son
    recursos de la página y no se identificaron como fuentes de funciones.
 
@@ -106,12 +123,14 @@ Para Cinemark, una ciudad consultada con cartelera poblada permitió implementar
 una petición HTTP directa y leer el JSON incrustado, sin Playwright. La ruta
 `/cartelera/valledupar` respondió, pero al momento de la consulta sus secciones
 de cartelera estaban vacías; por eso ese resultado no acredita funciones de
-Cinemark en Valledupar. Cinépolis es la opción recomendada para el siguiente
-scraper: su respuesta confirmada entrega en una sola llamada los horarios
-completos de la ciudad. Royal Films también es viable, aunque requiere consultar
-las funciones película por película. Cineland queda pendiente hasta capturar y
-verificar el cuerpo de su respuesta de funciones. No se implementó ningún scraper
-adicional para esos cines en este paso. El scraper de Cinemark también lee
+Cinemark en Valledupar. Cinépolis queda elegido como segundo scraper de la
+Fase 3: su respuesta confirmada entrega en una llamada los horarios completos
+de la ciudad. Royal Films también es viable, aunque requiere consultar las
+funciones película por película. En Cineland se reconocieron el dominio, el
+endpoint de cartelera, sus parámetros y el esquema de la respuesta con
+funciones. No se implementó ningún scraper adicional para esos cines en este
+paso.
+El scraper de Cinemark también lee
 `UpcomingReleases`; el comando actualiza las fechas y el estado de las películas
 que ya existen en `Media` y muestra los títulos sin coincidencia para revisión,
 sin crear fichas automáticamente.
@@ -141,11 +160,15 @@ de Cinemark en `--ciudad`.
 - `GET /api/cines/` devuelve el catálogo paginado de cines. `POST` en esa ruta y
   `PUT`, `PATCH` o `DELETE /api/cines/<id>/` requieren un usuario administrador
   (`is_staff`); las lecturas siguen siendo públicas.
-- `GET /api/cines/<id>/funciones/` devuelve la cartelera paginada de ese cine;
-  acepta `?fecha=AAAA-MM-DD`.
-- `GET /api/funciones/` devuelve funciones paginadas y acepta los filtros
-  `?fecha=AAAA-MM-DD&ciudad=<ciudad>`. La ciudad se compara sin distinguir
-  mayúsculas y minúsculas con `Cine.ciudad`.
+- `GET /api/cines/<id>/funciones/` devuelve las funciones de hoy de ese cine;
+  acepta `?fecha=AAAA-MM-DD` para otra fecha.
+- `GET /api/funciones/` devuelve las funciones de hoy y acepta los filtros
+  `?fecha=AAAA-MM-DD&ciudad=<ciudad>`. `fecha=hoy` y omitir `fecha` significan
+  hoy en `America/Bogota`; la ciudad se compara sin distinguir mayúsculas y
+  minúsculas con `Cine.ciudad`.
+- Ambos endpoints devuelven todos los resultados en una sola respuesta bajo la
+  clave `resultados` (sin paginación), para que el home cargue la cartelera
+  diaria o la de un cine con una llamada.
 - `GET /api/media/<id>/funciones/` devuelve funciones con la hora, la sala, el
   formato y la información del cine, junto con `ultima_actualizacion`.
 - Se puede filtrar con `?cine=<id>&fecha=AAAA-MM-DD`. La fecha filtra las

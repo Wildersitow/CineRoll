@@ -1,5 +1,6 @@
 from django.db.models import Max
 from django.shortcuts import get_object_or_404
+from django.utils import timezone
 from django.utils.dateparse import parse_date
 from rest_framework.exceptions import ValidationError
 from rest_framework.generics import (
@@ -28,15 +29,23 @@ class CineDetailView(RetrieveUpdateDestroyAPIView):
     permission_classes = (EsAdministradorOLecturaPublica,)
 
 
-class FuncionListView(ListAPIView):
+class UnpaginatedFuncionListView(ListAPIView):
+    pagination_class = None
+
+    def list(self, request, *args, **kwargs):
+        queryset = self.filter_queryset(self.get_queryset())
+        serializer = self.get_serializer(queryset, many=True)
+        return Response({"resultados": serializer.data})
+
+
+class FuncionListView(UnpaginatedFuncionListView):
     serializer_class = FuncionSerializer
     permission_classes = (EsAdministradorOLecturaPublica,)
 
     def get_queryset(self):
         queryset = Funcion.objects.select_related("cine", "media")
-        show_date = self.request.query_params.get("fecha")
-        if show_date is not None:
-            queryset = _filter_by_date(queryset, show_date)
+        show_date = self.request.query_params.get("fecha", "hoy")
+        queryset = _filter_by_date(queryset, show_date)
 
         city = self.request.query_params.get("ciudad")
         if city is not None:
@@ -47,16 +56,15 @@ class FuncionListView(ListAPIView):
         return queryset.order_by("fecha_hora", "cine__nombre", "sala")
 
 
-class CineFuncionListView(ListAPIView):
+class CineFuncionListView(UnpaginatedFuncionListView):
     serializer_class = FuncionSerializer
     permission_classes = (EsAdministradorOLecturaPublica,)
 
     def get_queryset(self):
         cine = get_object_or_404(Cine, pk=self.kwargs["cine_id"])
         queryset = Funcion.objects.filter(cine=cine).select_related("cine", "media")
-        show_date = self.request.query_params.get("fecha")
-        if show_date is not None:
-            queryset = _filter_by_date(queryset, show_date)
+        show_date = self.request.query_params.get("fecha", "hoy")
+        queryset = _filter_by_date(queryset, show_date)
         return queryset.order_by("fecha_hora", "sala", "media__titulo")
 
 
@@ -91,6 +99,9 @@ class MediaFuncionListView(APIView):
 
 
 def _filter_by_date(queryset, show_date):
+    if show_date.casefold() == "hoy":
+        parsed_date = timezone.localdate()
+        return queryset.filter(fecha_hora__date=parsed_date)
     try:
         parsed_date = parse_date(show_date)
     except ValueError:
