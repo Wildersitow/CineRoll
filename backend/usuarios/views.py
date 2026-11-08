@@ -1,5 +1,6 @@
 from django.contrib.auth import authenticate, get_user_model
 from rest_framework import status
+from rest_framework.exceptions import ValidationError
 from rest_framework.generics import RetrieveUpdateAPIView
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
@@ -54,9 +55,8 @@ class LoginView(APIView):
         username_or_email = str(username_or_email).strip()
 
         if not username_or_email or not password:
-            return Response(
-                {"error": "Debe proporcionar usuario y clave."},
-                status=status.HTTP_400_BAD_REQUEST,
+            raise ValidationError(
+                "Debe proporcionar usuario y clave.", code="datos_incompletos"
             )
 
         # Buscar por username o por correo (sin distinguir mayúsculas)
@@ -68,9 +68,8 @@ class LoginView(APIView):
         user = authenticate(username=username, password=password) if username else None
 
         if user is None:
-            return Response(
-                {"error": "Credenciales incorrectas."},
-                status=status.HTTP_400_BAD_REQUEST,
+            raise ValidationError(
+                "Credenciales incorrectas.", code="credenciales_invalidas"
             )
 
         return Response(generar_payload_autenticacion(user), status=status.HTTP_200_OK)

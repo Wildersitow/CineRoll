@@ -76,7 +76,7 @@ export async function loginUser(usuario, clave) {
 
   if (!response.ok) {
     const errorData = await response.json().catch(() => null);
-    throw new Error(errorData?.error || 'Credenciales incorrectas');
+    throw new Error(errorData?.error?.mensaje || 'Credenciales incorrectas');
   }
 
   const data = await response.json();
