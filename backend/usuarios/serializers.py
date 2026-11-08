@@ -41,6 +41,7 @@ class PerfilSerializer(serializers.ModelSerializer):
             "last_name",
             "avatar",
             "biografia",
+            "escala_calificacion",
             "is_staff",
             "date_joined",
         ]
@@ -59,10 +60,18 @@ class RegistroSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Usuario
-        fields = ["username", "email", "password", "first_name", "last_name"]
+        fields = [
+            "username",
+            "email",
+            "password",
+            "first_name",
+            "last_name",
+            "escala_calificacion",
+        ]
         extra_kwargs = {
             "first_name": {"required": False},
             "last_name": {"required": False},
+            "escala_calificacion": {"required": False},
         }
 
     def validate_email(self, value):

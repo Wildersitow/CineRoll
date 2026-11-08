@@ -14,6 +14,7 @@ def generar_payload_autenticacion(usuario):
         "username": usuario.username,
         "nombre": nombre_completo(usuario),
         "email": usuario.email,
+        "escala_calificacion": usuario.escala_calificacion,
         "token": access,
         "access": access,
         "refresh": str(refresh),
