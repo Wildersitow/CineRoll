@@ -5,18 +5,19 @@ from rest_framework.filters import SearchFilter
 from rest_framework.generics import ListAPIView, RetrieveAPIView
 
 from media.models import Genero, Media
-from media.permissions import IsAdminOrReadOnly
+from usuarios.permissions import EsAdministradorOLecturaPublica
 from media.serializers import (
 	GeneroSerializer,
 	MediaDetailSerializer,
 	MediaListSerializer,
 )
+from social.services import anotar_puntuacion
 
 
 class MediaListView(ListAPIView):
-	queryset = Media.objects.prefetch_related("generos")
+	queryset = anotar_puntuacion(Media.objects.prefetch_related("generos"))
 	serializer_class = MediaListSerializer
-	permission_classes = (IsAdminOrReadOnly,)
+	permission_classes = (EsAdministradorOLecturaPublica,)
 	filter_backends = (SearchFilter,)
 	search_fields = ("titulo", "titulo_original", "sinopsis")
 
@@ -68,12 +69,14 @@ class MediaListView(ListAPIView):
 
 
 class MediaDetailView(RetrieveAPIView):
-	queryset = Media.objects.prefetch_related("generos", "creditos__persona")
+	queryset = anotar_puntuacion(
+		Media.objects.prefetch_related("generos", "creditos__persona")
+	)
 	serializer_class = MediaDetailSerializer
-	permission_classes = (IsAdminOrReadOnly,)
+	permission_classes = (EsAdministradorOLecturaPublica,)
 
 
 class GeneroListView(ListAPIView):
 	queryset = Genero.objects.all()
 	serializer_class = GeneroSerializer
-	permission_classes = (IsAdminOrReadOnly,)
+	permission_classes = (EsAdministradorOLecturaPublica,)

@@ -1,12 +1,17 @@
 from django.contrib.auth import authenticate, get_user_model
 from rest_framework import status
+from rest_framework.generics import RetrieveUpdateAPIView
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
-from rest_framework_simplejwt.tokens import RefreshToken
-from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
+from rest_framework_simplejwt.views import TokenObtainPairView
 
-from .serializers import CustomTokenObtainPairSerializer, UsuarioSerializer
+from .serializers import (
+    CustomTokenObtainPairSerializer,
+    PerfilSerializer,
+    RegistroSerializer,
+)
+from .services import generar_payload_autenticacion
 
 Usuario = get_user_model()
 
@@ -16,9 +21,27 @@ class CustomTokenObtainPairView(TokenObtainPairView):
     serializer_class = CustomTokenObtainPairSerializer
 
 
+class RegistroView(APIView):
+    """
+    Registro de usuarios (/api/auth/registro/).
+    Recibe { username, email, password, first_name?, last_name? } y responde 201
+    con los mismos datos que el login, para que el frontend inicie sesión directo.
+    """
+    permission_classes = [AllowAny]
+
+    def post(self, request):
+        serializer = RegistroSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        usuario = serializer.save()
+        return Response(
+            generar_payload_autenticacion(usuario),
+            status=status.HTTP_201_CREATED,
+        )
+
+
 class LoginView(APIView):
     """
-    Endpoint de login compatible con React (/api/usuario/login/)
+    Endpoint de login compatible con React (/api/usuario/login/ y /api/auth/login/)
     Acepta { usuario, clave } o { username, password }
     Genera tokens JWT y retorna datos de perfil + token
     """
@@ -36,16 +59,13 @@ class LoginView(APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        # Intentar buscar por username o email
-        user = None
+        # Buscar por username o por correo (sin distinguir mayúsculas)
+        username = username_or_email
         if "@" in username_or_email:
-            try:
-                user_obj = Usuario.objects.get(email__iexact=username_or_email)
-                user = authenticate(username=user_obj.username, password=password)
-            except Usuario.DoesNotExist:
-                user = None
-        else:
-            user = authenticate(username=username_or_email, password=password)
+            candidato = Usuario.objects.filter(email__iexact=username_or_email).first()
+            username = candidato.username if candidato else None
+
+        user = authenticate(username=username, password=password) if username else None
 
         if user is None:
             return Response(
@@ -53,54 +73,17 @@ class LoginView(APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        if not user.is_active:
-            return Response(
-                {"error": "Usuario inactivo."},
-                status=status.HTTP_403_FORBIDDEN,
-            )
-
-        nombre_completo = f"{user.first_name} {user.last_name}".strip() or user.username
-
-        # Generar tokens con SimpleJWT usando claims personalizados
-        refresh = CustomTokenObtainPairSerializer.get_token(user)
-        access_token = refresh.access_token
-        access_token["username"] = user.username
-        access_token["nombre"] = nombre_completo
-        access_token["email"] = user.email
-
-        return Response(
-            {
-                "id": user.id,
-                "username": user.username,
-                "nombre": nombre_completo,
-                "email": user.email,
-                "token": str(access_token),
-                "access": str(access_token),
-                "refresh": str(refresh),
-            },
-            status=status.HTTP_200_OK,
-        )
+        return Response(generar_payload_autenticacion(user), status=status.HTTP_200_OK)
 
 
-class CurrentUserView(APIView):
+class CurrentUserView(RetrieveUpdateAPIView):
     """
-    Endpoint para obtener el perfil del usuario autenticado (/api/usuario/me/).
+    Perfil del usuario autenticado (/api/usuario/me/ y /api/usuarios/me/).
+    GET para verlo y PATCH/PUT para editar nombre, correo, avatar y biografía.
     Requiere encabezado: Authorization: Bearer <access_token>
     """
+    serializer_class = PerfilSerializer
     permission_classes = [IsAuthenticated]
 
-    def get(self, request):
-        user = request.user
-        nombre_completo = f"{user.first_name} {user.last_name}".strip() or user.username
-        return Response(
-            {
-                "id": user.id,
-                "username": user.username,
-                "nombre": nombre_completo,
-                "email": user.email,
-                "is_staff": user.is_staff,
-            },
-            status=status.HTTP_200_OK,
-        )
-
-
+    def get_object(self):
+        return self.request.user

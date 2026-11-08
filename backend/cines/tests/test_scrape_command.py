@@ -57,3 +57,52 @@ class ScrapeCarteleraCommandTests(TestCase):
         self.assertEqual(pending.titulo_original, self.showtime["titulo"])
         self.assertEqual(pending.estado, TituloPendiente.Estado.PENDIENTE)
         self.assertEqual(pending.apariciones_detectadas, 2)
+
+    @patch("cines.management.commands.scrape_cartelera.scrape_cartelera")
+    def test_manually_resolved_title_saves_functions(self, scrape):
+        scrape.return_value = [self.showtime]
+        media = Media.objects.create(
+            titulo="Dragones: la película",
+            tipo=Media.Tipo.PELICULA,
+        )
+
+        call_command("scrape_cartelera", cine="cinemark", ciudad="bogota")
+        self.assertEqual(Funcion.objects.count(), 0)
+
+        TituloPendiente.objects.update(
+            estado=TituloPendiente.Estado.RESUELTO, media_asociada=media
+        )
+        call_command("scrape_cartelera", cine="cinemark", ciudad="bogota")
+
+        self.assertEqual(Funcion.objects.count(), 1)
+        self.assertEqual(Funcion.objects.get().media, media)
+
+    @patch("cines.management.commands.scrape_cartelera.scrape_cartelera")
+    def test_matched_movie_is_marked_now_showing(self, scrape):
+        scrape.return_value = [self.showtime]
+        media = Media.objects.create(
+            titulo="Cómo entrenar a tu dragón",
+            tipo=Media.Tipo.PELICULA,
+            estado=Media.Estado.FUERA_CARTELERA,
+            fecha_estreno=date(2025, 6, 13),
+        )
+
+        call_command("scrape_cartelera", cine="cinemark", ciudad="bogota")
+
+        media.refresh_from_db()
+        self.assertEqual(media.estado, Media.Estado.EN_CARTELERA)
+
+    @patch("cines.management.commands.scrape_cartelera.scrape_cartelera")
+    def test_future_premiere_stays_upcoming(self, scrape):
+        scrape.return_value = [self.showtime]
+        media = Media.objects.create(
+            titulo="Cómo entrenar a tu dragón",
+            tipo=Media.Tipo.PELICULA,
+            estado=Media.Estado.PROXIMO_ESTRENO,
+            fecha_estreno=date(2999, 1, 1),
+        )
+
+        call_command("scrape_cartelera", cine="cinemark", ciudad="bogota")
+
+        media.refresh_from_db()
+        self.assertEqual(media.estado, Media.Estado.PROXIMO_ESTRENO)

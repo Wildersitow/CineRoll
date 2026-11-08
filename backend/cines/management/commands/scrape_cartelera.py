@@ -36,15 +36,19 @@ class Command(BaseCommand):
             raise CommandError(str(exc)) from exc
 
         movies = list(Media.objects.filter(tipo=Media.Tipo.PELICULA))
+        manual_matches = self._build_manual_matches()
         matched = 0
         pending = 0
         created_functions = 0
         updated_functions = 0
         cinema_cache = self._build_cinema_cache()
+        matched_media_ids: set[int] = set()
 
         with transaction.atomic():
             for record in records:
                 media = match_media_title(record["titulo"], movies)
+                if media is None:
+                    media = manual_matches.get(normalize_title(record["titulo"]))
                 if media is None:
                     self._record_pending(record)
                     pending += 1
@@ -71,17 +75,21 @@ class Command(BaseCommand):
                     defaults={"fuente_scraping": record["fuente_scraping"]},
                 )
                 matched += 1
+                matched_media_ids.add(media.pk)
                 if created:
                     created_functions += 1
                 else:
                     updated_functions += 1
+
+            now_showing = self._mark_now_showing(matched_media_ids)
 
         self.stdout.write(
             self.style.SUCCESS(
                 f"Cartelera {cinema_provider} ({city_slug}): "
                 f"{len(records)} funciones leídas, {matched} asociadas al catálogo, "
                 f"{created_functions} guardadas, {updated_functions} actualizadas, "
-                f"{pending} pendientes de revisión."
+                f"{pending} pendientes de revisión, "
+                f"{now_showing} películas pasadas a 'en cartelera'."
             )
         )
         if pending:
@@ -106,6 +114,26 @@ class Command(BaseCommand):
         if cinema_provider == "cinemark":
             return scrape_cartelera(city_slug=city_slug)
         raise CommandError(f"No existe scraper configurado para '{cinema_provider}'.")
+
+    def _build_manual_matches(self) -> dict[str, Media]:
+        """Títulos que un administrador resolvió a mano en el admin de pendientes."""
+        return {
+            pending.titulo_normalizado: pending.media_asociada
+            for pending in TituloPendiente.objects.filter(
+                estado=TituloPendiente.Estado.RESUELTO,
+                media_asociada__isnull=False,
+            ).select_related("media_asociada")
+        }
+
+    def _mark_now_showing(self, media_ids: set[int]) -> int:
+        """Marca 'en cartelera' las películas con funciones, salvo estrenos futuros."""
+        today = timezone.localdate()
+        return (
+            Media.objects.filter(pk__in=media_ids)
+            .exclude(estado=Media.Estado.EN_CARTELERA)
+            .exclude(fecha_estreno__gt=today)
+            .update(estado=Media.Estado.EN_CARTELERA)
+        )
 
     def _build_cinema_cache(self) -> dict[tuple[str, str], Cine]:
         return {

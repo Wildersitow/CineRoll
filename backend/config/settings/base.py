@@ -54,18 +54,14 @@ TEMPLATES = [
 
 WSGI_APPLICATION = "config.wsgi.application"
 
-DB_HOST = config("DB_HOST", default="localhost")
-DB_PORT = config("DB_PORT", default="1521")
-DB_SERVICE = config("DB_NAME")  # nombre del servicio, p. ej. XEPDB1
-
 DATABASES = {
     "default": {
-        "ENGINE": "django.db.backends.oracle",
-        "NAME": f"{DB_HOST}:{DB_PORT}/{DB_SERVICE}",
+        "ENGINE": "django.db.backends.postgresql",
+        "NAME": config("DB_NAME"),
         "USER": config("DB_USER"),
         "PASSWORD": config("DB_PASSWORD"),
-        "HOST": "",
-        "PORT": "",
+        "HOST": config("DB_HOST", default="localhost"),
+        "PORT": config("DB_PORT", default="5432"),
     }
 }
 
