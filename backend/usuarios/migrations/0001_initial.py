@@ -1,0 +1,37 @@
+import django.core.validators
+import django.db.models.deletion
+from django.conf import settings
+from django.db import migrations, models
+
+
+class Migration(migrations.Migration):
+
+    initial = True
+
+    dependencies = [
+        ('media', '0002_media_mvp_fields'),
+        migrations.swappable_dependency(settings.AUTH_USER_MODEL),
+    ]
+
+    operations = [
+        migrations.CreateModel(
+            name='Resena',
+            fields=[
+                ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
+                ('puntuacion', models.PositiveSmallIntegerField(validators=[django.core.validators.MinValueValidator(1), django.core.validators.MaxValueValidator(10)])),
+                ('texto', models.TextField(blank=True)),
+                ('oculta', models.BooleanField(default=False, help_text='Una reseña oculta no se muestra ni cuenta en el promedio.')),
+                ('fecha_creacion', models.DateTimeField(auto_now_add=True)),
+                ('fecha_actualizacion', models.DateTimeField(auto_now=True)),
+                ('media', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='resenas', to='media.media')),
+                ('usuario', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='resenas', to=settings.AUTH_USER_MODEL)),
+            ],
+            options={
+                'verbose_name': 'reseña',
+                'verbose_name_plural': 'reseñas',
+                'ordering': ['-fecha_creacion', '-id'],
+                'indexes': [models.Index(fields=['media', 'oculta'], name='social_resena_media_idx')],
+                'constraints': [models.UniqueConstraint(fields=('usuario', 'media'), name='social_resena_unica'), models.CheckConstraint(condition=models.Q(('puntuacion__gte', 1), ('puntuacion__lte', 10)), name='social_resena_puntuacion_ok')],
+            },
+        ),
+    ]
