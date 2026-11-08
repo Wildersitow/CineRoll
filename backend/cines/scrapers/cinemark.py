@@ -1,5 +1,8 @@
 import json
 import re
+from dataclasses import dataclass
+from datetime import date
+from typing import TypedDict
 from urllib.error import URLError
 from urllib.request import Request, urlopen
 
@@ -11,6 +14,18 @@ USER_AGENT = "CineRoll cartelera scraper/0.1 (development project)"
 MAX_RESPONSE_BYTES = 8 * 1024 * 1024
 
 
+class CinemarkUpcomingRelease(TypedDict):
+    titulo: str
+    fecha_estreno: date
+    fuente_scraping: str
+
+
+@dataclass(frozen=True)
+class CinemarkCartelera:
+    funciones: list[NormalizedShowtime]
+    proximos_estrenos: list[CinemarkUpcomingRelease]
+
+
 class CinemarkScraperError(RuntimeError):
     """Raised when Cinemark's cartelera cannot be fetched or parsed."""
 
@@ -19,6 +34,13 @@ def scrape_cartelera(
     city_slug: str = "bogota", timeout: float = 20.0
 ) -> list[NormalizedShowtime]:
     """Fetch one city's server-rendered Cinemark cartelera and extract showtimes."""
+    return scrape_cartelera_completa(city_slug=city_slug, timeout=timeout).funciones
+
+
+def scrape_cartelera_completa(
+    city_slug: str = "bogota", timeout: float = 20.0
+) -> CinemarkCartelera:
+    """Fetch showtimes and upcoming releases from one Cinemark cartelera page."""
     city_slug = city_slug.strip().lower()
     if not re.fullmatch(r"[a-z0-9-]+", city_slug):
         raise ValueError("city_slug debe contener solo letras, números y guiones.")
@@ -48,7 +70,7 @@ def scrape_cartelera(
     except (LookupError, UnicodeDecodeError) as exc:
         raise CinemarkScraperError("Cinemark devolvió una codificación no válida.") from exc
 
-    return parse_cartelera_page(html, city_slug, source_url)
+    return parse_cartelera_data(html, city_slug, source_url)
 
 
 def parse_cartelera_page(
@@ -57,6 +79,23 @@ def parse_cartelera_page(
     source_url: str,
 ) -> list[NormalizedShowtime]:
     """Parse the __NEXT_DATA__ JSON embedded in Cinemark's cartelera HTML."""
+    return parse_cartelera_data(html, city_slug, source_url).funciones
+
+
+def parse_cartelera_data(
+    html: str,
+    city_slug: str,
+    source_url: str,
+) -> CinemarkCartelera:
+    """Parse showtimes and upcoming releases from embedded __NEXT_DATA__."""
+    page_props = _extract_page_props(html, city_slug)
+    return CinemarkCartelera(
+        funciones=_parse_showtimes(page_props, city_slug, source_url),
+        proximos_estrenos=_parse_upcoming_releases(page_props, source_url),
+    )
+
+
+def _extract_page_props(html: str, city_slug: str) -> dict[str, object]:
     next_data = re.search(
         r'<script\b[^>]*\bid=["\']__NEXT_DATA__["\'][^>]*>(.*?)</script>',
         html,
@@ -79,7 +118,14 @@ def parse_cartelera_page(
         raise CinemarkScraperError(
             f"Cinemark no devolvió datos para la ciudad solicitada: {city_slug}."
         )
+    return page_props
 
+
+def _parse_showtimes(
+    page_props: dict[str, object],
+    city_slug: str,
+    source_url: str,
+) -> list[NormalizedShowtime]:
     showtimes: list[dict[str, object]] = []
     for section in ("PremieresBillboard", "Presales"):
         movies = page_props.get(section, [])
@@ -121,6 +167,48 @@ def parse_cartelera_page(
         return normalize_showtimes(showtimes)
     except ValueError as exc:
         raise CinemarkScraperError(f"No se pudo normalizar la cartelera: {exc}") from exc
+
+
+def _parse_upcoming_releases(
+    page_props: dict[str, object],
+    source_url: str,
+) -> list[CinemarkUpcomingRelease]:
+    releases = page_props.get("UpcomingReleases", [])
+    if not isinstance(releases, list):
+        raise CinemarkScraperError("La sección UpcomingReleases de Cinemark no es válida.")
+
+    parsed: list[CinemarkUpcomingRelease] = []
+    for movie in releases:
+        if not isinstance(movie, dict):
+            raise CinemarkScraperError(
+                "Se encontró un próximo estreno inválido en UpcomingReleases."
+            )
+
+        title = movie.get("TitleAlt") or movie.get("Title")
+        raw_release_date = movie.get("OpeningDate")
+        if not isinstance(title, str) or not title.strip():
+            raise CinemarkScraperError(
+                "Cinemark omitió el título de un próximo estreno."
+            )
+        if not isinstance(raw_release_date, str) or not raw_release_date.strip():
+            raise CinemarkScraperError(
+                f"Cinemark omitió la fecha de estreno de {title}."
+            )
+        try:
+            release_date = date.fromisoformat(raw_release_date[:10])
+        except ValueError as exc:
+            raise CinemarkScraperError(
+                f"Cinemark devolvió una fecha de estreno no válida para {title}."
+            ) from exc
+
+        parsed.append(
+            {
+                "titulo": title.strip(),
+                "fecha_estreno": release_date,
+                "fuente_scraping": source_url,
+            }
+        )
+    return parsed
 
 
 def _parse_session(

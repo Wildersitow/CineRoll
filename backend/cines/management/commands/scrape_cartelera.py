@@ -6,7 +6,11 @@ from django.db.models import F
 from django.utils import timezone
 
 from cines.models import Cine, Funcion, TituloPendiente
-from cines.scrapers.cinemark import CinemarkScraperError, scrape_cartelera
+from cines.scrapers.cinemark import (
+    CinemarkCartelera,
+    CinemarkScraperError,
+    scrape_cartelera_completa,
+)
 from cines.services import NormalizedShowtime, match_media_title, normalize_title
 from media.models import Media
 
@@ -31,10 +35,11 @@ class Command(BaseCommand):
         cinema_provider = options["cine"]
         city_slug = options["ciudad"].strip().lower()
         try:
-            records = self._scrape(cinema_provider, city_slug)
+            cartelera = self._scrape(cinema_provider, city_slug)
         except (CinemarkScraperError, ValueError) as exc:
             raise CommandError(str(exc)) from exc
 
+        records = cartelera.funciones
         movies = list(Media.objects.filter(tipo=Media.Tipo.PELICULA))
         manual_matches = self._build_manual_matches()
         matched = 0
@@ -43,8 +48,20 @@ class Command(BaseCommand):
         updated_functions = 0
         cinema_cache = self._build_cinema_cache()
         matched_media_ids: set[int] = set()
+        matched_releases = 0
+        unmatched_releases: list[str] = []
 
         with transaction.atomic():
+            for release in cartelera.proximos_estrenos:
+                media = match_media_title(release["titulo"], movies)
+                if media is None:
+                    unmatched_releases.append(release["titulo"])
+                    continue
+                media.fecha_estreno = release["fecha_estreno"]
+                media.estado = Media.Estado.PROXIMO_ESTRENO
+                media.save(update_fields=["fecha_estreno", "estado"])
+                matched_releases += 1
+
             for record in records:
                 media = match_media_title(record["titulo"], movies)
                 if media is None:
@@ -89,9 +106,15 @@ class Command(BaseCommand):
                 f"{len(records)} funciones leídas, {matched} asociadas al catálogo, "
                 f"{created_functions} guardadas, {updated_functions} actualizadas, "
                 f"{pending} pendientes de revisión, "
-                f"{now_showing} películas pasadas a 'en cartelera'."
+                f"{now_showing} películas pasadas a 'en cartelera', "
+                f"{len(cartelera.proximos_estrenos)} próximos estrenos leídos, "
+                f"{matched_releases} asociados a Media."
             )
         )
+        if unmatched_releases:
+            self.stdout.write("Próximos estrenos sin coincidencia en Media:")
+            for title in unmatched_releases:
+                self.stdout.write(f"  {title}")
         if pending:
             self.stdout.write("Títulos pendientes:")
             for item in (
@@ -110,9 +133,9 @@ class Command(BaseCommand):
             if pending > 20:
                 self.stdout.write("  (se muestran como máximo 20 títulos)")
 
-    def _scrape(self, cinema_provider: str, city_slug: str) -> list[NormalizedShowtime]:
+    def _scrape(self, cinema_provider: str, city_slug: str) -> CinemarkCartelera:
         if cinema_provider == "cinemark":
-            return scrape_cartelera(city_slug=city_slug)
+            return scrape_cartelera_completa(city_slug=city_slug)
         raise CommandError(f"No existe scraper configurado para '{cinema_provider}'.")
 
     def _build_manual_matches(self) -> dict[str, Media]:

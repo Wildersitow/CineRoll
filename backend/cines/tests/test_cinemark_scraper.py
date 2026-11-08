@@ -4,7 +4,9 @@ from unittest import TestCase
 from zoneinfo import ZoneInfo
 
 from cines.scrapers.cinemark import (
+    CinemarkCartelera,
     CinemarkScraperError,
+    parse_cartelera_data,
     parse_cartelera_page,
 )
 
@@ -37,7 +39,11 @@ class CinemarkScraperTests(TestCase):
                     ],
                     "Presales": [],
                     "UpcomingReleases": [
-                        {"Title": "No tiene funciones", "Sessions": []}
+                        {
+                            "Title": "No tiene funciones",
+                            "OpeningDate": "2026-12-17T00:00:00",
+                            "Sessions": [],
+                        }
                     ],
                 }
             }
@@ -66,6 +72,80 @@ class CinemarkScraperTests(TestCase):
                 "funcion_id_origen": "session-1",
             },
         )
+
+    def test_parses_upcoming_releases_and_opening_dates(self):
+        payload = {
+            "props": {
+                "pageProps": {
+                    "city": "bogota",
+                    "PremieresBillboard": [],
+                    "Presales": [],
+                    "UpcomingReleases": [
+                        {
+                            "Title": "TITULO ORIGINAL",
+                            "TitleAlt": "Título localizado",
+                            "OpeningDate": "2026-12-17T00:00:00",
+                            "Sessions": [],
+                        },
+                        {
+                            "Title": "Solo título original",
+                            "OpeningDate": "2026-12-24T00:00:00",
+                            "Sessions": [],
+                        },
+                    ],
+                }
+            }
+        }
+        source_url = "https://www.cinemark.com.co/cartelera/bogota"
+        html = (
+            '<html><script id="__NEXT_DATA__" type="application/json">'
+            f"{json.dumps(payload)}</script></html>"
+        )
+
+        result = parse_cartelera_data(html, "bogota", source_url)
+
+        self.assertIsInstance(result, CinemarkCartelera)
+        self.assertEqual(result.funciones, [])
+        self.assertEqual(
+            result.proximos_estrenos,
+            [
+                {
+                    "titulo": "Título localizado",
+                    "fecha_estreno": date(2026, 12, 17),
+                    "fuente_scraping": source_url,
+                },
+                {
+                    "titulo": "Solo título original",
+                    "fecha_estreno": date(2026, 12, 24),
+                    "fuente_scraping": source_url,
+                },
+            ],
+        )
+
+    def test_rejects_upcoming_release_without_a_valid_date(self):
+        payload = {
+            "props": {
+                "pageProps": {
+                    "city": "bogota",
+                    "PremieresBillboard": [],
+                    "Presales": [],
+                    "UpcomingReleases": [
+                        {"Title": "Sin fecha", "OpeningDate": "fecha inválida"}
+                    ],
+                }
+            }
+        }
+        html = (
+            '<html><script id="__NEXT_DATA__" type="application/json">'
+            f"{json.dumps(payload)}</script></html>"
+        )
+
+        with self.assertRaisesRegex(CinemarkScraperError, "fecha de estreno no válida"):
+            parse_cartelera_data(
+                html,
+                "bogota",
+                "https://www.cinemark.com.co/cartelera/bogota",
+            )
 
     def test_rejects_page_for_a_different_city(self):
         html = (

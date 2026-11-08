@@ -6,6 +6,12 @@ Films se observó en Network la solicitud que entrega funciones y su respuesta.
 En Cineland se llegó a la cartelera de Valledupar, pero no se pudo conservar y
 verificar el cuerpo de la respuesta que alimenta los horarios.
 
+Para los próximos estrenos de Cinemark, el modelo `Media` ya dispone de
+`fecha_estreno` y del estado `PROXIMO_ESTRENO`. El scraper toma `OpeningDate`
+de `UpcomingReleases` y actualiza esos campos solo si el título coincide de
+forma única con una película existente; no crea películas nuevas cuando no hay
+coincidencia.
+
 | Cine | URL consultada y evidencia | Datos de funciones / endpoint JSON | ¿Playwright? | Dificultad inicial |
 |---|---|---|---|---|
 | Cinemark | [Cartelera por ciudad](https://www.cinemark.com.co/cartelera/bogota) respondió HTTP 200. El HTML de Next.js contiene `__NEXT_DATA__` con `PremieresBillboard` y `Presales`. | La respuesta incrustada incluye título (`TitleAlt`/`Title`), cine (`CinemaName`, `CinemaId`), identificador de función, hora ISO (`Showtime`), sala (`ScreenName`) y formato/idioma (`Attributes`). No se confirmó un endpoint JSON separado: la fuente del scraper es el HTML de cartelera. | No hace falta para la cartelera observada: una petición HTTP entrega los datos renderizados por el servidor. | Baja-media; la página por ciudad ya incluye sesiones. |
@@ -34,6 +40,15 @@ verificar el cuerpo de la respuesta que alimenta los horarios.
    formato `DOB`, idioma `DOBLADA`, horarios 16:00, 18:30 y 21:00.
 4. La captura resumida correspondió a un complejo (ID `577`), 18 fechas, 41
    películas y 176 horarios. Los horarios y cantidades cambian con la cartelera.
+
+### Cinemark: próximos estrenos
+
+La respuesta HTML de [la cartelera de Bogotá](https://www.cinemark.com.co/cartelera/bogota)
+incluye `UpcomingReleases` dentro de `props.pageProps` en `__NEXT_DATA__`.
+La captura del 8 de noviembre de 2026 incluyó 29 títulos; cada uno tenía
+`OpeningDate` (por ejemplo, `2026-11-12T00:00:00`) y cero funciones en `Sessions`.
+El scraper procesa esta sección junto con los horarios en la misma descarga y
+usa `OpeningDate` como fecha local de estreno.
 
 ### Royal Films
 
@@ -86,7 +101,10 @@ scraper: su respuesta confirmada entrega en una sola llamada los horarios
 completos de la ciudad. Royal Films también es viable, aunque requiere consultar
 las funciones película por película. Cineland queda pendiente hasta capturar y
 verificar el cuerpo de su respuesta de funciones. No se implementó ningún scraper
-adicional en este paso.
+adicional para esos cines en este paso. El scraper de Cinemark también lee
+`UpcomingReleases`; el comando actualiza las fechas y el estado de las películas
+que ya existen en `Media` y muestra los títulos sin coincidencia para revisión,
+sin crear fichas automáticamente.
 
 ## Importar cartelera de Cinemark manualmente
 

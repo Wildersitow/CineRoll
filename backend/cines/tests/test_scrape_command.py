@@ -6,6 +6,7 @@ from django.core.management import call_command
 from django.test import TestCase
 
 from cines.models import Cine, Funcion, TituloPendiente
+from cines.scrapers.cinemark import CinemarkCartelera
 from media.models import Media
 
 
@@ -23,10 +24,14 @@ class ScrapeCarteleraCommandTests(TestCase):
             "cine_id_origen": "2401",
             "funcion_id_origen": "session-1",
         }
+        self.cartelera = CinemarkCartelera(
+            funciones=[self.showtime],
+            proximos_estrenos=[],
+        )
 
-    @patch("cines.management.commands.scrape_cartelera.scrape_cartelera")
+    @patch("cines.management.commands.scrape_cartelera.scrape_cartelera_completa")
     def test_matches_and_saves_function_idempotently(self, scrape):
-        scrape.return_value = [self.showtime]
+        scrape.return_value = self.cartelera
         media = Media.objects.create(
             titulo="Cómo entrenar a tu dragón",
             tipo=Media.Tipo.PELICULA,
@@ -43,9 +48,9 @@ class ScrapeCarteleraCommandTests(TestCase):
         self.assertEqual(function.formato, "2D, Doblada")
         self.assertEqual(TituloPendiente.objects.count(), 0)
 
-    @patch("cines.management.commands.scrape_cartelera.scrape_cartelera")
+    @patch("cines.management.commands.scrape_cartelera.scrape_cartelera_completa")
     def test_unknown_title_is_recorded_for_manual_review(self, scrape):
-        scrape.return_value = [self.showtime]
+        scrape.return_value = self.cartelera
 
         call_command("scrape_cartelera", cine="cinemark", ciudad="bogota")
         call_command("scrape_cartelera", cine="cinemark", ciudad="bogota")
@@ -58,9 +63,9 @@ class ScrapeCarteleraCommandTests(TestCase):
         self.assertEqual(pending.estado, TituloPendiente.Estado.PENDIENTE)
         self.assertEqual(pending.apariciones_detectadas, 2)
 
-    @patch("cines.management.commands.scrape_cartelera.scrape_cartelera")
+    @patch("cines.management.commands.scrape_cartelera.scrape_cartelera_completa")
     def test_manually_resolved_title_saves_functions(self, scrape):
-        scrape.return_value = [self.showtime]
+        scrape.return_value = self.cartelera
         media = Media.objects.create(
             titulo="Dragones: la película",
             tipo=Media.Tipo.PELICULA,
@@ -77,9 +82,9 @@ class ScrapeCarteleraCommandTests(TestCase):
         self.assertEqual(Funcion.objects.count(), 1)
         self.assertEqual(Funcion.objects.get().media, media)
 
-    @patch("cines.management.commands.scrape_cartelera.scrape_cartelera")
+    @patch("cines.management.commands.scrape_cartelera.scrape_cartelera_completa")
     def test_matched_movie_is_marked_now_showing(self, scrape):
-        scrape.return_value = [self.showtime]
+        scrape.return_value = self.cartelera
         media = Media.objects.create(
             titulo="Cómo entrenar a tu dragón",
             tipo=Media.Tipo.PELICULA,
@@ -92,9 +97,9 @@ class ScrapeCarteleraCommandTests(TestCase):
         media.refresh_from_db()
         self.assertEqual(media.estado, Media.Estado.EN_CARTELERA)
 
-    @patch("cines.management.commands.scrape_cartelera.scrape_cartelera")
+    @patch("cines.management.commands.scrape_cartelera.scrape_cartelera_completa")
     def test_future_premiere_stays_upcoming(self, scrape):
-        scrape.return_value = [self.showtime]
+        scrape.return_value = self.cartelera
         media = Media.objects.create(
             titulo="Cómo entrenar a tu dragón",
             tipo=Media.Tipo.PELICULA,
@@ -106,3 +111,34 @@ class ScrapeCarteleraCommandTests(TestCase):
 
         media.refresh_from_db()
         self.assertEqual(media.estado, Media.Estado.PROXIMO_ESTRENO)
+
+    @patch("cines.management.commands.scrape_cartelera.scrape_cartelera_completa")
+    def test_upcoming_release_updates_matched_media_without_creating_movies(self, scrape):
+        scrape.return_value = CinemarkCartelera(
+            funciones=[],
+            proximos_estrenos=[
+                {
+                    "titulo": "Cómo entrenar a tu dragón",
+                    "fecha_estreno": date(2026, 12, 17),
+                    "fuente_scraping": "https://www.cinemark.com.co/cartelera/bogota",
+                },
+                {
+                    "titulo": "Título no catalogado",
+                    "fecha_estreno": date(2026, 12, 24),
+                    "fuente_scraping": "https://www.cinemark.com.co/cartelera/bogota",
+                },
+            ],
+        )
+        media = Media.objects.create(
+            titulo="Cómo entrenar a tu dragón",
+            tipo=Media.Tipo.PELICULA,
+            estado=Media.Estado.FUERA_CARTELERA,
+        )
+
+        call_command("scrape_cartelera", cine="cinemark", ciudad="bogota")
+
+        media.refresh_from_db()
+        self.assertEqual(media.fecha_estreno, date(2026, 12, 17))
+        self.assertEqual(media.estado, Media.Estado.PROXIMO_ESTRENO)
+        self.assertEqual(Media.objects.count(), 1)
+        self.assertEqual(Funcion.objects.count(), 0)
