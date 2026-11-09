@@ -72,6 +72,12 @@ class CatalogApiTests(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(response.data["results"][0]["nombre"], "Drama")
 
+        detail_response = self.client.get(
+            reverse("genero-detail", kwargs={"pk": self.media.generos.first().pk})
+        )
+        self.assertEqual(detail_response.status_code, status.HTTP_200_OK)
+        self.assertEqual(detail_response.data["nombre"], "Drama")
+
     def test_persona_list_and_detail_are_public_and_include_profile_fields(self):
         list_response = self.client.get(reverse("persona-list"))
 
@@ -120,6 +126,48 @@ class CatalogApiTests(APITestCase):
         admin_response = self.client.post(url, data)
         self.assertEqual(admin_response.status_code, status.HTTP_201_CREATED)
         self.assertEqual(admin_response.data["titulo"], "No permitido")
+
+    def test_only_admin_can_write_media_genre_and_person(self):
+        genre = self.media.generos.first()
+        resources = (
+            (
+                reverse("media-list"),
+                reverse("media-detail", kwargs={"pk": self.media.pk}),
+                {"titulo": "Edición de prueba"},
+            ),
+            (
+                reverse("genero-list"),
+                reverse("genero-detail", kwargs={"pk": genre.pk}),
+                {"nombre": "Género editado"},
+            ),
+            (
+                reverse("persona-list"),
+                reverse("persona-detail", kwargs={"pk": self.actor.pk}),
+                {"nombre": "Persona editada"},
+            ),
+        )
+
+        for user, expected_status in (
+            (None, status.HTTP_401_UNAUTHORIZED),
+            (
+                Usuario.objects.create_user(
+                    username="lector-escritura", password="test-password"
+                ),
+                status.HTTP_403_FORBIDDEN,
+            ),
+        ):
+            self.client.force_authenticate(user=user)
+            for collection_url, detail_url, update_data in resources:
+                with self.subTest(user=user, url=collection_url, method="POST"):
+                    response = self.client.post(collection_url, update_data)
+                    self.assertEqual(response.status_code, expected_status)
+                with self.subTest(user=user, url=detail_url, method="PATCH"):
+                    response = self.client.patch(detail_url, update_data)
+                    self.assertEqual(response.status_code, expected_status)
+                with self.subTest(user=user, url=detail_url, method="DELETE"):
+                    response = self.client.delete(detail_url)
+                    self.assertEqual(response.status_code, expected_status)
+        self.client.force_authenticate(user=None)
 
     def test_media_can_be_updated_and_deleted_by_admin(self):
         admin_user = Usuario.objects.create_user(

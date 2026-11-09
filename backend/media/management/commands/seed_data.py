@@ -1,7 +1,9 @@
-from datetime import date
+from datetime import date, timedelta
+from urllib.parse import quote_plus
 
 from django.core.management.base import BaseCommand
 from django.db import transaction
+from django.utils import timezone
 
 from media.models import Credito, Genero, Media, Persona
 
@@ -380,8 +382,194 @@ MEDIA_DATA = [
 ]
 
 
+UPCOMING_MEDIA = [
+    {
+        "titulo": "Blue Lock",
+        "titulo_original": "Blue Lock",
+        "tipo": Media.Tipo.PELICULA,
+        "fecha_estreno": date(2026, 11, 12),
+        "duracion": 128,
+        "estado": Media.Estado.PROXIMO_ESTRENO,
+        "generos": ("Anime", "Acción", "Drama"),
+        "directores": ("Yusuke Taki",),
+        "actores": ("Fumiya Takahashi", "Kaito Sakurai", "Kyohei Takahashi"),
+    },
+    {
+        "titulo": "Pinocho: Desatado",
+        "titulo_original": "Pinocchio: Unstrung",
+        "tipo": Media.Tipo.PELICULA,
+        "fecha_estreno": date(2026, 11, 19),
+        "duracion": 82,
+        "estado": Media.Estado.PROXIMO_ESTRENO,
+        "generos": ("Terror", "Fantasía", "Suspenso"),
+        "directores": ("Rhys Frake-Waterfield",),
+        "actores": ("Jude Evan Lloyd", "Richard Brake", "Robert Englund"),
+    },
+    {
+        "titulo": "Los Juegos del Hambre: Amanecer en la cosecha",
+        "titulo_original": "The Hunger Games: Sunrise on the Reaping",
+        "tipo": Media.Tipo.PELICULA,
+        "fecha_estreno": date(2026, 11, 19),
+        "duracion": 150,
+        "estado": Media.Estado.PROXIMO_ESTRENO,
+        "generos": ("Ciencia ficción", "Acción", "Aventura"),
+        "directores": ("Francis Lawrence",),
+        "actores": ("Joseph Zada", "Mckenna Grace", "Ralph Fiennes"),
+    },
+    {
+        "titulo": "Jumanji 3",
+        "titulo_original": "Jumanji 3",
+        "tipo": Media.Tipo.PELICULA,
+        "fecha_estreno": date(2026, 12, 11),
+        "duracion": 120,
+        "estado": Media.Estado.PROXIMO_ESTRENO,
+        "generos": ("Aventura", "Comedia", "Fantasía"),
+        "directores": ("Jake Kasdan",),
+        "actores": ("Dwayne Johnson", "Jack Black", "Kevin Hart"),
+    },
+    {
+        "titulo": "Dune: Part Three",
+        "titulo_original": "Dune: Part Three",
+        "tipo": Media.Tipo.PELICULA,
+        "fecha_estreno": date(2026, 12, 18),
+        "duracion": 150,
+        "estado": Media.Estado.PROXIMO_ESTRENO,
+        "generos": ("Ciencia ficción", "Aventura", "Drama"),
+        "directores": ("Denis Villeneuve",),
+        "actores": ("Timothée Chalamet", "Zendaya", "Rebecca Ferguson"),
+    },
+]
+
+MEDIA_DATA = MEDIA_DATA + UPCOMING_MEDIA
+
+SINOPSIS = {
+    "Cadena perpetua": "Condenado injustamente a prisión perpetua, Andy Dufresne encuentra esperanza y una amistad duradera entre los muros de Shawshank.",
+    "El padrino": "Don Vito Corleone dirige una poderosa familia mafiosa; cuando rechaza entrar al negocio de las drogas, una violenta disputa amenaza a todos los Corleone.",
+    "El caballero oscuro": "Batman, Gordon y Harvey Dent unen fuerzas contra el crimen de Gotham, hasta que el Joker desata el caos y pone a prueba sus límites.",
+    "Pulp Fiction": "Las vidas de dos asesinos a sueldo, la esposa de su jefe y un boxeador se cruzan en una serie de historias criminales en Los Ángeles.",
+    "El viaje de Chihiro": "Durante una mudanza, Chihiro entra en un mundo de espíritus y debe encontrar la forma de liberar a sus padres y regresar a casa.",
+    "Parásitos": "Una familia sin empleo se introduce poco a poco en la vida de una familia adinerada, con consecuencias inesperadas para ambas.",
+    "El origen": "Un ladrón capaz de entrar en los sueños recibe una misión casi imposible: implantar una idea en la mente de un objetivo.",
+    "Coco": "Miguel, un niño que sueña con ser músico, viaja al mundo de los muertos y descubre secretos sobre la historia de su familia.",
+    "Interestelar": "Un grupo de exploradores atraviesa un agujero de gusano en busca de un futuro posible para la humanidad.",
+    "Parque Jurásico": "Un parque con dinosaurios clonados pierde el control de sus sistemas de seguridad y convierte una visita en una lucha por sobrevivir.",
+    "Matrix": "Neo descubre que la realidad que conoce es una simulación y se une a quienes luchan contra las máquinas que la controlan.",
+    "La comunidad del anillo": "Frodo emprende un viaje con sus aliados para destruir el Anillo Único antes de que Sauron lo recupere.",
+    "Titanic": "A bordo del transatlántico Titanic, Jack y Rose se enamoran mientras el barco se aproxima a una tragedia histórica.",
+    "Amélie": "Una joven camarera de Montmartre decide mejorar la vida de quienes la rodean mientras aprende a buscar su propia felicidad.",
+    "Whiplash": "Un joven baterista persigue la excelencia en un conservatorio bajo la exigencia extrema de un profesor de jazz.",
+    "Déjame salir": "Una visita a la familia de su novia lleva a Chris a descubrir que algo inquietante se oculta tras su hospitalidad.",
+    "La La Land": "Una aspirante a actriz y un pianista de jazz se enamoran en Los Ángeles mientras persiguen sus carreras artísticas.",
+    "Toy Story": "Cuando aparece Buzz Lightyear, Woody teme perder su lugar como juguete favorito y ambos terminan unidos por una aventura.",
+    "Todo a la vez en todas partes": "Una mujer común queda conectada con versiones de sí misma en universos paralelos y debe evitar que el multiverso colapse.",
+    "El gran hotel Budapest": "Un conserje legendario y su joven protegido quedan envueltos en el robo de una pintura y una disputa familiar.",
+    "Up: Una aventura de altura": "Un vendedor de globos jubilado emprende el viaje que siempre soñó y acaba acompañado por un joven explorador.",
+    "Dune": "Paul Atreides queda atrapado en las intrigas por Arrakis, un planeta desértico esencial para el futuro de la galaxia.",
+    "El show de Truman": "Truman empieza a sospechar que sus amigos, su ciudad y su vida entera forman parte de un programa televisivo.",
+    "Shrek": "Un ogro emprende una misión para recuperar su pantano y termina acompañado por un burro y una princesa con un secreto.",
+    "El silencio de los inocentes": "Una agente del FBI busca la ayuda de Hannibal Lecter para comprender la mente de un asesino en serie.",
+    "Blade Runner": "Un expolicía debe localizar a replicantes fugitivos en una ciudad futurista donde los límites entre humano y máquina se difuminan.",
+    "Perfect Blue": "Una cantante que inicia una carrera como actriz es acosada por un fan, mientras su percepción de la realidad se desmorona.",
+    "Spider-Man: Un nuevo universo": "Miles Morales descubre sus poderes y conoce a otras versiones de Spider-Man que deben impedir el colapso de sus universos.",
+    "Breaking Bad": "Un profesor de química con cáncer se asocia con un antiguo alumno para fabricar drogas y asegurar el futuro económico de su familia.",
+    "Juego de tronos": "Varias casas nobles luchan por el poder en Poniente mientras una amenaza sobrenatural avanza desde el norte.",
+    "The Office": "Un equipo de trabajadores de una compañía papelera afronta la rutina diaria bajo la dirección de un jefe convencido de ser ejemplar.",
+    "Stranger Things": "La desaparición de un niño revela experimentos secretos y fuerzas sobrenaturales en un pequeño pueblo.",
+    "The Last of Us": "Joel escolta a Ellie a través de un mundo devastado por una infección que ha transformado a gran parte de la población.",
+    "Fullmetal Alchemist: Brotherhood": "Dos hermanos alquimistas recorren un país militarizado para recuperar sus cuerpos y descubrir una conspiración.",
+    "Death Note": "Un estudiante encuentra un cuaderno capaz de matar a cualquiera cuyo nombre escriba y se enfrenta a un detective brillante.",
+    "Cowboy Bebop": "Un grupo de cazarrecompensas viaja por el sistema solar en busca de trabajos y de respuestas sobre sus pasados.",
+    "Ataque a los titanes": "Tras la caída de una muralla, Eren y el Cuerpo de Exploradores combaten a los titanes para proteger a la humanidad.",
+    "Blue Lock": "Tres cientos jóvenes futbolistas compiten en un programa extremo creado para encontrar al delantero más decisivo de Japón.",
+    "Pinocho: Desatado": "Un títere creado para un niño cobra vida de forma siniestra y convierte el deseo de ser humano en una pesadilla.",
+    "Los Juegos del Hambre: Amanecer en la cosecha": "Veinticuatro años antes de Katniss, el joven Haymitch participa en la edición de los Juegos del Hambre que cambiará Panem.",
+    "Jumanji 3": "Una nueva partida del juego Jumanji arrastra a sus jugadores a una aventura donde cada decisión tiene consecuencias reales.",
+    "Dune: Part Three": "Paul Atreides afronta las consecuencias de su ascenso mientras el destino de Arrakis y de la galaxia cambia a su alrededor.",
+}
+
+POSTERS = {
+    "Cadena perpetua": "uRRTV7p6l2ivtODWJVVAMRrwTn2",
+    "El padrino": "5HlLUsmsv60cZVTzVns9ICZD6zU",
+    "El caballero oscuro": "8QDQExnfNFOtabLDKqfDQuHDsIg",
+    "Pulp Fiction": "hNcQAuquJxTxl2fJFs1R42DrWcf",
+    "El viaje de Chihiro": "2RcxjDykOssx4SfqshewyI9vfSl",
+    "Parásitos": "4N55tgxDW0RRATyrZHbx0q9HUKv",
+    "El origen": "tXQvtRWfkUUnWJAn2tN3jERIUG",
+    "Coco": "vwsFGblLYxWBNjg9pdWN1Mm5YfW",
+    "Interestelar": "d1QKiYtceF3GDtxvTFXFAqwwah9",
+    "Parque Jurásico": "1r8TWaAExHbFRzyqT3Vcbq1XZQb",
+    "Matrix": "tpW2X2DvxtTHJ61iJ7zNYYrJihs",
+    "La comunidad del anillo": "9xtH1RmAzQ0rrMBNUMXstb2s3er",
+    "Titanic": "2tltWMvvTqscFtdujTXDsRFTqKQ",
+    "Amélie": "mYvUib00miJWxWkiXhy3QnrCj96",
+    "Whiplash": "uy36CPy5ARuC8qrH8Esg2ndFyJ5",
+    "Déjame salir": "xiMoqa0bmjuyuXYqKGwrTSJL8nI",
+    "La La Land": "7pFsAaJmiOppVHcldBzg8JKBHwe",
+    "Toy Story": "jvn7wy3RSNEXnFSXLpH2of2LcV6",
+    "Todo a la vez en todas partes": "9R1zEZJkIah6GuLwFZWsuygn552",
+    "El gran hotel Budapest": "1wk0vpNCX5T40KsGQKjfoDAhmJw",
+    "Up: Una aventura de altura": "1N0LtzUueXrlnpL466jQBJ6iAuj",
+    "Dune": "szcew6yyjcDvaL0isaPBk2e3nkF",
+    "El show de Truman": "8eWVXQZ6yqKfkuHhWD5RcdHnszT",
+    "Shrek": "jTQONM7jt1yv2lL972TtmWO0UIZ",
+    "El silencio de los inocentes": "8FdQQ3cUCs9goEOr1qUFaHackoJ",
+    "Blade Runner": "pBA2J6iQMiP5Zd4ewMKdOWfq1HV",
+    "Perfect Blue": "kk8p22JheV6MB0fBXOOUgZK9UWQ",
+    "Spider-Man: Un nuevo universo": "xRMZikjAHNFebD1FLRqgDZeGV4a",
+    "Breaking Bad": "anFx9aTOOYqgS3v7x3R84Kz67ly",
+    "Juego de tronos": "3hDtRuwTfQQYRst3kjhvp4Cogjw",
+    "The Office": "5uwetbr0X8BPRy3Wmh63S9EhsiY",
+    "Stranger Things": "AsPD90QEQsIAtSxfSjV3fN7XFpt",
+    "The Last of Us": "tNQWO6cNzQYCyvw36mUcAQQyf5F",
+    "Fullmetal Alchemist: Brotherhood": "5ZFUEOULaVml7pQuXxhpR2SmVUw",
+    "Death Note": "cFirFPdzle2QYyjFlLVwWUP5YAo",
+    "Cowboy Bebop": "xDiXDfZwC6XYC6fxHI1jl3A3Ill",
+    "Ataque a los titanes": "yFPQ4JhhirnCVe2UIKGMYX7TOGZ",
+    "Blue Lock": "is62bAmW4fHrJtbn0sjxWRb6psq",
+    "Pinocho: Desatado": "gdR1YLb7697IQZMdmA1EIJYFm9h",
+    "Los Juegos del Hambre: Amanecer en la cosecha": "nijGyrqQbDhSGss4uugQokvBAsG",
+}
+
+TRAILERS = {
+    "Cadena perpetua": "4u87tmlj4oE",
+    "El padrino": "v72XprPxy3E",
+    "Pulp Fiction": "Yydi7TMo5n0",
+    "El viaje de Chihiro": "5Fgq4Osh6XQ",
+    "Parásitos": "mwoy1GqLIP4",
+    "El origen": "RV9L7ui9Cn8",
+    "Coco": "DOtdQd_wgjI",
+    "Interestelar": "UoSSbmD9vqc",
+    "Matrix": "Zd8Jw1Z_j4w",
+    "La comunidad del anillo": "3GJp6p_mgPo",
+    "Titanic": "u8HKcDZ2OWg",
+    "Amélie": "UQRxJfMqQcE",
+    "Whiplash": "tXploxlYWL4",
+    "Déjame salir": "T-pmF5dJdT0",
+    "La La Land": "KtqSUk0kwJs",
+    "Todo a la vez en todas partes": "UcTzHfkgkRI",
+    "El gran hotel Budapest": "b7Dg35LBGBc",
+    "Up: Una aventura de altura": "qoZo9MiICo0",
+    "Dune": "mSY_NbSmaUI",
+    "El show de Truman": "c3gI9ms8Fdc",
+    "Shrek": "B88JfTyJ1Fw",
+    "El silencio de los inocentes": "5SKgu_gXPQ4",
+    "Blade Runner": "4USFH9n8tNk",
+    "Perfect Blue": "RS3fB6KLz8A",
+    "Spider-Man: Un nuevo universo": "eRNpNxy84Ik",
+    "Breaking Bad": "V8WQhxHEmMc",
+    "Juego de tronos": "kPrW3Swrp4E",
+    "The Office": "dmG9Oc4qYQk",
+    "Stranger Things": "RP-AsyQaTEk",
+    "The Last of Us": "yPfo1oINDLE",
+    "Death Note": "rZzG1C2hI8M",
+    "Ataque a los titanes": "v7sVsQlfDf0",
+    "Pinocho: Desatado": "NPLgD0dNQ8c",
+    "Los Juegos del Hambre: Amanecer en la cosecha": "bwZzXTUcaQo",
+}
+
+
 class Command(BaseCommand):
-    help = "Carga un catálogo inicial de películas, series y anime."
+    help = "Carga el catálogo inicial y próximos estrenos de películas, series y anime."
 
     def handle(self, *args, **options):
         media_created = 0
@@ -389,12 +577,33 @@ class Command(BaseCommand):
 
         with transaction.atomic():
             for item in MEDIA_DATA:
+                fecha_estreno = item["fecha_estreno"]
+                if item.get("estado") == Media.Estado.PROXIMO_ESTRENO:
+                    fecha_estreno = max(
+                        fecha_estreno, timezone.localdate() + timedelta(days=1)
+                    )
                 defaults = {
                     "titulo_original": item["titulo_original"],
                     "tipo": item["tipo"],
-                    "fecha_estreno": item["fecha_estreno"],
+                    "fecha_estreno": fecha_estreno,
                     "duracion": item["duracion"],
-                    "estado": Media.Estado.FUERA_CARTELERA,
+                    "sinopsis": SINOPSIS[item["titulo"]],
+                    "poster_url": (
+                        "https://media.themoviedb.org/t/p/w300_and_h450_face/"
+                        f"{POSTERS[item['titulo']]}.jpg"
+                        if item["titulo"] in POSTERS
+                        else "https://placehold.co/600x900/14213d/fca311.png?text="
+                        f"{quote_plus(item['titulo'])}"
+                    ),
+                    "trailer_url": (
+                        f"https://www.youtube.com/watch?v={TRAILERS[item['titulo']]}"
+                        if item["titulo"] in TRAILERS
+                        else "https://www.youtube.com/results?search_query="
+                        f"{quote_plus(item['titulo'] + ' trailer oficial')}"
+                    ),
+                    "estado": item.get(
+                        "estado", Media.Estado.FUERA_CARTELERA
+                    ),
                 }
                 media, created = Media.objects.update_or_create(
                     titulo=item["titulo"], defaults=defaults
