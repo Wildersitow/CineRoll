@@ -1,14 +1,7 @@
-from datetime import datetime
-
 from django.core.management.base import BaseCommand, CommandError
-from django.db import transaction
-from django.db.models import F
-from django.utils import timezone
 
-from cines.models import Cine, Funcion, TituloPendiente
-from cines.scrapers.cinemark import CinemarkScraperError, scrape_cartelera
-from cines.services import NormalizedShowtime, match_media_title, normalize_title
-from media.models import Media
+from cines.scrapers.cinemark import CinemarkScraperError
+from cines.services import scrape_and_save_cartelera
 
 
 class Command(BaseCommand):
@@ -28,157 +21,39 @@ class Command(BaseCommand):
         )
 
     def handle(self, *_args, **options):
-        cinema_provider = options["cine"]
-        city_slug = options["ciudad"].strip().lower()
         try:
-            records = self._scrape(cinema_provider, city_slug)
+            result = scrape_and_save_cartelera(
+                cinema_provider=options["cine"],
+                city_slug=options["ciudad"],
+            )
         except (CinemarkScraperError, ValueError) as exc:
             raise CommandError(str(exc)) from exc
 
-        movies = list(Media.objects.filter(tipo=Media.Tipo.PELICULA))
-        manual_matches = self._build_manual_matches()
-        matched = 0
-        pending = 0
-        created_functions = 0
-        updated_functions = 0
-        cinema_cache = self._build_cinema_cache()
-        matched_media_ids: set[int] = set()
-
-        with transaction.atomic():
-            for record in records:
-                media = match_media_title(record["titulo"], movies)
-                if media is None:
-                    media = manual_matches.get(normalize_title(record["titulo"]))
-                if media is None:
-                    self._record_pending(record)
-                    pending += 1
-                    continue
-
-                TituloPendiente.objects.filter(
-                    titulo_normalizado=normalize_title(record["titulo"]),
-                    cine_nombre=record["cine"],
-                    ciudad=record["ciudad"],
-                    estado=TituloPendiente.Estado.PENDIENTE,
-                ).update(
-                    estado=TituloPendiente.Estado.RESUELTO,
-                    media_asociada=media,
-                    ultima_deteccion=timezone.now(),
-                )
-                cinema = self._get_or_create_cinema(record, cinema_cache)
-                scheduled_at = datetime.combine(record["fecha"], record["hora"])
-                _, created = Funcion.objects.update_or_create(
-                    cine=cinema,
-                    media=media,
-                    fecha_hora=scheduled_at,
-                    sala=record["sala"],
-                    formato=record["formato"],
-                    defaults={"fuente_scraping": record["fuente_scraping"]},
-                )
-                matched += 1
-                matched_media_ids.add(media.pk)
-                if created:
-                    created_functions += 1
-                else:
-                    updated_functions += 1
-
-            now_showing = self._mark_now_showing(matched_media_ids)
-
         self.stdout.write(
             self.style.SUCCESS(
-                f"Cartelera {cinema_provider} ({city_slug}): "
-                f"{len(records)} funciones leídas, {matched} asociadas al catálogo, "
-                f"{created_functions} guardadas, {updated_functions} actualizadas, "
-                f"{pending} pendientes de revisión, "
-                f"{now_showing} películas pasadas a 'en cartelera'."
+                f"Cartelera {result.cine} ({result.ciudad}): "
+                f"{result.funciones_leidas} funciones leídas, "
+                f"{result.funciones_asociadas} asociadas al catálogo, "
+                f"{result.funciones_creadas} guardadas, "
+                f"{result.funciones_actualizadas} actualizadas, "
+                f"{result.titulos_pendientes} pendientes de revisión, "
+                f"{result.peliculas_en_cartelera} películas pasadas a 'en cartelera', "
+                f"{result.estrenos_leidos} próximos estrenos leídos, "
+                f"{result.estrenos_asociados} asociados a Media, "
+                f"{result.funciones_vencidas_eliminadas} funciones vencidas eliminadas, "
+                f"{result.peliculas_fuera_cartelera} películas pasadas a "
+                "'fuera de cartelera'."
             )
         )
-        if pending:
+
+        if result.estrenos_sin_coincidencia:
+            self.stdout.write("Próximos estrenos sin coincidencia en Media:")
+            for title in result.estrenos_sin_coincidencia:
+                self.stdout.write(f"  {title}")
+
+        if result.titulos_pendientes:
             self.stdout.write("Títulos pendientes:")
-            for item in (
-                TituloPendiente.objects.filter(
-                    ciudad=city_slug,
-                    cine_nombre__in={record["cine"] for record in records},
-                    estado=TituloPendiente.Estado.PENDIENTE,
-                )
-                .order_by("titulo_normalizado", "cine_nombre")
-                .distinct()[:20]
-            ):
-                self.stdout.write(
-                    f"  #{item.pk} {item.titulo_original} — "
-                    f"{item.cine_nombre} ({item.ciudad})"
-                )
-            if pending > 20:
+            for title in result.titulos_pendientes_mostrar:
+                self.stdout.write(f"  {title}")
+            if result.titulos_pendientes > len(result.titulos_pendientes_mostrar):
                 self.stdout.write("  (se muestran como máximo 20 títulos)")
-
-    def _scrape(self, cinema_provider: str, city_slug: str) -> list[NormalizedShowtime]:
-        if cinema_provider == "cinemark":
-            return scrape_cartelera(city_slug=city_slug)
-        raise CommandError(f"No existe scraper configurado para '{cinema_provider}'.")
-
-    def _build_manual_matches(self) -> dict[str, Media]:
-        """Títulos que un administrador resolvió a mano en el admin de pendientes."""
-        return {
-            pending.titulo_normalizado: pending.media_asociada
-            for pending in TituloPendiente.objects.filter(
-                estado=TituloPendiente.Estado.RESUELTO,
-                media_asociada__isnull=False,
-            ).select_related("media_asociada")
-        }
-
-    def _mark_now_showing(self, media_ids: set[int]) -> int:
-        """Marca 'en cartelera' las películas con funciones, salvo estrenos futuros."""
-        today = timezone.localdate()
-        return (
-            Media.objects.filter(pk__in=media_ids)
-            .exclude(estado=Media.Estado.EN_CARTELERA)
-            .exclude(fecha_estreno__gt=today)
-            .update(estado=Media.Estado.EN_CARTELERA)
-        )
-
-    def _build_cinema_cache(self) -> dict[tuple[str, str], Cine]:
-        return {
-            (normalize_title(cinema.nombre), normalize_title(cinema.ciudad)): cinema
-            for cinema in Cine.objects.all()
-        }
-
-    def _get_or_create_cinema(
-        self,
-        record: NormalizedShowtime,
-        cache: dict[tuple[str, str], Cine],
-    ) -> Cine:
-        key = (normalize_title(record["cine"]), normalize_title(record["ciudad"]))
-        cinema = cache.get(key)
-        if cinema is None:
-            cinema = Cine.objects.create(
-                nombre=record["cine"],
-                ciudad=record["ciudad"],
-                direccion="",
-                sitio_web="https://www.cinemark.com.co/",
-            )
-            cache[key] = cinema
-        return cinema
-
-    def _record_pending(self, record: NormalizedShowtime) -> None:
-        normalized = normalize_title(record["titulo"])
-        if not normalized:
-            raise CommandError(
-                f"El scraper devolvió un título sin contenido: {record['titulo']!r}."
-            )
-        pending, created = TituloPendiente.objects.get_or_create(
-            titulo_normalizado=normalized,
-            cine_nombre=record["cine"],
-            ciudad=record["ciudad"],
-            defaults={
-                "titulo_original": record["titulo"],
-                "fuente_scraping": record["fuente_scraping"],
-            },
-        )
-        if created:
-            return
-
-        TituloPendiente.objects.filter(pk=pending.pk).update(
-            titulo_original=record["titulo"],
-            fuente_scraping=record["fuente_scraping"],
-            ultima_deteccion=timezone.now(),
-            apariciones_detectadas=F("apariciones_detectadas") + 1,
-        )

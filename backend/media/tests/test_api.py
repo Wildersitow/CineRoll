@@ -1,9 +1,10 @@
-from datetime import date
+from datetime import date, datetime, timezone
 
 from django.urls import reverse
 from rest_framework import status
 from rest_framework.test import APITestCase
 
+from cines.models import Cine, Funcion
 from media.models import Credito, Genero, Media, Persona
 from usuarios.models import Usuario
 
@@ -149,6 +150,51 @@ class CatalogApiTests(APITestCase):
                 self.assertEqual(response.status_code, status.HTTP_200_OK)
                 self.assertEqual(response.data["count"], 1)
                 self.assertEqual(response.data["results"][0]["id"], target.pk)
+
+    def test_cinema_filter_uses_showtime_relationship_without_duplicates(self):
+        matching_cinema = Cine.objects.create(nombre="Cine filtrado", ciudad="Bogotá")
+        other_cinema = Cine.objects.create(nombre="Otro cine", ciudad="Cali")
+        other_media = Media.objects.create(
+            titulo="Sin funciones en el cine",
+            tipo=Media.Tipo.PELICULA,
+        )
+        Funcion.objects.create(
+            media=self.media,
+            cine=matching_cinema,
+            fecha_hora=datetime(2026, 11, 10, 19, 30, tzinfo=timezone.utc),
+        )
+        Funcion.objects.create(
+            media=self.media,
+            cine=matching_cinema,
+            fecha_hora=datetime(2026, 11, 11, 19, 30, tzinfo=timezone.utc),
+        )
+        Funcion.objects.create(
+            media=self.media,
+            cine=other_cinema,
+            fecha_hora=datetime(2026, 11, 12, 19, 30, tzinfo=timezone.utc),
+        )
+        Funcion.objects.create(
+            media=other_media,
+            cine=other_cinema,
+            fecha_hora=datetime(2026, 11, 12, 20, 30, tzinfo=timezone.utc),
+        )
+
+        response = self.client.get(
+            reverse("media-list"),
+            {"cine": str(matching_cinema.pk)},
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["count"], 1)
+        self.assertEqual(response.data["results"][0]["id"], self.media.pk)
+
+    def test_invalid_or_unknown_cinema_filter(self):
+        invalid = self.client.get(reverse("media-list"), {"cine": "valledupar"})
+        unknown = self.client.get(reverse("media-list"), {"cine": "999999"})
+
+        self.assertEqual(invalid.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(unknown.status_code, status.HTTP_200_OK)
+        self.assertEqual(unknown.data["count"], 0)
 
     def test_media_list_uses_configured_pagination(self):
         for index in range(21):

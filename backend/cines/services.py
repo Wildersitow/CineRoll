@@ -1,10 +1,16 @@
 from collections.abc import Iterable, Mapping
+from dataclasses import dataclass
 from datetime import date, datetime, time
 import unicodedata
 import re
 from typing import TypedDict
 from zoneinfo import ZoneInfo
 
+from django.db import transaction
+from django.db.models import Exists, F, OuterRef
+from django.utils import timezone
+
+from cines.models import Cine, Funcion, TituloPendiente
 from media.models import Media
 
 
@@ -46,6 +52,24 @@ class NormalizedShowtime(TypedDict):
     funcion_id_origen: str
 
 
+@dataclass(frozen=True)
+class CarteleraScrapeResult:
+    cine: str
+    ciudad: str
+    funciones_leidas: int
+    funciones_asociadas: int
+    funciones_creadas: int
+    funciones_actualizadas: int
+    titulos_pendientes: int
+    peliculas_en_cartelera: int
+    estrenos_leidos: int
+    estrenos_asociados: int
+    funciones_vencidas_eliminadas: int
+    peliculas_fuera_cartelera: int
+    estrenos_sin_coincidencia: tuple[str, ...]
+    titulos_pendientes_mostrar: tuple[str, ...]
+
+
 def normalize_title(title: str) -> str:
     """Normalize title accents, punctuation, and exhibition-format suffixes."""
     decomposed = unicodedata.normalize("NFKD", title.casefold())
@@ -74,6 +98,213 @@ def match_media_title(title: str, catalog: Iterable[Media] | None = None) -> Med
     if len(matches) != 1:
         return None
     return next(iter(matches.values()))
+
+
+def scrape_and_save_cartelera(
+    cinema_provider: str,
+    city_slug: str = "bogota",
+) -> CarteleraScrapeResult:
+    """Scrape, match, persist, and clean one cinema's showtimes."""
+    city_slug = city_slug.strip().lower()
+    if cinema_provider != "cinemark":
+        raise ValueError(f"No existe scraper configurado para '{cinema_provider}'.")
+
+    # Import lazily because the scraper uses the normalization helpers in this module.
+    from cines.scrapers.cinemark import scrape_cartelera_completa
+
+    cartelera = scrape_cartelera_completa(city_slug=city_slug)
+    records = cartelera.funciones
+    movies = list(Media.objects.filter(tipo=Media.Tipo.PELICULA))
+    manual_matches = _build_manual_matches()
+    matched = 0
+    pending = 0
+    created_functions = 0
+    updated_functions = 0
+    cinema_cache = _build_cinema_cache()
+    matched_media_ids: set[int] = set()
+    matched_releases = 0
+    unmatched_releases: list[str] = []
+
+    with transaction.atomic():
+        for release in cartelera.proximos_estrenos:
+            media = match_media_title(release["titulo"], movies)
+            if media is None:
+                unmatched_releases.append(release["titulo"])
+                continue
+            media.fecha_estreno = release["fecha_estreno"]
+            media.estado = Media.Estado.PROXIMO_ESTRENO
+            media.save(update_fields=["fecha_estreno", "estado"])
+            matched_releases += 1
+
+        for record in records:
+            media = match_media_title(record["titulo"], movies)
+            if media is None:
+                media = manual_matches.get(normalize_title(record["titulo"]))
+            if media is None:
+                _record_pending(record)
+                pending += 1
+                continue
+
+            TituloPendiente.objects.filter(
+                titulo_normalizado=normalize_title(record["titulo"]),
+                cine_nombre=record["cine"],
+                ciudad=record["ciudad"],
+                estado=TituloPendiente.Estado.PENDIENTE,
+            ).update(
+                estado=TituloPendiente.Estado.RESUELTO,
+                media_asociada=media,
+                ultima_deteccion=timezone.now(),
+            )
+            cinema = _get_or_create_cinema(record, cinema_cache)
+            scheduled_at = datetime.combine(record["fecha"], record["hora"])
+            _, created = Funcion.objects.update_or_create(
+                cine=cinema,
+                media=media,
+                fecha_hora=scheduled_at,
+                sala=record["sala"],
+                formato=record["formato"],
+                defaults={"fuente_scraping": record["fuente_scraping"]},
+            )
+            matched += 1
+            matched_media_ids.add(media.pk)
+            if created:
+                created_functions += 1
+            else:
+                updated_functions += 1
+
+        now_showing = _mark_now_showing(matched_media_ids)
+        deleted_functions, expired_media = cleanup_expired_showtimes()
+
+    pending_titles = (
+        TituloPendiente.objects.filter(
+            ciudad=city_slug,
+            cine_nombre__in={record["cine"] for record in records},
+            estado=TituloPendiente.Estado.PENDIENTE,
+        )
+        .order_by("titulo_normalizado", "cine_nombre")
+        .distinct()[:20]
+    )
+
+    return CarteleraScrapeResult(
+        cine=cinema_provider,
+        ciudad=city_slug,
+        funciones_leidas=len(records),
+        funciones_asociadas=matched,
+        funciones_creadas=created_functions,
+        funciones_actualizadas=updated_functions,
+        titulos_pendientes=pending,
+        peliculas_en_cartelera=now_showing,
+        estrenos_leidos=len(cartelera.proximos_estrenos),
+        estrenos_asociados=matched_releases,
+        funciones_vencidas_eliminadas=deleted_functions,
+        peliculas_fuera_cartelera=expired_media,
+        estrenos_sin_coincidencia=tuple(unmatched_releases),
+        titulos_pendientes_mostrar=tuple(
+            f"#{item.pk} {item.titulo_original} — {item.cine_nombre} ({item.ciudad})"
+            for item in pending_titles
+        ),
+    )
+
+
+def _build_manual_matches() -> dict[str, Media]:
+    return {
+        pending.titulo_normalizado: pending.media_asociada
+        for pending in TituloPendiente.objects.filter(
+            estado=TituloPendiente.Estado.RESUELTO,
+            media_asociada__isnull=False,
+        ).select_related("media_asociada")
+    }
+
+
+def _mark_now_showing(media_ids: set[int]) -> int:
+    if not media_ids:
+        return 0
+
+    future_media_ids = Funcion.objects.filter(
+        media_id__in=media_ids,
+        fecha_hora__gte=timezone.now(),
+    ).values("media_id")
+    return (
+        Media.objects.filter(pk__in=future_media_ids)
+        .exclude(estado=Media.Estado.EN_CARTELERA)
+        .exclude(fecha_estreno__gt=timezone.localdate())
+        .update(estado=Media.Estado.EN_CARTELERA)
+    )
+
+
+def _build_cinema_cache() -> dict[tuple[str, str], Cine]:
+    return {
+        (normalize_title(cinema.nombre), normalize_title(cinema.ciudad)): cinema
+        for cinema in Cine.objects.all()
+    }
+
+
+def _get_or_create_cinema(
+    record: NormalizedShowtime,
+    cache: dict[tuple[str, str], Cine],
+) -> Cine:
+    key = (normalize_title(record["cine"]), normalize_title(record["ciudad"]))
+    cinema = cache.get(key)
+    if cinema is None:
+        cinema = Cine.objects.create(
+            nombre=record["cine"],
+            ciudad=record["ciudad"],
+            direccion="",
+            sitio_web="https://www.cinemark.com.co/",
+        )
+        cache[key] = cinema
+    return cinema
+
+
+def _record_pending(record: NormalizedShowtime) -> None:
+    normalized = normalize_title(record["titulo"])
+    if not normalized:
+        raise ValueError(
+            f"El scraper devolvió un título sin contenido: {record['titulo']!r}."
+        )
+    pending, created = TituloPendiente.objects.get_or_create(
+        titulo_normalizado=normalized,
+        cine_nombre=record["cine"],
+        ciudad=record["ciudad"],
+        defaults={
+            "titulo_original": record["titulo"],
+            "fuente_scraping": record["fuente_scraping"],
+        },
+    )
+    if created:
+        return
+
+    TituloPendiente.objects.filter(pk=pending.pk).update(
+        titulo_original=record["titulo"],
+        fuente_scraping=record["fuente_scraping"],
+        ultima_deteccion=timezone.now(),
+        apariciones_detectadas=F("apariciones_detectadas") + 1,
+    )
+
+
+@transaction.atomic
+def cleanup_expired_showtimes(now: datetime | None = None) -> tuple[int, int]:
+    """Delete past showtimes and move movies without future functions off the billboard."""
+    current_time = now or timezone.now()
+    expired_functions = Funcion.objects.filter(fecha_hora__lt=current_time)
+    deleted_count = expired_functions.count()
+    expired_functions.delete()
+
+    media_without_future_showtimes = Media.objects.filter(
+        tipo=Media.Tipo.PELICULA,
+        estado=Media.Estado.EN_CARTELERA,
+    ).filter(
+        ~Exists(
+            Funcion.objects.filter(
+                media_id=OuterRef("pk"),
+                fecha_hora__gte=current_time,
+            )
+        )
+    )
+    moved_off_billboard = media_without_future_showtimes.update(
+        estado=Media.Estado.FUERA_CARTELERA
+    )
+    return deleted_count, moved_off_billboard
 
 
 def normalize_showtimes(
