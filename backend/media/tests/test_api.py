@@ -86,9 +86,77 @@ class CatalogApiTests(APITestCase):
         )
         self.client.force_authenticate(user=admin_user)
         admin_response = self.client.post(url, data)
-        self.assertEqual(
-            admin_response.status_code, status.HTTP_405_METHOD_NOT_ALLOWED
+        self.assertEqual(admin_response.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(admin_response.data["titulo"], "No permitido")
+
+    def test_media_can_be_updated_and_deleted_by_admin(self):
+        admin_user = Usuario.objects.create_user(
+            username="admin-media",
+            password="test-password",
+            is_staff=True,
         )
+        self.client.force_authenticate(user=admin_user)
+        url = reverse("media-detail", kwargs={"pk": self.media.pk})
+
+        update_response = self.client.patch(url, {"titulo": "Título actualizado"})
+        delete_response = self.client.delete(url)
+
+        self.assertEqual(update_response.status_code, status.HTTP_200_OK)
+        self.assertEqual(update_response.data["titulo"], "Título actualizado")
+        self.assertEqual(delete_response.status_code, status.HTTP_204_NO_CONTENT)
+        self.assertFalse(Media.objects.filter(pk=self.media.pk).exists())
+
+    def test_genre_and_person_crud_is_admin_only(self):
+        regular_user = Usuario.objects.create_user(
+            username="lector-catalogo", password="test-password"
+        )
+        self.client.force_authenticate(user=regular_user)
+        genre_forbidden = self.client.post(
+            reverse("genero-list"), {"nombre": "Acción"}
+        )
+        person_forbidden = self.client.post(
+            reverse("persona-list"), {"nombre": "Persona no autorizada"}
+        )
+        self.assertEqual(genre_forbidden.status_code, status.HTTP_403_FORBIDDEN)
+        self.assertEqual(person_forbidden.status_code, status.HTTP_403_FORBIDDEN)
+
+        admin_user = Usuario.objects.create_user(
+            username="admin-personas",
+            password="test-password",
+            is_staff=True,
+        )
+        self.client.force_authenticate(user=admin_user)
+
+        genre_response = self.client.post(
+            reverse("genero-list"), {"nombre": "Acción"}
+        )
+        self.assertEqual(genre_response.status_code, status.HTTP_201_CREATED)
+        genre_url = reverse("genero-detail", kwargs={"pk": genre_response.data["id"]})
+        genre_update = self.client.patch(genre_url, {"nombre": "Aventura"})
+        genre_delete = self.client.delete(genre_url)
+        self.assertEqual(genre_update.status_code, status.HTTP_200_OK)
+        self.assertEqual(genre_update.data["nombre"], "Aventura")
+        self.assertEqual(genre_delete.status_code, status.HTTP_204_NO_CONTENT)
+
+        person_response = self.client.post(
+            reverse("persona-list"),
+            {
+                "nombre": "Persona de prueba",
+                "biografia": "Biografía inicial.",
+                "fecha_nacimiento": "1980-01-02",
+            },
+        )
+        self.assertEqual(person_response.status_code, status.HTTP_201_CREATED)
+        person_url = reverse(
+            "persona-detail", kwargs={"pk": person_response.data["id"]}
+        )
+        person_update = self.client.patch(
+            person_url, {"biografia": "Biografía actualizada."}
+        )
+        person_delete = self.client.delete(person_url)
+        self.assertEqual(person_update.status_code, status.HTTP_200_OK)
+        self.assertEqual(person_update.data["biografia"], "Biografía actualizada.")
+        self.assertEqual(person_delete.status_code, status.HTTP_204_NO_CONTENT)
 
     def test_search_matches_title_original_and_synopsis(self):
         response = self.client.get(reverse("media-list"), {"search": "TEST"})
