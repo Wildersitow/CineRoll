@@ -20,8 +20,16 @@ class CatalogApiTests(APITestCase):
         )
         self.media.generos.add(genero)
 
-        director = Persona.objects.create(nombre="Directora de prueba")
-        actor = Persona.objects.create(nombre="Actor de prueba")
+        director = Persona.objects.create(
+            nombre="Directora de prueba",
+            biografia="Directora de películas de prueba.",
+            fecha_nacimiento=date(1975, 3, 10),
+        )
+        self.actor = Persona.objects.create(
+            nombre="Actor de prueba",
+            biografia="Actor de películas de prueba.",
+            fecha_nacimiento=date(1985, 6, 20),
+        )
         Credito.objects.create(
             media=self.media,
             persona=director,
@@ -29,7 +37,7 @@ class CatalogApiTests(APITestCase):
         )
         Credito.objects.create(
             media=self.media,
-            persona=actor,
+            persona=self.actor,
             rol=Credito.Rol.ACTOR,
         )
 
@@ -62,6 +70,29 @@ class CatalogApiTests(APITestCase):
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(response.data["results"][0]["nombre"], "Drama")
+
+    def test_persona_list_and_detail_are_public_and_include_profile_fields(self):
+        list_response = self.client.get(reverse("persona-list"))
+
+        self.assertEqual(list_response.status_code, status.HTTP_200_OK)
+        actor_in_list = next(
+            persona
+            for persona in list_response.data["results"]
+            if persona["id"] == self.actor.pk
+        )
+        self.assertEqual(actor_in_list["biografia"], "Actor de películas de prueba.")
+        self.assertEqual(actor_in_list["fecha_nacimiento"], "1985-06-20")
+
+        detail_response = self.client.get(
+            reverse("persona-detail", kwargs={"pk": self.actor.pk})
+        )
+
+        self.assertEqual(detail_response.status_code, status.HTTP_200_OK)
+        self.assertEqual(detail_response.data["nombre"], "Actor de prueba")
+        self.assertEqual(
+            detail_response.data["biografia"], "Actor de películas de prueba."
+        )
+        self.assertEqual(detail_response.data["fecha_nacimiento"], "1985-06-20")
 
     def test_media_list_requires_staff_for_write_requests(self):
         url = reverse("media-list")
