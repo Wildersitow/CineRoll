@@ -1,7 +1,7 @@
 import unicodedata
 
 from rest_framework.exceptions import ValidationError
-from rest_framework.filters import SearchFilter
+from rest_framework.filters import OrderingFilter, SearchFilter
 from rest_framework.generics import (
 	ListCreateAPIView,
 	RetrieveUpdateDestroyAPIView,
@@ -23,8 +23,9 @@ class MediaListView(ListCreateAPIView):
 	queryset = anotar_puntuacion(Media.objects.prefetch_related("generos"))
 	serializer_class = MediaListSerializer
 	permission_classes = (EsAdministradorOLecturaPublica,)
-	filter_backends = (SearchFilter,)
+	filter_backends = (SearchFilter, OrderingFilter)
 	search_fields = ("titulo", "titulo_original", "sinopsis")
+	ordering_fields = ("fecha_estreno", "titulo", "promedio_puntuacion")
 
 	def get_serializer_class(self):
 		if self.request.method == "POST":

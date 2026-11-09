@@ -6,6 +6,7 @@ from rest_framework.test import APITestCase
 
 from cines.models import Cine, Funcion
 from media.models import Credito, Genero, Media, Persona
+from social.models import Resena
 from usuarios.models import Usuario
 
 
@@ -195,6 +196,42 @@ class CatalogApiTests(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(response.data["count"], 1)
         self.assertEqual(response.data["results"][0]["id"], self.media.pk)
+
+    def test_media_list_can_be_ordered_by_release_title_and_rating(self):
+        alpha = Media.objects.create(
+            titulo="Alfa", tipo=Media.Tipo.PELICULA, fecha_estreno=date(2020, 1, 1)
+        )
+        zulu = Media.objects.create(
+            titulo="Zulu", tipo=Media.Tipo.PELICULA, fecha_estreno=date(2024, 1, 1)
+        )
+        self.media.fecha_estreno = date(2022, 1, 1)
+        self.media.save(update_fields=("fecha_estreno",))
+
+        for username, media, score in (
+            ("rating-alpha", alpha, 2),
+            ("rating-main", self.media, 5),
+            ("rating-zulu", zulu, 9),
+        ):
+            user = Usuario.objects.create_user(username=username, password="test-password")
+            Resena.objects.create(usuario=user, media=media, puntuacion=score)
+
+        endpoint = reverse("media-list")
+        title_order = self.client.get(endpoint, {"ordering": "titulo"})
+        release_order = self.client.get(endpoint, {"ordering": "fecha_estreno"})
+        rating_order = self.client.get(endpoint, {"ordering": "-promedio_puntuacion"})
+
+        self.assertEqual(
+            [item["titulo"] for item in title_order.data["results"]],
+            ["Alfa", "Ficha de prueba", "Zulu"],
+        )
+        self.assertEqual(
+            [item["titulo"] for item in release_order.data["results"]],
+            ["Alfa", "Ficha de prueba", "Zulu"],
+        )
+        self.assertEqual(
+            [item["titulo"] for item in rating_order.data["results"]],
+            ["Zulu", "Ficha de prueba", "Alfa"],
+        )
 
     def test_filters_can_be_combined_and_genre_ignores_accents(self):
         genero = Genero.objects.create(nombre="Acción")
