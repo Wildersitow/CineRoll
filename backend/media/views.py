@@ -1,25 +1,36 @@
 import unicodedata
 
 from rest_framework.exceptions import ValidationError
-from rest_framework.filters import SearchFilter
-from rest_framework.generics import ListAPIView, RetrieveAPIView
+from rest_framework.filters import OrderingFilter, SearchFilter
+from rest_framework.generics import (
+	ListCreateAPIView,
+	RetrieveUpdateDestroyAPIView,
+)
 
-from media.models import Genero, Media
+from media.models import Genero, Media, Persona
 from usuarios.permissions import EsAdministradorOLecturaPublica
 from media.serializers import (
 	GeneroSerializer,
 	MediaDetailSerializer,
 	MediaListSerializer,
+	MediaWriteSerializer,
+	PersonaCrudSerializer,
 )
 from social.services import anotar_puntuacion
 
 
-class MediaListView(ListAPIView):
+class MediaListView(ListCreateAPIView):
 	queryset = anotar_puntuacion(Media.objects.prefetch_related("generos"))
 	serializer_class = MediaListSerializer
 	permission_classes = (EsAdministradorOLecturaPublica,)
-	filter_backends = (SearchFilter,)
+	filter_backends = (SearchFilter, OrderingFilter)
 	search_fields = ("titulo", "titulo_original", "sinopsis")
+	ordering_fields = ("fecha_estreno", "titulo", "promedio_puntuacion")
+
+	def get_serializer_class(self):
+		if self.request.method == "POST":
+			return MediaWriteSerializer
+		return super().get_serializer_class()
 
 	def get_queryset(self):
 		queryset = super().get_queryset()
@@ -74,15 +85,38 @@ class MediaListView(ListAPIView):
 		)
 
 
-class MediaDetailView(RetrieveAPIView):
+class MediaDetailView(RetrieveUpdateDestroyAPIView):
 	queryset = anotar_puntuacion(
 		Media.objects.prefetch_related("generos", "creditos__persona")
 	)
 	serializer_class = MediaDetailSerializer
 	permission_classes = (EsAdministradorOLecturaPublica,)
 
+	def get_serializer_class(self):
+		if self.request.method in ("PUT", "PATCH"):
+			return MediaWriteSerializer
+		return super().get_serializer_class()
 
-class GeneroListView(ListAPIView):
+
+class GeneroListView(ListCreateAPIView):
 	queryset = Genero.objects.all()
 	serializer_class = GeneroSerializer
+	permission_classes = (EsAdministradorOLecturaPublica,)
+
+
+class GeneroDetailView(RetrieveUpdateDestroyAPIView):
+	queryset = Genero.objects.all()
+	serializer_class = GeneroSerializer
+	permission_classes = (EsAdministradorOLecturaPublica,)
+
+
+class PersonaListView(ListCreateAPIView):
+	queryset = Persona.objects.all()
+	serializer_class = PersonaCrudSerializer
+	permission_classes = (EsAdministradorOLecturaPublica,)
+
+
+class PersonaDetailView(RetrieveUpdateDestroyAPIView):
+	queryset = Persona.objects.all()
+	serializer_class = PersonaCrudSerializer
 	permission_classes = (EsAdministradorOLecturaPublica,)

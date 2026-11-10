@@ -6,6 +6,7 @@ from rest_framework.test import APITestCase
 
 from cines.models import Cine, Funcion
 from media.models import Credito, Genero, Media, Persona
+from social.models import Resena
 from usuarios.models import Usuario
 
 
@@ -20,8 +21,16 @@ class CatalogApiTests(APITestCase):
         )
         self.media.generos.add(genero)
 
-        director = Persona.objects.create(nombre="Directora de prueba")
-        actor = Persona.objects.create(nombre="Actor de prueba")
+        director = Persona.objects.create(
+            nombre="Directora de prueba",
+            biografia="Directora de películas de prueba.",
+            fecha_nacimiento=date(1975, 3, 10),
+        )
+        self.actor = Persona.objects.create(
+            nombre="Actor de prueba",
+            biografia="Actor de películas de prueba.",
+            fecha_nacimiento=date(1985, 6, 20),
+        )
         Credito.objects.create(
             media=self.media,
             persona=director,
@@ -29,7 +38,7 @@ class CatalogApiTests(APITestCase):
         )
         Credito.objects.create(
             media=self.media,
-            persona=actor,
+            persona=self.actor,
             rol=Credito.Rol.ACTOR,
         )
 
@@ -63,6 +72,35 @@ class CatalogApiTests(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(response.data["results"][0]["nombre"], "Drama")
 
+        detail_response = self.client.get(
+            reverse("genero-detail", kwargs={"pk": self.media.generos.first().pk})
+        )
+        self.assertEqual(detail_response.status_code, status.HTTP_200_OK)
+        self.assertEqual(detail_response.data["nombre"], "Drama")
+
+    def test_persona_list_and_detail_are_public_and_include_profile_fields(self):
+        list_response = self.client.get(reverse("persona-list"))
+
+        self.assertEqual(list_response.status_code, status.HTTP_200_OK)
+        actor_in_list = next(
+            persona
+            for persona in list_response.data["results"]
+            if persona["id"] == self.actor.pk
+        )
+        self.assertEqual(actor_in_list["biografia"], "Actor de películas de prueba.")
+        self.assertEqual(actor_in_list["fecha_nacimiento"], "1985-06-20")
+
+        detail_response = self.client.get(
+            reverse("persona-detail", kwargs={"pk": self.actor.pk})
+        )
+
+        self.assertEqual(detail_response.status_code, status.HTTP_200_OK)
+        self.assertEqual(detail_response.data["nombre"], "Actor de prueba")
+        self.assertEqual(
+            detail_response.data["biografia"], "Actor de películas de prueba."
+        )
+        self.assertEqual(detail_response.data["fecha_nacimiento"], "1985-06-20")
+
     def test_media_list_requires_staff_for_write_requests(self):
         url = reverse("media-list")
         data = {"titulo": "No permitido", "tipo": Media.Tipo.PELICULA}
@@ -86,9 +124,119 @@ class CatalogApiTests(APITestCase):
         )
         self.client.force_authenticate(user=admin_user)
         admin_response = self.client.post(url, data)
-        self.assertEqual(
-            admin_response.status_code, status.HTTP_405_METHOD_NOT_ALLOWED
+        self.assertEqual(admin_response.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(admin_response.data["titulo"], "No permitido")
+
+    def test_only_admin_can_write_media_genre_and_person(self):
+        genre = self.media.generos.first()
+        resources = (
+            (
+                reverse("media-list"),
+                reverse("media-detail", kwargs={"pk": self.media.pk}),
+                {"titulo": "Edición de prueba"},
+            ),
+            (
+                reverse("genero-list"),
+                reverse("genero-detail", kwargs={"pk": genre.pk}),
+                {"nombre": "Género editado"},
+            ),
+            (
+                reverse("persona-list"),
+                reverse("persona-detail", kwargs={"pk": self.actor.pk}),
+                {"nombre": "Persona editada"},
+            ),
         )
+
+        for user, expected_status in (
+            (None, status.HTTP_401_UNAUTHORIZED),
+            (
+                Usuario.objects.create_user(
+                    username="lector-escritura", password="test-password"
+                ),
+                status.HTTP_403_FORBIDDEN,
+            ),
+        ):
+            self.client.force_authenticate(user=user)
+            for collection_url, detail_url, update_data in resources:
+                with self.subTest(user=user, url=collection_url, method="POST"):
+                    response = self.client.post(collection_url, update_data)
+                    self.assertEqual(response.status_code, expected_status)
+                with self.subTest(user=user, url=detail_url, method="PATCH"):
+                    response = self.client.patch(detail_url, update_data)
+                    self.assertEqual(response.status_code, expected_status)
+                with self.subTest(user=user, url=detail_url, method="DELETE"):
+                    response = self.client.delete(detail_url)
+                    self.assertEqual(response.status_code, expected_status)
+        self.client.force_authenticate(user=None)
+
+    def test_media_can_be_updated_and_deleted_by_admin(self):
+        admin_user = Usuario.objects.create_user(
+            username="admin-media",
+            password="test-password",
+            is_staff=True,
+        )
+        self.client.force_authenticate(user=admin_user)
+        url = reverse("media-detail", kwargs={"pk": self.media.pk})
+
+        update_response = self.client.patch(url, {"titulo": "Título actualizado"})
+        delete_response = self.client.delete(url)
+
+        self.assertEqual(update_response.status_code, status.HTTP_200_OK)
+        self.assertEqual(update_response.data["titulo"], "Título actualizado")
+        self.assertEqual(delete_response.status_code, status.HTTP_204_NO_CONTENT)
+        self.assertFalse(Media.objects.filter(pk=self.media.pk).exists())
+
+    def test_genre_and_person_crud_is_admin_only(self):
+        regular_user = Usuario.objects.create_user(
+            username="lector-catalogo", password="test-password"
+        )
+        self.client.force_authenticate(user=regular_user)
+        genre_forbidden = self.client.post(
+            reverse("genero-list"), {"nombre": "Acción"}
+        )
+        person_forbidden = self.client.post(
+            reverse("persona-list"), {"nombre": "Persona no autorizada"}
+        )
+        self.assertEqual(genre_forbidden.status_code, status.HTTP_403_FORBIDDEN)
+        self.assertEqual(person_forbidden.status_code, status.HTTP_403_FORBIDDEN)
+
+        admin_user = Usuario.objects.create_user(
+            username="admin-personas",
+            password="test-password",
+            is_staff=True,
+        )
+        self.client.force_authenticate(user=admin_user)
+
+        genre_response = self.client.post(
+            reverse("genero-list"), {"nombre": "Acción"}
+        )
+        self.assertEqual(genre_response.status_code, status.HTTP_201_CREATED)
+        genre_url = reverse("genero-detail", kwargs={"pk": genre_response.data["id"]})
+        genre_update = self.client.patch(genre_url, {"nombre": "Aventura"})
+        genre_delete = self.client.delete(genre_url)
+        self.assertEqual(genre_update.status_code, status.HTTP_200_OK)
+        self.assertEqual(genre_update.data["nombre"], "Aventura")
+        self.assertEqual(genre_delete.status_code, status.HTTP_204_NO_CONTENT)
+
+        person_response = self.client.post(
+            reverse("persona-list"),
+            {
+                "nombre": "Persona de prueba",
+                "biografia": "Biografía inicial.",
+                "fecha_nacimiento": "1980-01-02",
+            },
+        )
+        self.assertEqual(person_response.status_code, status.HTTP_201_CREATED)
+        person_url = reverse(
+            "persona-detail", kwargs={"pk": person_response.data["id"]}
+        )
+        person_update = self.client.patch(
+            person_url, {"biografia": "Biografía actualizada."}
+        )
+        person_delete = self.client.delete(person_url)
+        self.assertEqual(person_update.status_code, status.HTTP_200_OK)
+        self.assertEqual(person_update.data["biografia"], "Biografía actualizada.")
+        self.assertEqual(person_delete.status_code, status.HTTP_204_NO_CONTENT)
 
     def test_search_matches_title_original_and_synopsis(self):
         response = self.client.get(reverse("media-list"), {"search": "TEST"})
@@ -96,6 +244,42 @@ class CatalogApiTests(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(response.data["count"], 1)
         self.assertEqual(response.data["results"][0]["id"], self.media.pk)
+
+    def test_media_list_can_be_ordered_by_release_title_and_rating(self):
+        alpha = Media.objects.create(
+            titulo="Alfa", tipo=Media.Tipo.PELICULA, fecha_estreno=date(2020, 1, 1)
+        )
+        zulu = Media.objects.create(
+            titulo="Zulu", tipo=Media.Tipo.PELICULA, fecha_estreno=date(2024, 1, 1)
+        )
+        self.media.fecha_estreno = date(2022, 1, 1)
+        self.media.save(update_fields=("fecha_estreno",))
+
+        for username, media, score in (
+            ("rating-alpha", alpha, 2),
+            ("rating-main", self.media, 5),
+            ("rating-zulu", zulu, 9),
+        ):
+            user = Usuario.objects.create_user(username=username, password="test-password")
+            Resena.objects.create(usuario=user, media=media, puntuacion=score)
+
+        endpoint = reverse("media-list")
+        title_order = self.client.get(endpoint, {"ordering": "titulo"})
+        release_order = self.client.get(endpoint, {"ordering": "fecha_estreno"})
+        rating_order = self.client.get(endpoint, {"ordering": "-promedio_puntuacion"})
+
+        self.assertEqual(
+            [item["titulo"] for item in title_order.data["results"]],
+            ["Alfa", "Ficha de prueba", "Zulu"],
+        )
+        self.assertEqual(
+            [item["titulo"] for item in release_order.data["results"]],
+            ["Alfa", "Ficha de prueba", "Zulu"],
+        )
+        self.assertEqual(
+            [item["titulo"] for item in rating_order.data["results"]],
+            ["Zulu", "Ficha de prueba", "Alfa"],
+        )
 
     def test_filters_can_be_combined_and_genre_ignores_accents(self):
         genero = Genero.objects.create(nombre="Acción")

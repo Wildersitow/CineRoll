@@ -2,6 +2,7 @@ from io import StringIO
 
 from django.core.management import call_command
 from django.test import TestCase
+from django.utils import timezone
 
 from media.models import Credito, Genero, Media, Persona
 
@@ -16,6 +17,9 @@ class SeedDataCommandTests(TestCase):
         self.assertGreater(Credito.objects.count(), 0)
 
         for seeded_media in Media.objects.all():
+            self.assertTrue(seeded_media.sinopsis, seeded_media.titulo)
+            self.assertTrue(seeded_media.poster_url, seeded_media.titulo)
+            self.assertTrue(seeded_media.trailer_url, seeded_media.titulo)
             self.assertTrue(seeded_media.generos.exists(), seeded_media.titulo)
             self.assertTrue(
                 seeded_media.creditos.filter(rol=Credito.Rol.DIRECTOR).exists(),
@@ -25,6 +29,12 @@ class SeedDataCommandTests(TestCase):
                 seeded_media.creditos.filter(rol=Credito.Rol.ACTOR).exists(),
                 seeded_media.titulo,
             )
+
+        upcoming = Media.objects.filter(estado=Media.Estado.PROXIMO_ESTRENO)
+        self.assertGreaterEqual(upcoming.count(), 5)
+        self.assertGreaterEqual(
+            upcoming.filter(fecha_estreno__gt=timezone.localdate()).count(), 5
+        )
 
         media = Media.objects.get(titulo="Cadena perpetua")
         self.assertGreater(media.generos.count(), 0)
