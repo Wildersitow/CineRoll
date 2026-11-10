@@ -1,6 +1,7 @@
 from django.contrib.auth import get_user_model
 from django.contrib.auth.password_validation import validate_password
 from django.core.exceptions import ValidationError as DjangoValidationError
+from django.db import models
 from rest_framework import serializers
 from rest_framework.validators import UniqueValidator
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
@@ -52,6 +53,90 @@ class PerfilSerializer(serializers.ModelSerializer):
 
     def validate_email(self, value):
         return value.strip().lower()
+
+
+class PerfilPublicoSerializer(serializers.ModelSerializer):
+    """Perfil público visible para cualquier usuario o visitante."""
+
+    nombre = serializers.SerializerMethodField()
+    total_resenas = serializers.SerializerMethodField()
+    promedio_puntuacion_dada = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Usuario
+        fields = [
+            "id",
+            "username",
+            "nombre",
+            "avatar",
+            "biografia",
+            "escala_calificacion",
+            "date_joined",
+            "total_resenas",
+            "promedio_puntuacion_dada",
+        ]
+        read_only_fields = fields
+
+    def get_nombre(self, obj):
+        return f"{obj.first_name} {obj.last_name}".strip() or obj.username
+
+    def get_total_resenas(self, obj):
+        return obj.resenas.visibles().count()
+
+    def get_promedio_puntuacion_dada(self, obj):
+        avg = obj.resenas.visibles().aggregate(models.Avg("puntuacion"))["puntuacion__avg"]
+        return None if avg is None else round(float(avg), 2)
+
+
+class CambioPasswordSerializer(serializers.Serializer):
+    """Permite al usuario autenticado cambiar su contraseña validando la anterior."""
+
+    clave_actual = serializers.CharField(
+        write_only=True, required=False, style={"input_type": "password"}
+    )
+    clave_nueva = serializers.CharField(
+        write_only=True, required=False, style={"input_type": "password"}
+    )
+    old_password = serializers.CharField(
+        write_only=True, required=False, style={"input_type": "password"}
+    )
+    new_password = serializers.CharField(
+        write_only=True, required=False, style={"input_type": "password"}
+    )
+
+    def validate(self, attrs):
+        usuario = self.context["request"].user
+        clave_actual = attrs.get("clave_actual") or attrs.get("old_password")
+        clave_nueva = attrs.get("clave_nueva") or attrs.get("new_password")
+
+        if not clave_actual:
+            raise serializers.ValidationError(
+                {"clave_actual": ["Debe proporcionar la contraseña actual."]}
+            )
+        if not clave_nueva:
+            raise serializers.ValidationError(
+                {"clave_nueva": ["Debe proporcionar la nueva contraseña."]}
+            )
+
+        if not usuario.check_password(clave_actual):
+            raise serializers.ValidationError(
+                {"clave_actual": ["La contraseña actual es incorrecta."]}
+            )
+
+        try:
+            validate_password(clave_nueva, usuario)
+        except DjangoValidationError as exc:
+            raise serializers.ValidationError({"clave_nueva": list(exc.messages)})
+
+        attrs["clave_nueva"] = clave_nueva
+        return attrs
+
+    def save(self, **kwargs):
+        usuario = self.context["request"].user
+        nueva_clave = self.validated_data["clave_nueva"]
+        usuario.set_password(nueva_clave)
+        usuario.save()
+        return usuario
 
 
 class RegistroSerializer(serializers.ModelSerializer):

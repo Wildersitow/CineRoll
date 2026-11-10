@@ -49,16 +49,17 @@ class FormatoErroresTests(APITestCase):
         )
 
     def test_metodo_no_permitido(self):
-        administrador = Usuario.objects.create_user(
-            username="admin-metodo",
-            password="Secur3Passw0rd!",
-            is_staff=True,
-        )
-        self.client.force_authenticate(administrador)
-        response = self.client.delete(reverse("cine-list"))
-        self.assertFormatoError(
-            response, status.HTTP_405_METHOD_NOT_ALLOWED, "method_not_allowed"
-        )
+        self.usuario.is_staff = True
+        self.usuario.save()
+        try:
+            self.client.force_authenticate(self.usuario)
+            response = self.client.delete(reverse("cine-list"))
+            self.assertFormatoError(
+                response, status.HTTP_405_METHOD_NOT_ALLOWED, "method_not_allowed"
+            )
+        finally:
+            self.usuario.is_staff = False
+            self.usuario.save()
 
     def test_validacion_por_campos_incluye_campos(self):
         response = self.client.post(

@@ -7,6 +7,9 @@ class ResenaSerializer(serializers.ModelSerializer):
     usuario = serializers.CharField(source="usuario.username", read_only=True)
     usuario_id = serializers.IntegerField(read_only=True)
     media_id = serializers.IntegerField(read_only=True)
+    media_titulo = serializers.CharField(source="media.titulo", read_only=True)
+    media_poster_url = serializers.CharField(source="media.poster_url", read_only=True)
+    media_tipo = serializers.CharField(source="media.tipo", read_only=True)
 
     class Meta:
         model = Resena
@@ -15,6 +18,9 @@ class ResenaSerializer(serializers.ModelSerializer):
             "usuario",
             "usuario_id",
             "media_id",
+            "media_titulo",
+            "media_poster_url",
+            "media_tipo",
             "puntuacion",
             "texto",
             "fecha_creacion",
