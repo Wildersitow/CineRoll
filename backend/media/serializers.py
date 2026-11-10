@@ -16,6 +16,34 @@ class PersonaSerializer(serializers.ModelSerializer):
 		fields = ("id", "nombre")
 
 
+class PersonaCrudSerializer(serializers.ModelSerializer):
+	class Meta:
+		model = Persona
+		fields = ("id", "nombre", "biografia", "fecha_nacimiento")
+
+
+class MediaWriteSerializer(serializers.ModelSerializer):
+	generos = serializers.PrimaryKeyRelatedField(
+		many=True, queryset=Genero.objects.all(), required=False
+	)
+
+	class Meta:
+		model = Media
+		fields = (
+			"id",
+			"titulo",
+			"titulo_original",
+			"tipo",
+			"sinopsis",
+			"fecha_estreno",
+			"duracion",
+			"poster_url",
+			"trailer_url",
+			"estado",
+			"generos",
+		)
+
+
 class MediaListSerializer(serializers.ModelSerializer):
 	generos = GeneroSerializer(many=True, read_only=True)
 	promedio_puntuacion = serializers.SerializerMethodField()

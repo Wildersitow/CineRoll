@@ -49,7 +49,12 @@ class FormatoErroresTests(APITestCase):
         )
 
     def test_metodo_no_permitido(self):
-        self.client.force_authenticate(self.usuario)
+        administrador = Usuario.objects.create_user(
+            username="admin-metodo",
+            password="Secur3Passw0rd!",
+            is_staff=True,
+        )
+        self.client.force_authenticate(administrador)
         response = self.client.delete(reverse("cine-list"))
         self.assertFormatoError(
             response, status.HTTP_405_METHOD_NOT_ALLOWED, "method_not_allowed"
