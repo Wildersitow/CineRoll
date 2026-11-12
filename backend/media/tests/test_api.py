@@ -398,3 +398,18 @@ class CatalogApiTests(APITestCase):
         response = self.client.get(reverse("media-list"), {"anio": "dosmil"})
 
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_persona_detail_includes_filmography_but_list_does_not(self):
+        response = self.client.get(
+            reverse("persona-detail", kwargs={"pk": self.actor.pk})
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(response.data["filmografia"]), 1)
+        film = response.data["filmografia"][0]
+        self.assertEqual(film["id"], self.media.pk)
+        self.assertEqual(film["titulo"], "Ficha de prueba")
+        self.assertEqual(film["rol"], "actor")
+
+        list_response = self.client.get(reverse("persona-list"))
+        self.assertNotIn("filmografia", list_response.data["results"][0])

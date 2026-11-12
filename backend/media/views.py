@@ -15,6 +15,7 @@ from media.serializers import (
 	MediaListSerializer,
 	MediaWriteSerializer,
 	PersonaCrudSerializer,
+	PersonaDetailSerializer,
 )
 from social.services import anotar_puntuacion
 
@@ -117,6 +118,6 @@ class PersonaListView(ListCreateAPIView):
 
 
 class PersonaDetailView(RetrieveUpdateDestroyAPIView):
-	queryset = Persona.objects.all()
-	serializer_class = PersonaCrudSerializer
+	queryset = Persona.objects.prefetch_related("creditos__media")
+	serializer_class = PersonaDetailSerializer
 	permission_classes = (EsAdministradorOLecturaPublica,)

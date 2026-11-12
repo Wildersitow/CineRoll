@@ -2,7 +2,7 @@ from rest_framework import serializers
 
 from media.models import Credito, Genero, Media, Persona
 from social.services import resumen_puntuacion
-
+from datetime import date
 
 class GeneroSerializer(serializers.ModelSerializer):
 	class Meta:
@@ -20,6 +20,35 @@ class PersonaCrudSerializer(serializers.ModelSerializer):
 	class Meta:
 		model = Persona
 		fields = ("id", "nombre", "biografia", "fecha_nacimiento")
+
+
+class PersonaDetailSerializer(PersonaCrudSerializer):
+	filmografia = serializers.SerializerMethodField()
+
+	class Meta(PersonaCrudSerializer.Meta):
+		fields = PersonaCrudSerializer.Meta.fields + ("filmografia",)
+
+	def get_filmografia(self, obj):
+		creditos = sorted(
+			obj.creditos.all(),
+			key=lambda credito: credito.media.fecha_estreno or date.min,
+			reverse=True,
+		)
+		return [
+			{
+				"id": credito.media_id,
+				"titulo": credito.media.titulo,
+				"tipo": credito.media.tipo,
+				"rol": credito.rol,
+				"fecha_estreno": (
+					credito.media.fecha_estreno.isoformat()
+					if credito.media.fecha_estreno
+					else None
+				),
+				"poster_url": credito.media.poster_url,
+			}
+			for credito in creditos
+		]
 
 
 class MediaWriteSerializer(serializers.ModelSerializer):
