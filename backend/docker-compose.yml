@@ -1,5 +1,5 @@
-# PostgreSQL para desarrollo local. Lee DB_NAME, DB_USER, DB_PASSWORD y DB_PORT
-# del archivo backend/.env (el mismo que usa Django), así hay una sola fuente de verdad.
+# PostgreSQL y Redis para desarrollo local. Lee DB_NAME, DB_USER, DB_PASSWORD, DB_PORT
+# y REDIS_PORT del archivo backend/.env (el mismo que usa Django), así hay una sola fuente de verdad.
 services:
   db:
     image: postgres:16
@@ -19,5 +19,20 @@ services:
       timeout: 3s
       retries: 10
 
+  redis:
+    image: redis:7
+    container_name: cineroll-redis
+    restart: unless-stopped
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    volumes:
+      - cineroll_redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
 volumes:
   cineroll_pgdata:
+  cineroll_redisdata:
