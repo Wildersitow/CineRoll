@@ -6,7 +6,7 @@ from typing import TypedDict
 from urllib.error import URLError
 from urllib.request import Request, urlopen
 
-from cines.services import NormalizedShowtime, normalize_showtimes
+from cines.services import NormalizedShowtime, ScraperError, normalize_showtimes
 
 
 CINEMARK_CARTELERA_URL = "https://www.cinemark.com.co/cartelera"
@@ -26,7 +26,7 @@ class CinemarkCartelera:
     proximos_estrenos: list[CinemarkUpcomingRelease]
 
 
-class CinemarkScraperError(RuntimeError):
+class CinemarkScraperError(ScraperError):
     """Raised when Cinemark's cartelera cannot be fetched or parsed."""
 
 

@@ -577,15 +577,15 @@ class Command(BaseCommand):
 
         with transaction.atomic():
             for item in MEDIA_DATA:
+                estado = item.get("estado", Media.Estado.FUERA_CARTELERA)
                 fecha_estreno = item["fecha_estreno"]
-                if item.get("estado") == Media.Estado.PROXIMO_ESTRENO:
+                if estado == Media.Estado.PROXIMO_ESTRENO:
                     fecha_estreno = max(
                         fecha_estreno, timezone.localdate() + timedelta(days=1)
                     )
                 defaults = {
                     "titulo_original": item["titulo_original"],
                     "tipo": item["tipo"],
-                    "fecha_estreno": fecha_estreno,
                     "duracion": item["duracion"],
                     "sinopsis": SINOPSIS[item["titulo"]],
                     "poster_url": (
@@ -601,12 +601,15 @@ class Command(BaseCommand):
                         else "https://www.youtube.com/results?search_query="
                         f"{quote_plus(item['titulo'] + ' trailer oficial')}"
                     ),
-                    "estado": item.get(
-                        "estado", Media.Estado.FUERA_CARTELERA
-                    ),
                 }
                 media, created = Media.objects.update_or_create(
-                    titulo=item["titulo"], defaults=defaults
+                    titulo=item["titulo"],
+                    defaults=defaults,
+                    create_defaults={
+                        **defaults,
+                        "fecha_estreno": fecha_estreno,
+                        "estado": estado,
+                    },
                 )
                 media_created += created
                 media_updated += not created

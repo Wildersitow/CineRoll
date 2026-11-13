@@ -2,7 +2,7 @@ from unittest import TestCase
 
 from django.test import TestCase as DjangoTestCase
 
-from cines.services import match_media_title, normalize_title
+from cines.services import match_media_title, normalize_city, normalize_title
 from media.models import Media
 
 
@@ -52,3 +52,8 @@ class MediaTitleMatchingTests(DjangoTestCase):
         Media.objects.create(titulo="PELICULA REPETIDA (DOB 2D)", tipo=Media.Tipo.PELICULA)
 
         self.assertIsNone(match_media_title("Película repetida"))
+
+class CityNormalizationTests(TestCase):
+    def test_ignores_accents_case_and_separators(self):
+        self.assertEqual(normalize_city("Bogotá"), "bogota")
+        self.assertEqual(normalize_city("santa-marta"), normalize_city("Santa Marta"))

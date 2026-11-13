@@ -10,6 +10,8 @@ import {
   changePassword,
 } from './services/api'
 
+const MIN_PASSWORD_LENGTH = 8
+
 export default function App() {
   const [currentUser, setCurrentUser] = useState(() => getStoredAuth())
   const [activeTab, setActiveTab] = useState('login') // 'login' | 'register'
@@ -85,8 +87,8 @@ export default function App() {
   // Cálculo de fuerza de contraseña
   const getPasswordStrength = (pwd) => {
     if (!pwd) return { level: 0, label: '', color: '' }
-    if (pwd.length < 6) return { level: 1, label: 'Débil', color: '#ef4444' }
-    if (pwd.length < 10) return { level: 2, label: 'Media', color: '#f59e0b' }
+    if (pwd.length < MIN_PASSWORD_LENGTH) return { level: 1, label: 'Débil', color: '#ef4444' }
+    if (pwd.length < 12 || /^\d+$/.test(pwd)) return { level: 2, label: 'Media', color: '#f59e0b' }
     return { level: 3, label: 'Segura', color: '#10b981' }
   }
 
@@ -140,8 +142,14 @@ export default function App() {
       return
     }
 
-    if (registerPassword.length < 6) {
-      setAuthError('La contraseña debe tener al menos 6 caracteres.')
+    if (registerPassword.length < MIN_PASSWORD_LENGTH) {
+      setAuthError(`La contraseña debe tener al menos ${MIN_PASSWORD_LENGTH} caracteres.`)
+      setIsLoading(false)
+      return
+    }
+
+    if (/^\d+$/.test(registerPassword)) {
+      setAuthError('La contraseña no puede ser solo números.')
       setIsLoading(false)
       return
     }
@@ -186,6 +194,15 @@ export default function App() {
     if (newPasswordInput !== confirmNewPasswordInput) {
       setPasswordChangeStatus({
         error: 'La nueva contraseña y su confirmación no coinciden.',
+        success: '',
+        loading: false,
+      })
+      return
+    }
+
+    if (newPasswordInput.length < MIN_PASSWORD_LENGTH) {
+      setPasswordChangeStatus({
+        error: `La nueva contraseña debe tener al menos ${MIN_PASSWORD_LENGTH} caracteres.`,
         success: '',
         loading: false,
       })

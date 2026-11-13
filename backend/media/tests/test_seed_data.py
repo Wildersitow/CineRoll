@@ -3,6 +3,7 @@ from io import StringIO
 from django.core.management import call_command
 from django.test import TestCase
 from django.utils import timezone
+from datetime import date
 
 from media.models import Credito, Genero, Media, Persona
 
@@ -61,3 +62,22 @@ class SeedDataCommandTests(TestCase):
         )
         self.assertEqual(counts_after_first_run, counts_after_second_run)
         self.assertIn("0 nuevas", output.getvalue())
+
+        def test_no_pisa_estado_ni_fecha_de_titulos_existentes(self):
+            call_command("seed_data", stdout=StringIO())
+            en_cartelera = Media.objects.get(titulo="Cadena perpetua")
+            en_cartelera.estado = Media.Estado.EN_CARTELERA
+            en_cartelera.fecha_estreno = date(2026, 12, 1)
+            en_cartelera.save()
+            proximo = Media.objects.get(titulo="Jumanji 3")
+            proximo.fecha_estreno = date(2027, 1, 15)
+            proximo.save()
+
+            call_command("seed_data", stdout=StringIO())
+
+            en_cartelera.refresh_from_db()
+            proximo.refresh_from_db()
+            self.assertEqual(en_cartelera.estado, Media.Estado.EN_CARTELERA)
+            self.assertEqual(en_cartelera.fecha_estreno, date(2026, 12, 1))
+            self.assertEqual(proximo.estado, Media.Estado.PROXIMO_ESTRENO)
+            self.assertEqual(proximo.fecha_estreno, date(2027, 1, 15))

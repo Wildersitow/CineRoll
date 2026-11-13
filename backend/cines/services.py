@@ -38,6 +38,13 @@ TITLE_QUALIFIERS = {
     "xd",
 }
 
+CINEMA_WEBSITES = {
+    "cinemark": "https://www.cinemark.com.co/",
+}
+
+
+class ScraperError(RuntimeError):
+    pass
 
 class NormalizedShowtime(TypedDict):
     titulo: str
@@ -70,16 +77,24 @@ class CarteleraScrapeResult:
     titulos_pendientes_mostrar: tuple[str, ...]
 
 
-def normalize_title(title: str) -> str:
-    """Normalize title accents, punctuation, and exhibition-format suffixes."""
-    decomposed = unicodedata.normalize("NFKD", title.casefold())
+def _fold_tokens(text: str) -> list[str]:
+    decomposed = unicodedata.normalize("NFKD", text.casefold())
     without_accents = "".join(
         character for character in decomposed if not unicodedata.combining(character)
     )
-    tokens = re.findall(r"[a-z0-9]+", without_accents)
+    return re.findall(r"[a-z0-9]+", without_accents)
+
+
+def normalize_title(title: str) -> str:
+    """Normalize title accents, punctuation, and exhibition-format suffixes."""
+    tokens = _fold_tokens(title)
     while tokens and tokens[-1] in TITLE_QUALIFIERS:
         tokens.pop()
     return " ".join(tokens)
+
+
+def normalize_city(city: str) -> str:
+    return " ".join(_fold_tokens(city))
 
 
 def match_media_title(title: str, catalog: Iterable[Media] | None = None) -> Media | None:
@@ -99,6 +114,12 @@ def match_media_title(title: str, catalog: Iterable[Media] | None = None) -> Med
         return None
     return next(iter(matches.values()))
 
+def _get_scraper(cinema_provider: str):
+    if cinema_provider == "cinemark":
+        from cines.scrapers.cinemark import scrape_cartelera_completa
+
+        return scrape_cartelera_completa
+    raise ValueError(f"No existe scraper configurado para '{cinema_provider}'.")
 
 def scrape_and_save_cartelera(
     cinema_provider: str,
@@ -106,13 +127,9 @@ def scrape_and_save_cartelera(
 ) -> CarteleraScrapeResult:
     """Scrape, match, persist, and clean one cinema's showtimes."""
     city_slug = city_slug.strip().lower()
-    if cinema_provider != "cinemark":
-        raise ValueError(f"No existe scraper configurado para '{cinema_provider}'.")
-
-    # Import lazily because the scraper uses the normalization helpers in this module.
-    from cines.scrapers.cinemark import scrape_cartelera_completa
-
-    cartelera = scrape_cartelera_completa(city_slug=city_slug)
+    scraper = _get_scraper(cinema_provider)
+    website = CINEMA_WEBSITES[cinema_provider]
+    cartelera = scraper(city_slug=city_slug)
     records = cartelera.funciones
     movies = list(Media.objects.filter(tipo=Media.Tipo.PELICULA))
     manual_matches = _build_manual_matches()
@@ -155,7 +172,7 @@ def scrape_and_save_cartelera(
                 media_asociada=media,
                 ultima_deteccion=timezone.now(),
             )
-            cinema = _get_or_create_cinema(record, cinema_cache)
+            cinema = _get_or_create_cinema(record, cinema_cache, website)
             scheduled_at = datetime.combine(record["fecha"], record["hora"])
             _, created = Funcion.objects.update_or_create(
                 cine=cinema,
@@ -242,6 +259,7 @@ def _build_cinema_cache() -> dict[tuple[str, str], Cine]:
 def _get_or_create_cinema(
     record: NormalizedShowtime,
     cache: dict[tuple[str, str], Cine],
+    website: str,
 ) -> Cine:
     key = (normalize_title(record["cine"]), normalize_title(record["ciudad"]))
     cinema = cache.get(key)
@@ -250,7 +268,7 @@ def _get_or_create_cinema(
             nombre=record["cine"],
             ciudad=record["ciudad"],
             direccion="",
-            sitio_web="https://www.cinemark.com.co/",
+            sitio_web=website,
         )
         cache[key] = cinema
     return cinema

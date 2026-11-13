@@ -15,7 +15,7 @@ from cines.models import Cine, Funcion
 from cines.serializers import CineSerializer, FuncionSerializer
 from media.models import Media
 from usuarios.permissions import EsAdministradorOLecturaPublica
-
+from cines.services import normalize_city
 
 class CineListView(ListCreateAPIView):
     queryset = Cine.objects.all()
@@ -49,9 +49,7 @@ class FuncionListView(UnpaginatedFuncionListView):
 
         city = self.request.query_params.get("ciudad")
         if city is not None:
-            if not city.strip():
-                raise ValidationError({"ciudad": "Debe indicar una ciudad."})
-            queryset = queryset.filter(cine__ciudad__iexact=city.strip())
+            queryset = _filter_by_city(queryset, city)
 
         return queryset.order_by("fecha_hora", "cine__nombre", "sala")
 
@@ -109,3 +107,14 @@ def _filter_by_date(queryset, show_date):
     if parsed_date is None:
         raise ValidationError({"fecha": "Debe tener formato AAAA-MM-DD."})
     return queryset.filter(fecha_hora__date=parsed_date)
+
+def _filter_by_city(queryset, city):
+    normalized = normalize_city(city)
+    if not normalized:
+        raise ValidationError({"ciudad": "Debe indicar una ciudad."})
+    matching_cities = [
+        name
+        for name in Cine.objects.values_list("ciudad", flat=True).distinct()
+        if normalize_city(name) == normalized
+    ]
+    return queryset.filter(cine__ciudad__in=matching_cities)

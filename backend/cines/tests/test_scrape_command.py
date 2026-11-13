@@ -10,6 +10,7 @@ from cines.models import Cine, Funcion, TituloPendiente
 from cines.scrapers.cinemark import CinemarkCartelera, CinemarkScraperError
 from cines.services import CarteleraScrapeResult
 from media.models import Media
+from cines.services import CarteleraScrapeResult, scrape_and_save_cartelera
 
 
 class ScrapeCarteleraCommandTests(TestCase):
@@ -240,3 +241,19 @@ class ScrapeCarteleraCommandTests(TestCase):
 
         with self.assertRaisesMessage(CommandError, "Fallo de lectura"):
             call_command("scrape_cartelera", cine="cinemark", ciudad="bogota")
+
+    @patch("cines.scrapers.cinemark.scrape_cartelera_completa")
+    def test_created_cinema_uses_the_provider_website(self, scrape):
+        scrape.return_value = self.cartelera
+        Media.objects.create(
+            titulo="Cómo entrenar a tu dragón",
+            tipo=Media.Tipo.PELICULA,
+        )
+
+        call_command("scrape_cartelera", cine="cinemark", ciudad="bogota")
+
+        self.assertEqual(Cine.objects.get().sitio_web, "https://www.cinemark.com.co/")
+
+    def test_unknown_provider_is_rejected(self):
+        with self.assertRaisesMessage(ValueError, "desconocido"):
+            scrape_and_save_cartelera("desconocido")

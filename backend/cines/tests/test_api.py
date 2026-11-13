@@ -228,3 +228,43 @@ class CarteleraApiTests(APITestCase):
         )
 
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_city_filter_ignores_accents_case_and_slugs(self):
+        slug_cinema = Cine.objects.create(nombre="Cine slug", ciudad="bogota")
+        slug_function = Funcion.objects.create(
+            media=self.media,
+            cine=slug_cinema,
+            fecha_hora=datetime(2026, 10, 15, 21, 0, tzinfo=timezone.utc),
+            sala="Sala 9",
+            formato="2D",
+        )
+        other_cinema = Cine.objects.create(nombre="Otra ciudad", ciudad="Medellín")
+        Funcion.objects.create(
+            media=self.media,
+            cine=other_cinema,
+            fecha_hora=datetime(2026, 10, 15, 20, 0, tzinfo=timezone.utc),
+        )
+
+        for city in ("Bogotá", "bogota", "BOGOTÁ", "bogotá"):
+            with self.subTest(city=city):
+                response = self.client.get(
+                    reverse("funcion-list"), {"fecha": "2026-10-15", "ciudad": city}
+                )
+                ids = {item["id"] for item in response.data["resultados"]}
+                self.assertEqual(ids, {self.function.pk, slug_function.pk})
+
+    def test_city_filter_matches_slug_with_hyphens(self):
+        cinema = Cine.objects.create(nombre="Cine Samario", ciudad="santa-marta")
+        function = Funcion.objects.create(
+            media=self.media,
+            cine=cinema,
+            fecha_hora=datetime(2026, 10, 15, 20, 0, tzinfo=timezone.utc),
+        )
+
+        response = self.client.get(
+            reverse("funcion-list"), {"fecha": "2026-10-15", "ciudad": "Santa Marta"}
+        )
+
+        self.assertEqual(
+            [item["id"] for item in response.data["resultados"]], [function.pk]
+        )
