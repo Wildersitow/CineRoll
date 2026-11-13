@@ -1,5 +1,25 @@
 const API_BASE_URL = 'http://localhost:8000/api';
 
+const FIELD_LABELS = {
+  username: 'Usuario',
+  email: 'Correo',
+  password: 'Contraseña',
+  clave_actual: 'Contraseña actual',
+  clave_nueva: 'Nueva contraseña',
+  first_name: 'Nombre',
+  last_name: 'Apellido',
+};
+
+function formatApiError(errObj, fallback) {
+  if (errObj?.campos) {
+    const detalles = Object.entries(errObj.campos)
+      .map(([campo, errores]) => `${FIELD_LABELS[campo] || campo}: ${Array.isArray(errores) ? errores.join(' ') : errores}`)
+      .join(' | ');
+    if (detalles) return detalles;
+  }
+  return errObj?.mensaje || fallback;
+}
+
 /**
  * Retorna los datos de autenticación almacenados en localStorage o sessionStorage.
  */
@@ -170,15 +190,7 @@ export async function registerUser({ username, email, password, first_name = '',
 
   if (!response.ok) {
     const errorData = await response.json().catch(() => null);
-    const errObj = errorData?.error;
-    let mensaje = errObj?.mensaje || 'Error al crear la cuenta.';
-    if (errObj?.campos) {
-      const detalles = Object.entries(errObj.campos)
-        .map(([campo, errores]) => `${campo}: ${Array.isArray(errores) ? errores.join(' ') : errores}`)
-        .join(' | ');
-      mensaje = `${mensaje} (${detalles})`;
-    }
-    throw new Error(mensaje);
+    throw new Error(formatApiError(errorData?.error, 'Error al crear la cuenta.'));
   }
 
   const data = await response.json();
@@ -231,17 +243,9 @@ export async function changePassword(claveActual, claveNueva) {
     }),
   });
 
-  if (!response.ok) {
+    if (!response.ok) {
     const errorData = await response.json().catch(() => null);
-    const errObj = errorData?.error;
-    let mensaje = errObj?.mensaje || 'Error al cambiar la contraseña.';
-    if (errObj?.campos) {
-      const detalles = Object.entries(errObj.campos)
-        .map(([campo, errores]) => `${campo}: ${Array.isArray(errores) ? errores.join(' ') : errores}`)
-        .join(' | ');
-      mensaje = `${mensaje} (${detalles})`;
-    }
-    throw new Error(mensaje);
+    throw new Error(formatApiError(errorData?.error, 'Error al cambiar la contraseña.'));
   }
 
   return await response.json();
