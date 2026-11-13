@@ -1,8 +1,12 @@
+from html import parser
+
 from django.core.management.base import BaseCommand, CommandError
 
 from cines.scrapers.cinemark import CinemarkScraperError
 from cines.services import scrape_and_save_cartelera
+from django.core.management.base import BaseCommand, CommandError
 
+from cines.services import CINEMA_WEBSITES, ScraperError, scrape_and_save_cartelera
 
 class Command(BaseCommand):
     help = "Obtiene la cartelera de un cine, relaciona películas y guarda funciones."
@@ -11,7 +15,7 @@ class Command(BaseCommand):
         parser.add_argument(
             "--cine",
             required=True,
-            choices=("cinemark",),
+            choices=tuple(CINEMA_WEBSITES),
             help="Cine cuyo scraper se ejecutará.",
         )
         parser.add_argument(
@@ -26,7 +30,7 @@ class Command(BaseCommand):
                 cinema_provider=options["cine"],
                 city_slug=options["ciudad"],
             )
-        except (CinemarkScraperError, ValueError) as exc:
+        except (ScraperError, ValueError) as exc:
             raise CommandError(str(exc)) from exc
 
         self.stdout.write(
