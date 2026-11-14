@@ -154,6 +154,17 @@ El scraper de Cinemark también lee
 que ya existen en `Media` y muestra los títulos sin coincidencia para revisión,
 sin crear fichas automáticamente.
 
+## Decisión sobre Playwright
+
+Por ahora no se agrega Playwright ni otra dependencia de navegador. En los cuatro
+sitios reconocidos, la información de funciones se puede obtener con peticiones
+HTTP directas: HTML con datos incrustados en Cinemark y respuestas JSON en
+Cinépolis, Royal Films y Cineland. El navegador sirvió para descubrir las
+solicitudes y seleccionar ciudades durante el reconocimiento, pero no es
+necesario para ejecutar esas peticiones. Se reconsiderará Playwright solo si un
+proveedor deja de exponer los datos por HTTP directo y exige renderizado,
+interacción o estado de navegador para obtenerlos.
+
 ## Ciudades canónicas
 
 El servicio recibe el slug canónico y lo traduce a la clave que requiere cada
