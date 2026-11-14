@@ -5,10 +5,38 @@ from django.core.management import call_command
 from django.test import TestCase
 from django.utils import timezone
 
+from cines.services import match_media_title
 from media.models import Credito, Genero, Media, Persona
 
 
 class SeedDataCommandTests(TestCase):
+    def test_seeds_movies_currently_screening_in_valledupar(self):
+        call_command("seed_data", stdout=StringIO())
+
+        current_titles = {
+            "Cómo robar un banco",
+            "Ebenezer",
+            "El gato con sombrero",
+            "Godzilla Minus Zero",
+            "RE: Encanto",
+            "Yo soy Rocky",
+            "Clayface",
+            "Wildwood: El Bosque Salvaje",
+            "El corazón de la bestia",
+            "Verity",
+        }
+        current_media = Media.objects.filter(titulo__in=current_titles)
+
+        self.assertSetEqual(
+            set(current_media.values_list("titulo", flat=True)), current_titles
+        )
+        self.assertFalse(
+            current_media.exclude(estado=Media.Estado.EN_CARTELERA).exists()
+        )
+        encanto = Media.objects.get(titulo="RE: Encanto")
+        self.assertEqual(match_media_title("Encanto"), encanto)
+        self.assertEqual(match_media_title("RE: Encanto"), encanto)
+
     def test_loads_catalog_and_is_idempotent(self):
         call_command("seed_data", stdout=StringIO())
 
