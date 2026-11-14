@@ -3,6 +3,7 @@ from unittest import TestCase
 from unittest.mock import call, patch
 from zoneinfo import ZoneInfo
 
+from cines.services import CarteleraData
 from cines.scrapers.royal_films import (
     ROYAL_FILMS_API_URL,
     REQUEST_PAUSE_SECONDS,
@@ -64,6 +65,7 @@ class RoyalFilmsScraperTests(TestCase):
             "1006",
         )
 
+        self.assertIsInstance(result, CarteleraData)
         self.assertEqual(len(result.funciones), 1)
         self.assertEqual(result.proximos_estrenos, [])
         self.assertEqual(

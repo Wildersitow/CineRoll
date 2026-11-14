@@ -361,3 +361,4 @@ class CarteleraApiTests(APITestCase):
             {item["id"] for item in response.data["resultados"]},
             {function.pk for function in functions},
         )
+        self.assertIsNotNone(response.data["ultima_actualizacion"])

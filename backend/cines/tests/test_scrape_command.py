@@ -1,6 +1,9 @@
+import json
 from io import StringIO
 from datetime import date, datetime, timedelta
-from unittest.mock import patch
+from pathlib import Path
+from unittest.mock import MagicMock, patch
+from zoneinfo import ZoneInfo
 
 from django.core.management import CommandError, call_command
 from django.test import TestCase
@@ -14,6 +17,13 @@ from cines.services import (
     scrape_and_save_cartelera,
 )
 from media.models import Media
+
+
+CINEPOLIS_FIXTURE_PATH = (
+    Path(__file__).resolve().parents[1]
+    / "fixtures"
+    / "cinepolis_valledupar_sample.json"
+)
 
 
 class ScrapeCarteleraCommandTests(TestCase):
@@ -458,6 +468,118 @@ class ScrapeCarteleraCommandTests(TestCase):
 
         scrape.assert_called_once_with(city_id="1006")
         self.assertEqual(Cine.objects.get().ciudad, "valledupar")
+
+    @patch("cines.services.timezone.now")
+    @patch("cines.scrapers.cinepolis.urlopen")
+    def test_one_command_scrapes_cinepolis_example_into_valledupar(
+        self,
+        open_url,
+        now,
+    ):
+        with CINEPOLIS_FIXTURE_PATH.open(encoding="utf-8") as fixture:
+            payload = json.load(fixture)
+        response = MagicMock()
+        response.__enter__.return_value = response
+        response.read.return_value = json.dumps(payload).encode("utf-8")
+        response.headers.get_content_charset.return_value = "utf-8"
+        open_url.return_value = response
+        now.return_value = datetime(2026, 11, 13, 12, 0, tzinfo=ZoneInfo("America/Bogota"))
+        media = Media.objects.create(
+            titulo="Cómo robar un banco",
+            tipo=Media.Tipo.PELICULA,
+        )
+
+        output = StringIO()
+        call_command(
+            "scrape_cartelera",
+            cine="cinepolis",
+            ciudad="valledupar",
+            stdout=output,
+        )
+
+        open_url.assert_called_once()
+        request = open_url.call_args.args[0]
+        self.assertEqual(request.get_method(), "POST")
+        self.assertEqual(
+            json.loads(request.data),
+            {"claveCiudad": "valledupar-colombia", "esVIP": False},
+        )
+        function = Funcion.objects.get()
+        self.assertEqual(function.media, media)
+        self.assertEqual(function.cine.ciudad, "valledupar")
+        local_time = timezone.localtime(function.fecha_hora)
+        self.assertEqual(local_time.date(), date(2026, 11, 13))
+        self.assertEqual(local_time.time().hour, 20)
+        self.assertIn("1 funciones leídas, 1 asociadas", output.getvalue())
+
+    @patch("cines.services.timezone.now")
+    @patch("cines.scrapers.royal_films.sleep")
+    @patch("cines.scrapers.royal_films._fetch_json")
+    def test_one_command_scrapes_royal_films_example_into_valledupar(
+        self,
+        fetch_json,
+        sleep,
+        now,
+    ):
+        billboard = {
+            "status": True,
+            "data": [
+                {
+                    "pelicula": {
+                        "pelicula_id": 4209,
+                        "pelicula_titulo": "CÓMO ROBAR UN BANCO",
+                        "pelicula_nombre_original": "HOW TO ROB A BANK",
+                    }
+                }
+            ],
+        }
+        functions = {
+            "status": True,
+            "data": [
+                {
+                    "funcion_id": 957376,
+                    "funcion_fecha": "2026-11-13",
+                    "funcion_pelicula_id": 4209,
+                    "funcion_multicine_id": 2032,
+                    "funcion_hora_inicio": "1970-01-01T16:30:00.000Z",
+                    "formato": {"formato_nombre": "2D"},
+                    "multicine": {
+                        "multicine_nombre": "Multicine Unicentro Valledupar"
+                    },
+                    "sala": {"sala_nombre": "SALA 2 STD"},
+                }
+            ],
+        }
+        fetch_json.side_effect = [billboard, functions]
+        now.return_value = datetime(2026, 11, 13, 12, 0, tzinfo=ZoneInfo("America/Bogota"))
+        media = Media.objects.create(
+            titulo="Cómo robar un banco",
+            tipo=Media.Tipo.PELICULA,
+        )
+
+        output = StringIO()
+        call_command(
+            "scrape_cartelera",
+            cine="royal_films",
+            ciudad="valledupar",
+            stdout=output,
+        )
+
+        self.assertEqual(
+            [call.args[0] for call in fetch_json.call_args_list],
+            [
+                "https://cinemasroyalfilms.com/api/billboard/city/1006",
+                "https://cinemasroyalfilms.com/api/movies/functions/4209/city/1006",
+            ],
+        )
+        sleep.assert_called_once()
+        function = Funcion.objects.get()
+        self.assertEqual(function.media, media)
+        self.assertEqual(function.cine.ciudad, "valledupar")
+        local_time = timezone.localtime(function.fecha_hora)
+        self.assertEqual(local_time.date(), date(2026, 11, 13))
+        self.assertEqual(local_time.time().hour, 16)
+        self.assertIn("1 funciones leídas, 1 asociadas", output.getvalue())
 
     @patch("cines.scrapers.cinemark.scrape_cartelera_completa")
     def test_cinemark_is_not_configured_for_valledupar(self, scrape):

@@ -7,6 +7,7 @@ from zoneinfo import ZoneInfo
 
 from django.test import SimpleTestCase
 
+from cines.services import CarteleraData
 from cines.scrapers.cinepolis import (
     CINEPOLIS_CARTELERA_URL,
     CinepolisScraperError,
@@ -36,6 +37,7 @@ class CinepolisScraperTests(SimpleTestCase):
             CINEPOLIS_CARTELERA_URL,
         )
 
+        self.assertIsInstance(result, CarteleraData)
         self.assertEqual(len(result.funciones), 1)
         self.assertEqual(result.proximos_estrenos, [])
         self.assertEqual(
