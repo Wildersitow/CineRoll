@@ -1,0 +1,47 @@
+{
+  "d": {
+    "__type": "CinepolisOnline.Data.Mongo.Models.NowPlayingByCinema.CinemaDTO",
+    "Cinemas": [
+      {
+        "CityKey": "valledupar-colombia",
+        "CityName": "Valledupar, Colombia",
+        "Id": 577,
+        "VistaId": "625",
+        "Key": "cinepolis-mega-mall",
+        "Name": "Cinépolis Mega Mall",
+        "Dates": [
+          {
+            "FilterDate": "/Date(1794549600000)/",
+            "ShowtimeDate": "13 noviembre",
+            "Movies": [
+              {
+                "Id": 54083,
+                "Title": "Cómo robar un banco",
+                "OriginalTitle": "Cómo robar un banco",
+                "Formats": [
+                  {
+                    "VistaId": "49383",
+                    "Name": "DOB",
+                    "IsExperience": false,
+                    "SegobPermission": "49383",
+                    "Language": "DOBLADA",
+                    "Showtimes": [
+                      {
+                        "CinemaId": 577,
+                        "VistaCinemaId": "625",
+                        "ShowtimeId": "64989",
+                        "TimeFilter": "/Date(1794622200000)/",
+                        "Time": "20:10",
+                        "ShowtimeAMPM": "08:10 PM"
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  }
+}

@@ -1,29 +1,21 @@
 import json
 import re
-from dataclasses import dataclass
 from datetime import date
-from typing import TypedDict
 from urllib.error import URLError
 from urllib.request import Request, urlopen
 
-from cines.services import NormalizedShowtime, ScraperError, normalize_showtimes
+from cines.services import (
+    CarteleraData,
+    NormalizedShowtime,
+    ScraperError,
+    UpcomingRelease,
+    normalize_showtimes,
+)
 
 
 CINEMARK_CARTELERA_URL = "https://www.cinemark.com.co/cartelera"
 USER_AGENT = "CineRoll cartelera scraper/0.1 (development project)"
 MAX_RESPONSE_BYTES = 8 * 1024 * 1024
-
-
-class CinemarkUpcomingRelease(TypedDict):
-    titulo: str
-    fecha_estreno: date
-    fuente_scraping: str
-
-
-@dataclass(frozen=True)
-class CinemarkCartelera:
-    funciones: list[NormalizedShowtime]
-    proximos_estrenos: list[CinemarkUpcomingRelease]
 
 
 class CinemarkScraperError(ScraperError):
@@ -39,7 +31,7 @@ def scrape_cartelera(
 
 def scrape_cartelera_completa(
     city_slug: str = "bogota", timeout: float = 20.0
-) -> CinemarkCartelera:
+) -> CarteleraData:
     """Fetch showtimes and upcoming releases from one Cinemark cartelera page."""
     city_slug = city_slug.strip().lower()
     if not re.fullmatch(r"[a-z0-9-]+", city_slug):
@@ -86,10 +78,10 @@ def parse_cartelera_data(
     html: str,
     city_slug: str,
     source_url: str,
-) -> CinemarkCartelera:
+) -> CarteleraData:
     """Parse showtimes and upcoming releases from embedded __NEXT_DATA__."""
     page_props = _extract_page_props(html, city_slug)
-    return CinemarkCartelera(
+    return CarteleraData(
         funciones=_parse_showtimes(page_props, city_slug, source_url),
         proximos_estrenos=_parse_upcoming_releases(page_props, source_url),
     )
@@ -172,12 +164,12 @@ def _parse_showtimes(
 def _parse_upcoming_releases(
     page_props: dict[str, object],
     source_url: str,
-) -> list[CinemarkUpcomingRelease]:
+) -> list[UpcomingRelease]:
     releases = page_props.get("UpcomingReleases", [])
     if not isinstance(releases, list):
         raise CinemarkScraperError("La sección UpcomingReleases de Cinemark no es válida.")
 
-    parsed: list[CinemarkUpcomingRelease] = []
+    parsed: list[UpcomingRelease] = []
     for movie in releases:
         if not isinstance(movie, dict):
             raise CinemarkScraperError(

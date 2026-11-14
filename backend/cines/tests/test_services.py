@@ -2,10 +2,26 @@ from datetime import date, time
 from unittest import TestCase
 from zoneinfo import ZoneInfo
 
-from cines.services import normalize_showtime, normalize_showtimes
+from cines.services import (
+    CANONICAL_CITY,
+    CITY_PROVIDER_KEYS,
+    normalize_showtime,
+    normalize_showtimes,
+)
 
 
 class ShowtimeNormalizationTests(TestCase):
+    def test_valledupar_uses_the_city_key_for_each_provider(self):
+        self.assertEqual(CANONICAL_CITY, "valledupar")
+        self.assertEqual(
+            CITY_PROVIDER_KEYS[CANONICAL_CITY],
+            {
+                "cinepolis": "valledupar-colombia",
+                "royal_films": "1006",
+                "cineland": "0051",
+            },
+        )
+
     def test_normalizes_shared_fields_and_timezone(self):
         result = normalize_showtime(
             {
@@ -32,6 +48,21 @@ class ShowtimeNormalizationTests(TestCase):
         )
         self.assertEqual(result["sala"], "Sala 4")
         self.assertEqual(result["formato"], "2D, Doblada")
+        self.assertNotIn("titulo_alternativo", result)
+
+    def test_normalizes_optional_alternate_title(self):
+        result = normalize_showtime(
+            {
+                "titulo": "Título localizado",
+                "titulo_alternativo": "  Original   Title ",
+                "cine": "Cine",
+                "ciudad": "bogota",
+                "fecha": "2026-10-15",
+                "hora": "19:30:00",
+            }
+        )
+
+        self.assertEqual(result["titulo_alternativo"], "Original Title")
 
     def test_accepts_separate_iso_date_and_time_fields(self):
         result = normalize_showtime(

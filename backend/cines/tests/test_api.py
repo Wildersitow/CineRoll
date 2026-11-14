@@ -53,6 +53,31 @@ class CarteleraApiTests(APITestCase):
             {"Cine de prueba", "Otro cine"},
         )
 
+    def test_cinema_list_filters_by_normalized_city(self):
+        santa_marta = Cine.objects.create(
+            nombre="Cine samario",
+            ciudad="santa-marta",
+        )
+
+        for city, expected_ids in (
+            ("BOGOTÁ", {self.cine.pk, self.other_cine.pk}),
+            ("Santa Marta", {santa_marta.pk}),
+            ("santa-marta", {santa_marta.pk}),
+        ):
+            with self.subTest(city=city):
+                response = self.client.get(reverse("cine-list"), {"ciudad": city})
+
+                self.assertEqual(response.status_code, status.HTTP_200_OK)
+                self.assertEqual(
+                    {item["id"] for item in response.data["results"]},
+                    expected_ids,
+                )
+
+    def test_cinema_list_rejects_an_empty_city_filter(self):
+        response = self.client.get(reverse("cine-list"), {"ciudad": "  "})
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
     def test_cinema_detail_and_showtimes_are_public(self):
         response = self.client.get(reverse("cine-detail", kwargs={"pk": self.cine.pk}))
 
@@ -105,6 +130,49 @@ class CarteleraApiTests(APITestCase):
         self.assertEqual(len(today_alias_response.data["resultados"]), 25)
         self.assertEqual(cinema_response.status_code, status.HTTP_200_OK)
         self.assertEqual(len(cinema_response.data["resultados"]), 25)
+        self.assertIsNotNone(city_response.data["ultima_actualizacion"])
+        self.assertIsNotNone(today_alias_response.data["ultima_actualizacion"])
+        self.assertIsNotNone(cinema_response.data["ultima_actualizacion"])
+
+    def test_home_showtime_freshness_uses_city_or_cinema_before_date_filter(self):
+        now = django_timezone.now()
+        oldest_update = now - timedelta(days=2)
+        latest_city_update = now - timedelta(days=1)
+        latest_other_city_update = now
+        Funcion.objects.filter(pk=self.function.pk).update(
+            fecha_actualizacion=oldest_update
+        )
+        Funcion.objects.filter(pk=self.other_date_function.pk).update(
+            fecha_actualizacion=latest_city_update
+        )
+
+        medellin = Cine.objects.create(nombre="Cine Medellín", ciudad="Medellín")
+        medellin_function = Funcion.objects.create(
+            media=self.media,
+            cine=medellin,
+            fecha_hora=datetime(2026, 10, 15, 20, 0, tzinfo=timezone.utc),
+        )
+        Funcion.objects.filter(pk=medellin_function.pk).update(
+            fecha_actualizacion=latest_other_city_update
+        )
+
+        city_response = self.client.get(
+            reverse("funcion-list"),
+            {"fecha": "2099-01-01", "ciudad": "bogota"},
+        )
+        cinema_response = self.client.get(
+            reverse("cine-funciones", kwargs={"cine_id": self.cine.pk}),
+            {"fecha": "2099-01-01"},
+        )
+
+        self.assertEqual(city_response.data["resultados"], [])
+        self.assertEqual(
+            city_response.data["ultima_actualizacion"], latest_city_update
+        )
+        self.assertEqual(cinema_response.data["resultados"], [])
+        self.assertEqual(
+            cinema_response.data["ultima_actualizacion"], oldest_update
+        )
 
     def test_unknown_cinema_showtimes_return_not_found(self):
         response = self.client.get(
@@ -268,3 +336,29 @@ class CarteleraApiTests(APITestCase):
         self.assertEqual(
             [item["id"] for item in response.data["resultados"]], [function.pk]
         )
+
+    def test_valledupar_filter_returns_functions_from_all_cinemas(self):
+        cinemas = [
+            Cine.objects.create(nombre=name, ciudad="valledupar")
+            for name in ("Cinépolis", "Royal Films", "Cineland")
+        ]
+        functions = [
+            Funcion.objects.create(
+                media=self.media,
+                cine=cinema,
+                fecha_hora=datetime(2026, 10, 15, 20, 0, tzinfo=timezone.utc),
+            )
+            for cinema in cinemas
+        ]
+
+        response = self.client.get(
+            reverse("funcion-list"),
+            {"fecha": "2026-10-15", "ciudad": "valledupar"},
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(
+            {item["id"] for item in response.data["resultados"]},
+            {function.pk for function in functions},
+        )
+        self.assertIsNotNone(response.data["ultima_actualizacion"])
