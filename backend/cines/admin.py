@@ -1,6 +1,8 @@
 from django.contrib import admin
+from django.db import transaction
 
 from cines.models import Cine, Funcion, TituloPendiente
+from media.models import Media
 
 
 @admin.register(Cine)
@@ -52,7 +54,11 @@ class TituloPendienteAdmin(admin.ModelAdmin):
         "ultima_deteccion",
         "apariciones_detectadas",
     )
-    actions = ("marcar_ignorados", "volver_a_pendientes")
+    actions = (
+        "crear_fichas_borrador",
+        "marcar_ignorados",
+        "volver_a_pendientes",
+    )
 
     def save_model(self, request, obj, form, change):
         # Elegir una película es resolver el título; quitarla lo devuelve a pendiente.
@@ -61,6 +67,40 @@ class TituloPendienteAdmin(admin.ModelAdmin):
         elif not obj.media_asociada_id and obj.estado == TituloPendiente.Estado.RESUELTO:
             obj.estado = TituloPendiente.Estado.PENDIENTE
         super().save_model(request, obj, form, change)
+
+    @admin.action(description="Crear ficha borrador en el catálogo")
+    def crear_fichas_borrador(self, request, queryset):
+        fichas_por_titulo = {}
+        pendientes_resueltos = 0
+
+        with transaction.atomic():
+            for pendiente in queryset:
+                if (
+                    pendiente.estado != TituloPendiente.Estado.PENDIENTE
+                    or pendiente.media_asociada_id
+                    or not pendiente.titulo_normalizado
+                ):
+                    continue
+
+                media = fichas_por_titulo.get(pendiente.titulo_normalizado)
+                if media is None:
+                    media = Media.objects.create(
+                        titulo=pendiente.titulo_normalizado,
+                        tipo=Media.Tipo.PELICULA,
+                        estado=Media.Estado.EN_CARTELERA,
+                    )
+                    fichas_por_titulo[pendiente.titulo_normalizado] = media
+
+                pendiente.media_asociada = media
+                pendiente.estado = TituloPendiente.Estado.RESUELTO
+                pendiente.save(update_fields=("media_asociada", "estado"))
+                pendientes_resueltos += 1
+
+        self.message_user(
+            request,
+            f"{len(fichas_por_titulo)} ficha(s) borrador creada(s) y "
+            f"{pendientes_resueltos} título(s) pendiente(s) resuelto(s).",
+        )
 
     @admin.action(description="Marcar como ignorados (no son películas del catálogo)")
     def marcar_ignorados(self, request, queryset):
