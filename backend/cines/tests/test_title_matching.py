@@ -13,6 +13,14 @@ class TitleNormalizationTests(TestCase):
             "pelicula la accion",
         )
 
+    def test_removes_cinema_provider_3d_dob_and_sub_suffixes(self):
+        for suffix in ("3D", "DOB", "SUB"):
+            with self.subTest(suffix=suffix):
+                self.assertEqual(
+                    normalize_title(f"Película de prueba {suffix}"),
+                    "pelicula de prueba",
+                )
+
     def test_preserves_words_that_are_part_of_a_title(self):
         self.assertEqual(normalize_title("El original"), "el original")
 
@@ -37,6 +45,39 @@ class MediaTitleMatchingTests(DjangoTestCase):
         )
 
         self.assertEqual(match_media_title("THE DARK KNIGHT (SUB 3D)"), media)
+
+    def test_matches_alternate_scraper_title(self):
+        media = Media.objects.create(
+            titulo="El robo definitivo",
+            titulo_original="How to Rob a Bank",
+            tipo=Media.Tipo.PELICULA,
+        )
+
+        result = match_media_title(
+            "Cómo robar un banco",
+            [media],
+            alternate_title="HOW TO ROB A BANK (SUB)",
+        )
+
+        self.assertEqual(result, media)
+
+    def test_distinct_primary_and_alternate_matches_are_ambiguous(self):
+        primary_match = Media.objects.create(
+            titulo="Título principal",
+            tipo=Media.Tipo.PELICULA,
+        )
+        alternate_match = Media.objects.create(
+            titulo="Título alternativo",
+            tipo=Media.Tipo.PELICULA,
+        )
+
+        self.assertIsNone(
+            match_media_title(
+                primary_match.titulo,
+                [primary_match, alternate_match],
+                alternate_title=alternate_match.titulo,
+            )
+        )
 
     def test_does_not_match_series_or_unknown_titles(self):
         Media.objects.create(

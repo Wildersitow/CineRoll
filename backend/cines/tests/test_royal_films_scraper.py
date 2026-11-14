@@ -12,7 +12,11 @@ from cines.scrapers.royal_films import (
 )
 
 
-def _billboard(movie_id="4209", title="CÓMO ROBAR UN BANCO"):
+def _billboard(
+    movie_id="4209",
+    title="CÓMO ROBAR UN BANCO",
+    original_title="HOW TO ROB A BANK",
+):
     return {
         "status": True,
         "data": [
@@ -20,6 +24,7 @@ def _billboard(movie_id="4209", title="CÓMO ROBAR UN BANCO"):
                 "pelicula": {
                     "pelicula_id": int(movie_id),
                     "pelicula_titulo": title,
+                    "pelicula_nombre_original": original_title,
                 }
             }
         ],
@@ -65,6 +70,7 @@ class RoyalFilmsScraperTests(TestCase):
             result.funciones[0],
             {
                 "titulo": "CÓMO ROBAR UN BANCO",
+                "titulo_alternativo": "HOW TO ROB A BANK",
                 "cine": "Multicine Unicentro Valledupar",
                 "ciudad": "valledupar",
                 "fecha": date(2026, 11, 13),

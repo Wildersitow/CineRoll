@@ -121,7 +121,8 @@ def parse_cartelera_data(
             for movie in _required_list(day, "Movies", "fecha"):
                 if not isinstance(movie, dict):
                     raise CinepolisScraperError("Cinépolis devolvió una película inválida.")
-                title = movie.get("Title") or movie.get("OriginalTitle")
+                original_title = movie.get("OriginalTitle")
+                title = movie.get("Title") or original_title
                 if not isinstance(title, str) or not title.strip():
                     raise CinepolisScraperError(
                         "Cinépolis omitió el título de una película."
@@ -152,20 +153,25 @@ def parse_cartelera_data(
                                 f"o inconsistentes para {title}."
                             )
                         showtime = _parse_time(session.get("Time"), title)
-                        showtimes.append(
-                            {
-                                "titulo": title.strip(),
-                                "cine": cinema_name,
-                                "ciudad": city_name,
-                                "fecha": show_date,
-                                "hora": showtime,
-                                "sala": "",
-                                "formato": [format_name, language],
-                                "fuente_scraping": source_url,
-                                "cine_id_origen": str(session_cinema_id),
-                                "funcion_id_origen": str(session_id),
-                            }
-                        )
+                        record: dict[str, object] = {
+                            "titulo": title.strip(),
+                            "cine": cinema_name,
+                            "ciudad": city_name,
+                            "fecha": show_date,
+                            "hora": showtime,
+                            "sala": "",
+                            "formato": [format_name, language],
+                            "fuente_scraping": source_url,
+                            "cine_id_origen": str(session_cinema_id),
+                            "funcion_id_origen": str(session_id),
+                        }
+                        if (
+                            isinstance(original_title, str)
+                            and original_title.strip()
+                            and original_title.strip() != title.strip()
+                        ):
+                            record["titulo_alternativo"] = original_title
+                        showtimes.append(record)
 
     try:
         normalized = normalize_showtimes(showtimes)

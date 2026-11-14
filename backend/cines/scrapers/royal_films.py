@@ -44,7 +44,7 @@ def scrape_cartelera_completa(
     movies = _parse_billboard_movies(billboard)
 
     function_responses: dict[str, object] = {}
-    for movie_id, _title in movies:
+    for movie_id, _title, _alternate_title in movies:
         sleep(REQUEST_PAUSE_SECONDS)
         functions_url = (
             f"{ROYAL_FILMS_API_URL}/movies/functions/{movie_id}/city/{city_id}"
@@ -64,7 +64,7 @@ def parse_cartelera_data(
     city_id: str,
 ) -> CarteleraData:
     records: list[dict[str, object]] = []
-    for movie_id, title in _parse_billboard_movies(billboard):
+    for movie_id, title, alternate_title in _parse_billboard_movies(billboard):
         response = function_responses.get(movie_id)
         if response is None:
             raise RoyalFilmsScraperError(
@@ -102,27 +102,28 @@ def parse_cartelera_data(
                 function.get("funcion_hora_inicio"),
                 title,
             )
-            records.append(
-                {
-                    "titulo": title,
-                    "cine": _required_text(cinema, "multicine_nombre", title),
-                    "ciudad": "valledupar",
-                    "fecha": function_date,
-                    "hora": function_time,
-                    "sala": _required_text(room, "sala_nombre", title),
-                    "formato": _required_text(
-                        movie_format,
-                        "formato_nombre",
-                        title,
-                    ),
-                    "fuente_scraping": (
-                        f"{ROYAL_FILMS_API_URL}/movies/functions/"
-                        f"{movie_id}/city/{city_id}"
-                    ),
-                    "cine_id_origen": str(cinema_id),
-                    "funcion_id_origen": str(function_id),
-                }
-            )
+            record: dict[str, object] = {
+                "titulo": title,
+                "cine": _required_text(cinema, "multicine_nombre", title),
+                "ciudad": "valledupar",
+                "fecha": function_date,
+                "hora": function_time,
+                "sala": _required_text(room, "sala_nombre", title),
+                "formato": _required_text(
+                    movie_format,
+                    "formato_nombre",
+                    title,
+                ),
+                "fuente_scraping": (
+                    f"{ROYAL_FILMS_API_URL}/movies/functions/"
+                    f"{movie_id}/city/{city_id}"
+                ),
+                "cine_id_origen": str(cinema_id),
+                "funcion_id_origen": str(function_id),
+            }
+            if alternate_title:
+                record["titulo_alternativo"] = alternate_title
+            records.append(record)
 
     try:
         normalized = normalize_showtimes(records)
@@ -166,9 +167,11 @@ def _fetch_json(url: str, timeout: float) -> object:
         ) from exc
 
 
-def _parse_billboard_movies(payload: object) -> list[tuple[str, str]]:
+def _parse_billboard_movies(
+    payload: object,
+) -> list[tuple[str, str, str | None]]:
     movies = _response_data(payload, "cartelera")
-    parsed: list[tuple[str, str]] = []
+    parsed: list[tuple[str, str, str | None]] = []
     for entry in movies:
         if not isinstance(entry, dict):
             raise RoyalFilmsScraperError(
@@ -193,7 +196,16 @@ def _parse_billboard_movies(payload: object) -> list[tuple[str, str]]:
             raise RoyalFilmsScraperError(
                 "Royal Films omitió el título de una película."
             )
-        parsed.append((str(movie_id), re.sub(r"\s+", " ", title).strip()))
+        normalized_title = re.sub(r"\s+", " ", title).strip()
+        raw_alternate_title = movie.get("pelicula_nombre_original")
+        alternate_title = (
+            re.sub(r"\s+", " ", raw_alternate_title).strip()
+            if isinstance(raw_alternate_title, str) and raw_alternate_title.strip()
+            else None
+        )
+        if alternate_title and alternate_title.casefold() == normalized_title.casefold():
+            alternate_title = None
+        parsed.append((str(movie_id), normalized_title, alternate_title))
     return parsed
 
 

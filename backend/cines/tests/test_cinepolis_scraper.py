@@ -1,4 +1,5 @@
 import json
+from copy import deepcopy
 from datetime import date, time
 from pathlib import Path
 from unittest.mock import MagicMock, patch
@@ -82,3 +83,19 @@ class CinepolisScraperTests(SimpleTestCase):
                 "bogota",
                 CINEPOLIS_CARTELERA_URL,
             )
+
+    def test_keeps_original_title_as_optional_alternative(self):
+        payload = deepcopy(self.payload)
+        movie = payload["d"]["Cinemas"][0]["Dates"][0]["Movies"][0]
+        movie["OriginalTitle"] = "How to Rob a Bank"
+
+        result = parse_cartelera_data(
+            payload,
+            "valledupar-colombia",
+            CINEPOLIS_CARTELERA_URL,
+        )
+
+        self.assertEqual(
+            result.funciones[0]["titulo_alternativo"],
+            "How to Rob a Bank",
+        )

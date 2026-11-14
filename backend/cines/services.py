@@ -3,7 +3,7 @@ from dataclasses import dataclass
 from datetime import date, datetime, time
 import unicodedata
 import re
-from typing import Callable, TypedDict
+from typing import Callable, NotRequired, TypedDict
 from zoneinfo import ZoneInfo
 
 from django.db import transaction
@@ -53,6 +53,7 @@ class NormalizedShowtime(TypedDict):
     fuente_scraping: str
     cine_id_origen: str
     funcion_id_origen: str
+    titulo_alternativo: NotRequired[str]
 
 
 class UpcomingRelease(TypedDict):
@@ -158,17 +159,29 @@ def normalize_city(city: str) -> str:
     return " ".join(_fold_tokens(city))
 
 
-def match_media_title(title: str, catalog: Iterable[Media] | None = None) -> Media | None:
-    """Return a unique movie matching title/original title, or None if uncertain."""
-    normalized = normalize_title(title)
-    if not normalized:
+def match_media_title(
+    title: str,
+    catalog: Iterable[Media] | None = None,
+    alternate_title: str | None = None,
+) -> Media | None:
+    """Return a unique movie matching either title, or None if uncertain."""
+    normalized_titles: set[str] = set()
+    for candidate in (title, alternate_title):
+        if candidate:
+            normalized = normalize_title(candidate)
+            if normalized:
+                normalized_titles.add(normalized)
+    if not normalized_titles:
         return None
 
     movies = catalog if catalog is not None else Media.objects.filter(tipo=Media.Tipo.PELICULA)
     matches: dict[int, Media] = {}
     for movie in movies:
         candidates = (movie.titulo, movie.titulo_original)
-        if any(value and normalize_title(value) == normalized for value in candidates):
+        if any(
+            value and normalize_title(value) in normalized_titles
+            for value in candidates
+        ):
             matches[movie.pk] = movie
 
     if len(matches) != 1:
@@ -227,7 +240,11 @@ def scrape_and_save_cartelera(
             matched_releases += 1
 
         for record in records:
-            media = match_media_title(record["titulo"], movies)
+            media = match_media_title(
+                record["titulo"],
+                movies,
+                alternate_title=record.get("titulo_alternativo"),
+            )
             if media is None:
                 media = manual_matches.get(normalize_title(record["titulo"]))
             if media is None:
@@ -433,7 +450,7 @@ def normalize_showtimes(
 def normalize_showtime(record: Mapping[str, object]) -> NormalizedShowtime:
     """Convert one scraper record to CineRoll's common showtime contract."""
     showtime = _parse_datetime(record)
-    return {
+    normalized: NormalizedShowtime = {
         "titulo": _required_text(record, "titulo"),
         "cine": _required_text(record, "cine"),
         "ciudad": _required_text(record, "ciudad"),
@@ -445,6 +462,10 @@ def normalize_showtime(record: Mapping[str, object]) -> NormalizedShowtime:
         "cine_id_origen": _optional_text(record.get("cine_id_origen")),
         "funcion_id_origen": _optional_text(record.get("funcion_id_origen")),
     }
+    alternate_title = _optional_text(record.get("titulo_alternativo"))
+    if alternate_title:
+        normalized["titulo_alternativo"] = alternate_title
+    return normalized
 
 
 def _required_text(record: Mapping[str, object], field: str) -> str:

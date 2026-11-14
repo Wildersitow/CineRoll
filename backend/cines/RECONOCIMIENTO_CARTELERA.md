@@ -95,6 +95,16 @@ usa `OpeningDate` como fecha local de estreno.
    Conserva la hora y los minutos de `funcion_hora_inicio` tal cual (sin
    conversión de zona) y los combina con `funcion_fecha`.
 
+### Títulos y calificadores de exhibición
+
+En las muestras revisadas, Cinépolis separa `Title` y `OriginalTitle`, Royal
+Films entrega `pelicula_titulo` y `pelicula_nombre_original`, y Cineland entrega
+`nombre_pelicula_original` y `nombre_pelicula`. No se observaron nuevos sufijos
+en los títulos: `3D`, `DOB` y `SUB` ya están contemplados por
+`TITLE_QUALIFIERS`; además, aparecen como formato o idioma de función. Cinépolis
+y Royal conservan el título alternativo cuando difiere del principal. Cineland
+aún no tiene scraper implementado.
+
 ### Cineland
 
 1. El dominio que cargó la aplicación fue `https://home.cineland.co/`. Al

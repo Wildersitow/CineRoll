@@ -58,6 +58,28 @@ class ScrapeCarteleraCommandTests(TestCase):
         scrape.assert_called_with(city_slug="bogota")
 
     @patch("cines.scrapers.cinemark.scrape_cartelera_completa")
+    def test_matching_uses_alternate_title_from_normalized_scraper_data(self, scrape):
+        record = {
+            **self.showtime,
+            "titulo": "Título localizado sin coincidencia",
+            "titulo_alternativo": "Original Movie",
+        }
+        scrape.return_value = CarteleraData(
+            funciones=[record],
+            proximos_estrenos=[],
+        )
+        media = Media.objects.create(
+            titulo="Título del catálogo",
+            titulo_original="Original Movie",
+            tipo=Media.Tipo.PELICULA,
+        )
+
+        call_command("scrape_cartelera", cine="cinemark", ciudad="bogota")
+
+        self.assertEqual(Funcion.objects.get().media, media)
+        self.assertEqual(TituloPendiente.objects.count(), 0)
+
+    @patch("cines.scrapers.cinemark.scrape_cartelera_completa")
     def test_unknown_title_is_recorded_for_manual_review(self, scrape):
         scrape.return_value = self.cartelera
 

@@ -48,6 +48,21 @@ class ShowtimeNormalizationTests(TestCase):
         )
         self.assertEqual(result["sala"], "Sala 4")
         self.assertEqual(result["formato"], "2D, Doblada")
+        self.assertNotIn("titulo_alternativo", result)
+
+    def test_normalizes_optional_alternate_title(self):
+        result = normalize_showtime(
+            {
+                "titulo": "Título localizado",
+                "titulo_alternativo": "  Original   Title ",
+                "cine": "Cine",
+                "ciudad": "bogota",
+                "fecha": "2026-10-15",
+                "hora": "19:30:00",
+            }
+        )
+
+        self.assertEqual(result["titulo_alternativo"], "Original Title")
 
     def test_accepts_separate_iso_date_and_time_fields(self):
         result = normalize_showtime(
