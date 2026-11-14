@@ -1,13 +1,14 @@
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from datetime import date, datetime, time
+import logging
 import unicodedata
 import re
 from typing import Callable, NotRequired, TypedDict
 from zoneinfo import ZoneInfo
 
 from django.db import transaction
-from django.db.models import Exists, F, OuterRef
+from django.db.models import Exists, F, OuterRef, QuerySet
 from django.utils import timezone
 
 from cines.models import Cine, Funcion, TituloPendiente
@@ -15,6 +16,8 @@ from media.models import Media
 
 
 COLOMBIA_TIMEZONE = ZoneInfo("America/Bogota")
+MINIMUM_SYNC_PERCENT = 50
+logger = logging.getLogger(__name__)
 TITLE_QUALIFIERS = {
     "2d",
     "3d",
@@ -137,6 +140,7 @@ class CarteleraScrapeResult:
     peliculas_fuera_cartelera: int
     estrenos_sin_coincidencia: tuple[str, ...]
     titulos_pendientes_mostrar: tuple[str, ...]
+    funciones_obsoletas_eliminadas: int = 0
 
 
 def _fold_tokens(text: str) -> list[str]:
@@ -213,6 +217,12 @@ def scrape_and_save_cartelera(
 
     cartelera = scraper_config.scrape(provider_city_key)
     website = scraper_config.website
+    synchronization_time = timezone.now()
+    previous_future_count = _future_showtimes_for_source(
+        city_slug,
+        website,
+        synchronization_time,
+    ).count()
     records = [
         {**record, "ciudad": city_slug}
         for record in cartelera.funciones
@@ -227,6 +237,10 @@ def scrape_and_save_cartelera(
     matched_media_ids: set[int] = set()
     matched_releases = 0
     unmatched_releases: list[str] = []
+    incoming_future_count = 0
+    expected_future_functions: set[tuple[int, int, datetime, str, str]] = set()
+    obsolete_functions_deleted = 0
+    synchronization_warning: str | None = None
 
     with transaction.atomic():
         for release in cartelera.proximos_estrenos:
@@ -272,6 +286,17 @@ def scrape_and_save_cartelera(
                 formato=record["formato"],
                 defaults={"fuente_scraping": record["fuente_scraping"]},
             )
+            if scheduled_at >= synchronization_time:
+                incoming_future_count += 1
+                expected_future_functions.add(
+                    (
+                        cinema.pk,
+                        media.pk,
+                        scheduled_at,
+                        record["sala"],
+                        record["formato"],
+                    )
+                )
             matched += 1
             matched_media_ids.add(media.pk)
             if created:
@@ -279,8 +304,36 @@ def scrape_and_save_cartelera(
             else:
                 updated_functions += 1
 
+        if not records:
+            synchronization_warning = (
+                f"Se omitió la sincronización de funciones futuras de "
+                f"{cinema_provider} ({city_slug}): la respuesta llegó vacía."
+            )
+        elif (
+            previous_future_count
+            and incoming_future_count * 100
+            < previous_future_count * MINIMUM_SYNC_PERCENT
+        ):
+            synchronization_warning = (
+                f"Se omitió la sincronización de funciones futuras de "
+                f"{cinema_provider} ({city_slug}): "
+                f"{incoming_future_count} funciones válidas frente a "
+                f"{previous_future_count} previas, menos del "
+                f"{MINIMUM_SYNC_PERCENT}%."
+            )
+        else:
+            obsolete_functions_deleted = _delete_obsolete_future_showtimes(
+                city_slug,
+                website,
+                synchronization_time,
+                expected_future_functions,
+            )
+
         now_showing = _mark_now_showing(matched_media_ids)
         deleted_functions, expired_media = cleanup_expired_showtimes()
+
+    if synchronization_warning:
+        logger.warning(synchronization_warning)
 
     pending_titles = (
         TituloPendiente.objects.filter(
@@ -310,7 +363,50 @@ def scrape_and_save_cartelera(
             f"#{item.pk} {item.titulo_original} — {item.cine_nombre} ({item.ciudad})"
             for item in pending_titles
         ),
+        funciones_obsoletas_eliminadas=obsolete_functions_deleted,
     )
+
+
+def _future_showtimes_for_source(
+    city_slug: str,
+    website: str,
+    now: datetime,
+) -> QuerySet[Funcion]:
+    return Funcion.objects.filter(
+        cine__ciudad=city_slug,
+        cine__sitio_web=website,
+        fecha_hora__gte=now,
+    )
+
+
+def _delete_obsolete_future_showtimes(
+    city_slug: str,
+    website: str,
+    now: datetime,
+    expected_functions: set[tuple[int, int, datetime, str, str]],
+) -> int:
+    current_functions = _future_showtimes_for_source(
+        city_slug,
+        website,
+        now,
+    ).values_list("pk", "cine_id", "media_id", "fecha_hora", "sala", "formato")
+    obsolete_ids = [
+        function_id
+        for (
+            function_id,
+            cinema_id,
+            media_id,
+            scheduled_at,
+            room,
+            format_name,
+        ) in current_functions
+        if (cinema_id, media_id, scheduled_at, room, format_name)
+        not in expected_functions
+    ]
+    if not obsolete_ids:
+        return 0
+    Funcion.objects.filter(pk__in=obsolete_ids).delete()
+    return len(obsolete_ids)
 
 
 def _build_manual_matches() -> dict[str, Media]:

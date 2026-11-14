@@ -44,6 +44,8 @@ class Command(BaseCommand):
                 f"{result.estrenos_leidos} próximos estrenos leídos, "
                 f"{result.estrenos_asociados} asociados a Media, "
                 f"{result.funciones_vencidas_eliminadas} funciones vencidas eliminadas, "
+                f"{result.funciones_obsoletas_eliminadas} funciones futuras obsoletas "
+                "eliminadas, "
                 f"{result.peliculas_fuera_cartelera} películas pasadas a "
                 "'fuera de cartelera'."
             )

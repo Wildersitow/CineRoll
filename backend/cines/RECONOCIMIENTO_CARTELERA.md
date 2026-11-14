@@ -185,6 +185,13 @@ Cada ejecución también elimina funciones vencidas y recalcula el estado de
 cartelera según las funciones futuras que queden en todos los cines. Esta
 limpieza es inmediata; no depende de Celery.
 
+Tras un scrape con funciones válidas, se eliminan las funciones futuras de ese
+proveedor y ciudad que ya no aparecen en la fuente; el cine, película, fecha,
+hora, sala y formato identifican cada función. Si la respuesta viene vacía o
+contiene menos del 50% de las funciones futuras previamente guardadas y
+asociadas al catálogo, no se borran funciones y se registra una advertencia.
+Una respuesta exactamente igual al 50% sí permite sincronizar.
+
 El comando guarda únicamente las funciones cuyo título coincide de forma
 inequívoca con una película del catálogo. Los títulos sin coincidencia (o con
 coincidencias ambiguas) quedan en `TituloPendiente` para revisión; no se crean

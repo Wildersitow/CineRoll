@@ -1,5 +1,5 @@
 from io import StringIO
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 from unittest.mock import patch
 
 from django.core.management import CommandError, call_command
@@ -200,6 +200,152 @@ class ScrapeCarteleraCommandTests(TestCase):
         self.assertEqual(upcoming.estado, Media.Estado.PROXIMO_ESTRENO)
 
     @patch("cines.scrapers.cinemark.scrape_cartelera_completa")
+    def test_scrape_removes_obsolete_and_changed_room_format_functions(self, scrape):
+        scrape.return_value = self.cartelera
+        media = Media.objects.create(
+            titulo="Cómo entrenar a tu dragón",
+            tipo=Media.Tipo.PELICULA,
+        )
+        cinema = Cine.objects.create(
+            nombre=self.showtime["cine"],
+            ciudad="bogota",
+            sitio_web="https://www.cinemark.com.co/",
+        )
+        previous_time = datetime.combine(
+            self.showtime["fecha"],
+            self.showtime["hora"],
+        )
+        outdated_room = Funcion.objects.create(
+            media=media,
+            cine=cinema,
+            fecha_hora=previous_time,
+            sala="Sala antigua",
+            formato="Formato antiguo",
+        )
+        removed_media = Media.objects.create(
+            titulo="Película que ya no está",
+            tipo=Media.Tipo.PELICULA,
+        )
+        removed_function = Funcion.objects.create(
+            media=removed_media,
+            cine=cinema,
+            fecha_hora=previous_time + timedelta(hours=2),
+            sala="Sala 2",
+            formato="2D",
+        )
+        other_city_cinema = Cine.objects.create(
+            nombre="Cinemark en Cali",
+            ciudad="cali",
+            sitio_web="https://www.cinemark.com.co/",
+        )
+        other_city_function = Funcion.objects.create(
+            media=removed_media,
+            cine=other_city_cinema,
+            fecha_hora=previous_time + timedelta(hours=3),
+            sala="Sala 3",
+            formato="2D",
+        )
+        other_provider_cinema = Cine.objects.create(
+            nombre="Cinépolis en Bogotá",
+            ciudad="bogota",
+            sitio_web="https://cinepolis.com.co/",
+        )
+        other_provider_function = Funcion.objects.create(
+            media=removed_media,
+            cine=other_provider_cinema,
+            fecha_hora=previous_time + timedelta(hours=4),
+            sala="Sala 4",
+            formato="2D",
+        )
+
+        result = scrape_and_save_cartelera("cinemark", city_slug="bogota")
+
+        self.assertEqual(result.funciones_obsoletas_eliminadas, 2)
+        self.assertFalse(Funcion.objects.filter(pk=outdated_room.pk).exists())
+        self.assertFalse(Funcion.objects.filter(pk=removed_function.pk).exists())
+        self.assertTrue(Funcion.objects.filter(pk=other_city_function.pk).exists())
+        self.assertTrue(Funcion.objects.filter(pk=other_provider_function.pk).exists())
+        self.assertEqual(Funcion.objects.filter(cine=cinema).count(), 1)
+        synced = Funcion.objects.get(cine=cinema)
+        self.assertEqual(synced.media, media)
+        self.assertEqual(synced.sala, self.showtime["sala"])
+        self.assertEqual(synced.formato, self.showtime["formato"])
+
+    @patch("cines.scrapers.cinemark.scrape_cartelera_completa")
+    def test_empty_response_warns_and_preserves_future_functions(self, scrape):
+        scrape.return_value = CarteleraData(funciones=[], proximos_estrenos=[])
+        media = Media.objects.create(
+            titulo="Película de la cartelera",
+            tipo=Media.Tipo.PELICULA,
+        )
+        cinema = Cine.objects.create(
+            nombre="Cinemark existente",
+            ciudad="bogota",
+            sitio_web="https://www.cinemark.com.co/",
+        )
+        existing = Funcion.objects.create(
+            media=media,
+            cine=cinema,
+            fecha_hora=timezone.now() + timedelta(days=1),
+            sala="Sala 1",
+            formato="2D",
+        )
+
+        with self.assertLogs("cines.services", level="WARNING") as logs:
+            result = scrape_and_save_cartelera("cinemark", city_slug="bogota")
+
+        self.assertTrue(Funcion.objects.filter(pk=existing.pk).exists())
+        self.assertEqual(result.funciones_obsoletas_eliminadas, 0)
+        self.assertIn("respuesta llegó vacía", logs.output[0])
+
+    @patch("cines.scrapers.cinemark.scrape_cartelera_completa")
+    def test_response_below_half_previous_functions_skips_synchronization(self, scrape):
+        scrape.return_value = self.cartelera
+        media = Media.objects.create(
+            titulo="Cómo entrenar a tu dragón",
+            tipo=Media.Tipo.PELICULA,
+        )
+        cinema = Cine.objects.create(
+            nombre=self.showtime["cine"],
+            ciudad="bogota",
+            sitio_web="https://www.cinemark.com.co/",
+        )
+        current_time = datetime.combine(
+            self.showtime["fecha"],
+            self.showtime["hora"],
+        )
+        existing_functions = [
+            Funcion.objects.create(
+                media=media,
+                cine=cinema,
+                fecha_hora=current_time,
+                sala=self.showtime["sala"],
+                formato=self.showtime["formato"],
+            )
+        ]
+        for index in range(2):
+            other_media = Media.objects.create(
+                titulo=f"Película anterior {index}",
+                tipo=Media.Tipo.PELICULA,
+            )
+            existing_functions.append(
+                Funcion.objects.create(
+                    media=other_media,
+                    cine=cinema,
+                    fecha_hora=current_time + timedelta(hours=index + 1),
+                    sala=f"Sala {index + 2}",
+                    formato="2D",
+                )
+            )
+
+        with self.assertLogs("cines.services", level="WARNING") as logs:
+            result = scrape_and_save_cartelera("cinemark", city_slug="bogota")
+
+        self.assertEqual(result.funciones_obsoletas_eliminadas, 0)
+        self.assertEqual(Funcion.objects.filter(cine=cinema).count(), 3)
+        self.assertIn("menos del 50%", logs.output[0])
+
+    @patch("cines.scrapers.cinemark.scrape_cartelera_completa")
     def test_upcoming_release_updates_matched_media_without_creating_movies(self, scrape):
         scrape.return_value = CarteleraData(
             funciones=[],
@@ -259,6 +405,7 @@ class ScrapeCarteleraCommandTests(TestCase):
 
         scrape.assert_called_once_with(cinema_provider="cinemark", city_slug="BOGOTA")
         self.assertIn("10 funciones leídas", output.getvalue())
+        self.assertIn("0 funciones futuras obsoletas eliminadas", output.getvalue())
         self.assertIn("Película sin catálogo", output.getvalue())
         self.assertIn("#1 Película — Cine (bogota)", output.getvalue())
 
