@@ -92,10 +92,20 @@ def _scrape_cinemark(city_slug: str) -> CarteleraData:
     return scrape_cartelera_completa(city_slug=city_slug)
 
 
+def _scrape_cinepolis(city_key: str) -> CarteleraData:
+    from cines.scrapers.cinepolis import scrape_cartelera_completa
+
+    return scrape_cartelera_completa(city_key=city_key)
+
+
 SCRAPERS = {
     "cinemark": ScraperConfig(
         scrape=_scrape_cinemark,
         website="https://www.cinemark.com.co/",
+    ),
+    "cinepolis": ScraperConfig(
+        scrape=_scrape_cinepolis,
+        website="https://cinepolis.com.co/",
     ),
 }
 

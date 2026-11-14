@@ -55,6 +55,11 @@ servicio.
    formato `DOB`, idioma `DOBLADA`, horarios 16:00, 18:30 y 21:00.
 4. La captura resumida correspondió a un complejo (ID `577`), 18 fechas, 41
    películas y 176 horarios. Los horarios y cantidades cambian con la cartelera.
+5. Se repitió la petición el 13 de noviembre de 2026 con el mismo cuerpo. La
+   respuesta `200 application/json` incluyó un complejo, 20 fechas, 52 películas,
+   67 formatos y 210 horarios. Se guardó un recorte de una función real en
+   `cines/fixtures/cinepolis_valledupar_sample.json`: *Cómo robar un banco*,
+   formato `DOB` + `DOBLADA`, `ShowtimeId` `64989` y `CinemaId` `577`.
 
 ### Cinemark: próximos estrenos
 

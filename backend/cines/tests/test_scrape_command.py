@@ -1,6 +1,6 @@
 from io import StringIO
 from datetime import date, timedelta
-from unittest.mock import Mock, patch
+from unittest.mock import patch
 
 from django.core.management import CommandError, call_command
 from django.test import TestCase
@@ -11,8 +11,6 @@ from cines.scrapers.cinemark import CinemarkScraperError
 from cines.services import (
     CarteleraData,
     CarteleraScrapeResult,
-    SCRAPERS,
-    ScraperConfig,
     scrape_and_save_cartelera,
 )
 from media.models import Media
@@ -265,25 +263,17 @@ class ScrapeCarteleraCommandTests(TestCase):
         with self.assertRaisesMessage(ValueError, "desconocido"):
             scrape_and_save_cartelera("desconocido")
 
-    def test_provider_city_key_and_canonical_city_are_used(self):
-        scrape = Mock(return_value=self.cartelera)
+    @patch("cines.scrapers.cinepolis.scrape_cartelera_completa")
+    def test_provider_city_key_and_canonical_city_are_used(self, scrape):
+        scrape.return_value = self.cartelera
         media = Media.objects.create(
             titulo="Cómo entrenar a tu dragón",
             tipo=Media.Tipo.PELICULA,
         )
 
-        with patch.dict(
-            SCRAPERS,
-            {
-                "cinepolis": ScraperConfig(
-                    scrape=scrape,
-                    website="https://www.cinepolis.com.co/",
-                )
-            },
-        ):
-            scrape_and_save_cartelera("cinepolis", city_slug="valledupar")
+        scrape_and_save_cartelera("cinepolis", city_slug="valledupar")
 
-        scrape.assert_called_once_with("valledupar-colombia")
+        scrape.assert_called_once_with(city_key="valledupar-colombia")
         self.assertEqual(Funcion.objects.get().media, media)
         self.assertEqual(Cine.objects.get().ciudad, "valledupar")
 
