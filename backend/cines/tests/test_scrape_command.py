@@ -7,10 +7,10 @@ from django.test import TestCase
 from django.utils import timezone
 
 from cines.models import Cine, Funcion, TituloPendiente
-from cines.scrapers.cinemark import CinemarkCartelera, CinemarkScraperError
-from cines.services import CarteleraScrapeResult
+from cines.scrapers.cinemark import CinemarkScraperError
+from cines.services import CarteleraData, CarteleraScrapeResult
 from media.models import Media
-from cines.services import CarteleraScrapeResult, scrape_and_save_cartelera
+from cines.services import scrape_and_save_cartelera
 
 
 class ScrapeCarteleraCommandTests(TestCase):
@@ -28,7 +28,7 @@ class ScrapeCarteleraCommandTests(TestCase):
             "cine_id_origen": "2401",
             "funcion_id_origen": "session-1",
         }
-        self.cartelera = CinemarkCartelera(
+        self.cartelera = CarteleraData(
             funciones=[self.showtime],
             proximos_estrenos=[],
         )
@@ -118,7 +118,7 @@ class ScrapeCarteleraCommandTests(TestCase):
 
     @patch("cines.scrapers.cinemark.scrape_cartelera_completa")
     def test_scrape_deletes_expired_functions_and_updates_status_globally(self, scrape):
-        scrape.return_value = CinemarkCartelera(funciones=[], proximos_estrenos=[])
+        scrape.return_value = CarteleraData(funciones=[], proximos_estrenos=[])
         past_only = Media.objects.create(
             titulo="Solo funciones pasadas",
             tipo=Media.Tipo.PELICULA,
@@ -174,7 +174,7 @@ class ScrapeCarteleraCommandTests(TestCase):
 
     @patch("cines.scrapers.cinemark.scrape_cartelera_completa")
     def test_upcoming_release_updates_matched_media_without_creating_movies(self, scrape):
-        scrape.return_value = CinemarkCartelera(
+        scrape.return_value = CarteleraData(
             funciones=[],
             proximos_estrenos=[
                 {

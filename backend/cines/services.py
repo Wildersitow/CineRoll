@@ -3,7 +3,7 @@ from dataclasses import dataclass
 from datetime import date, datetime, time
 import unicodedata
 import re
-from typing import TypedDict
+from typing import Callable, TypedDict
 from zoneinfo import ZoneInfo
 
 from django.db import transaction
@@ -38,13 +38,9 @@ TITLE_QUALIFIERS = {
     "xd",
 }
 
-CINEMA_WEBSITES = {
-    "cinemark": "https://www.cinemark.com.co/",
-}
-
-
 class ScraperError(RuntimeError):
     pass
+
 
 class NormalizedShowtime(TypedDict):
     titulo: str
@@ -57,6 +53,38 @@ class NormalizedShowtime(TypedDict):
     fuente_scraping: str
     cine_id_origen: str
     funcion_id_origen: str
+
+
+class UpcomingRelease(TypedDict):
+    titulo: str
+    fecha_estreno: date
+    fuente_scraping: str
+
+
+@dataclass(frozen=True)
+class CarteleraData:
+    funciones: list[NormalizedShowtime]
+    proximos_estrenos: list[UpcomingRelease]
+
+
+@dataclass(frozen=True)
+class ScraperConfig:
+    scrape: Callable[[str], CarteleraData]
+    website: str
+
+
+def _scrape_cinemark(city_slug: str) -> CarteleraData:
+    from cines.scrapers.cinemark import scrape_cartelera_completa
+
+    return scrape_cartelera_completa(city_slug=city_slug)
+
+
+SCRAPERS = {
+    "cinemark": ScraperConfig(
+        scrape=_scrape_cinemark,
+        website="https://www.cinemark.com.co/",
+    ),
+}
 
 
 @dataclass(frozen=True)
@@ -114,22 +142,21 @@ def match_media_title(title: str, catalog: Iterable[Media] | None = None) -> Med
         return None
     return next(iter(matches.values()))
 
-def _get_scraper(cinema_provider: str):
-    if cinema_provider == "cinemark":
-        from cines.scrapers.cinemark import scrape_cartelera_completa
-
-        return scrape_cartelera_completa
-    raise ValueError(f"No existe scraper configurado para '{cinema_provider}'.")
-
 def scrape_and_save_cartelera(
     cinema_provider: str,
     city_slug: str = "bogota",
 ) -> CarteleraScrapeResult:
     """Scrape, match, persist, and clean one cinema's showtimes."""
     city_slug = city_slug.strip().lower()
-    scraper = _get_scraper(cinema_provider)
-    website = CINEMA_WEBSITES[cinema_provider]
-    cartelera = scraper(city_slug=city_slug)
+    try:
+        scraper_config = SCRAPERS[cinema_provider]
+    except KeyError as exc:
+        raise ValueError(
+            f"No existe scraper configurado para '{cinema_provider}'."
+        ) from exc
+
+    cartelera = scraper_config.scrape(city_slug)
+    website = scraper_config.website
     records = cartelera.funciones
     movies = list(Media.objects.filter(tipo=Media.Tipo.PELICULA))
     manual_matches = _build_manual_matches()
