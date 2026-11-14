@@ -277,6 +277,19 @@ class ScrapeCarteleraCommandTests(TestCase):
         self.assertEqual(Funcion.objects.get().media, media)
         self.assertEqual(Cine.objects.get().ciudad, "valledupar")
 
+    @patch("cines.scrapers.royal_films.scrape_cartelera_completa")
+    def test_royal_films_provider_uses_its_configured_city_id(self, scrape):
+        scrape.return_value = self.cartelera
+        Media.objects.create(
+            titulo="Cómo entrenar a tu dragón",
+            tipo=Media.Tipo.PELICULA,
+        )
+
+        scrape_and_save_cartelera("royal_films", city_slug="valledupar")
+
+        scrape.assert_called_once_with(city_id="1006")
+        self.assertEqual(Cine.objects.get().ciudad, "valledupar")
+
     @patch("cines.scrapers.cinemark.scrape_cartelera_completa")
     def test_cinemark_is_not_configured_for_valledupar(self, scrape):
         with self.assertRaisesMessage(ValueError, "para la ciudad 'valledupar'"):

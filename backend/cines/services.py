@@ -98,6 +98,12 @@ def _scrape_cinepolis(city_key: str) -> CarteleraData:
     return scrape_cartelera_completa(city_key=city_key)
 
 
+def _scrape_royal_films(city_id: str) -> CarteleraData:
+    from cines.scrapers.royal_films import scrape_cartelera_completa
+
+    return scrape_cartelera_completa(city_id=city_id)
+
+
 SCRAPERS = {
     "cinemark": ScraperConfig(
         scrape=_scrape_cinemark,
@@ -106,6 +112,10 @@ SCRAPERS = {
     "cinepolis": ScraperConfig(
         scrape=_scrape_cinepolis,
         website="https://cinepolis.com.co/",
+    ),
+    "royal_films": ScraperConfig(
+        scrape=_scrape_royal_films,
+        website="https://cinemasroyalfilms.com/",
     ),
 }
 

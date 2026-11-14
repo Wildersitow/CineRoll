@@ -90,6 +90,10 @@ usa `OpeningDate` como fecha local de estreno.
    de ellas tenía fecha `2026-11-12`, hora `16:30`, formato `2D`, cine
    Multicine Unicentro Valledupar y sala `SALA 2 STD`. La hora se entrega como
    fecha ISO (`1970-01-01T16:30:00.000Z`) separada de `funcion_fecha`.
+5. El scraper consulta el listado y, secuencialmente, el endpoint de funciones
+   de cada película, esperando un segundo antes de cada consulta secundaria.
+   Conserva la hora y los minutos de `funcion_hora_inicio` tal cual (sin
+   conversión de zona) y los combina con `funcion_fecha`.
 
 ### Cineland
 
