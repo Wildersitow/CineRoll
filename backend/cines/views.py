@@ -13,14 +13,21 @@ from rest_framework.views import APIView
 
 from cines.models import Cine, Funcion
 from cines.serializers import CineSerializer, FuncionSerializer
+from cines.services import normalize_city
 from media.models import Media
 from usuarios.permissions import EsAdministradorOLecturaPublica
-from cines.services import normalize_city
 
 class CineListView(ListCreateAPIView):
     queryset = Cine.objects.all()
     serializer_class = CineSerializer
     permission_classes = (EsAdministradorOLecturaPublica,)
+
+    def get_queryset(self):
+        queryset = super().get_queryset()
+        city = self.request.query_params.get("ciudad")
+        if city is not None:
+            queryset = queryset.filter(ciudad__in=_matching_city_names(city))
+        return queryset
 
 
 class CineDetailView(RetrieveUpdateDestroyAPIView):
@@ -34,8 +41,20 @@ class UnpaginatedFuncionListView(ListAPIView):
 
     def list(self, request, *args, **kwargs):
         queryset = self.filter_queryset(self.get_queryset())
+        ultima_actualizacion = queryset.aggregate(
+            ultima_actualizacion=Max("fecha_actualizacion")
+        )["ultima_actualizacion"]
+        queryset = _filter_by_date(
+            queryset,
+            request.query_params.get("fecha", "hoy"),
+        )
         serializer = self.get_serializer(queryset, many=True)
-        return Response({"resultados": serializer.data})
+        return Response(
+            {
+                "ultima_actualizacion": ultima_actualizacion,
+                "resultados": serializer.data,
+            }
+        )
 
 
 class FuncionListView(UnpaginatedFuncionListView):
@@ -44,9 +63,6 @@ class FuncionListView(UnpaginatedFuncionListView):
 
     def get_queryset(self):
         queryset = Funcion.objects.select_related("cine", "media")
-        show_date = self.request.query_params.get("fecha", "hoy")
-        queryset = _filter_by_date(queryset, show_date)
-
         city = self.request.query_params.get("ciudad")
         if city is not None:
             queryset = _filter_by_city(queryset, city)
@@ -61,8 +77,6 @@ class CineFuncionListView(UnpaginatedFuncionListView):
     def get_queryset(self):
         cine = get_object_or_404(Cine, pk=self.kwargs["cine_id"])
         queryset = Funcion.objects.filter(cine=cine).select_related("cine", "media")
-        show_date = self.request.query_params.get("fecha", "hoy")
-        queryset = _filter_by_date(queryset, show_date)
         return queryset.order_by("fecha_hora", "sala", "media__titulo")
 
 
@@ -109,12 +123,15 @@ def _filter_by_date(queryset, show_date):
     return queryset.filter(fecha_hora__date=parsed_date)
 
 def _filter_by_city(queryset, city):
+    return queryset.filter(cine__ciudad__in=_matching_city_names(city))
+
+
+def _matching_city_names(city):
     normalized = normalize_city(city)
     if not normalized:
         raise ValidationError({"ciudad": "Debe indicar una ciudad."})
-    matching_cities = [
+    return [
         name
         for name in Cine.objects.values_list("ciudad", flat=True).distinct()
         if normalize_city(name) == normalized
     ]
-    return queryset.filter(cine__ciudad__in=matching_cities)

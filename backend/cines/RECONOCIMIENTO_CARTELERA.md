@@ -214,7 +214,8 @@ canónico configurado en `--ciudad`.
 
 - `GET /api/cines/` devuelve el catálogo paginado de cines. `POST` en esa ruta y
   `PUT`, `PATCH` o `DELETE /api/cines/<id>/` requieren un usuario administrador
-  (`is_staff`); las lecturas siguen siendo públicas.
+  (`is_staff`); las lecturas siguen siendo públicas. Acepta `?ciudad=<ciudad>`
+  y normaliza tildes, mayúsculas y separadores al comparar con `Cine.ciudad`.
 - `GET /api/cines/<id>/funciones/` devuelve las funciones de hoy de ese cine;
   acepta `?fecha=AAAA-MM-DD` para otra fecha.
 - `GET /api/funciones/` devuelve las funciones de hoy y acepta los filtros
@@ -222,8 +223,11 @@ canónico configurado en `--ciudad`.
   hoy en `America/Bogota`; la ciudad se compara sin distinguir mayúsculas y
   minúsculas con `Cine.ciudad`.
 - Ambos endpoints devuelven todos los resultados en una sola respuesta bajo la
-  clave `resultados` (sin paginación), para que el home cargue la cartelera
-  diaria o la de un cine con una llamada.
+  clave `resultados` (sin paginación), junto con `ultima_actualizacion`, para
+  que el home cargue la cartelera diaria o la de un cine con una llamada. La
+  fecha filtra los resultados; la última actualización se calcula sobre el
+  conjunto base, considerando ciudad o cine y todas las fechas. Es `null` si
+  ese conjunto no tiene funciones.
 - `GET /api/media/<id>/funciones/` devuelve funciones con la hora, la sala, el
   formato y la información del cine, junto con `ultima_actualizacion`.
 - Se puede filtrar con `?cine=<id>&fecha=AAAA-MM-DD`. La fecha filtra las
