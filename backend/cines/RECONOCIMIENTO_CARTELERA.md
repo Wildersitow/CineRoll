@@ -112,8 +112,10 @@ aún no tiene scraper implementado.
    títulos, fechas, cine (C.C. Mayales), formatos, salas y horarios.
 2. Al seleccionar Valledupar el navegador envió
    `POST https://cineland.website/api_point_back.php`, con JSON
-   `{"fechacon1":"2026-11-08","fechacon2":"2026-11-08","codteatro":"0051"}`.
-   La respuesta observada en esa primera carga fue
+   `usrlock`, `fechacon1`, `fechacon2` y `codteatro: "0051"`. También envía las
+   cabeceras `Api-Key`, `Route: get_cartelera_agrupada` y `Authorization`.
+   `usrlock` se obtiene mediante la ruta `get_consecutivo_temporal`; el token se
+   obtiene mediante `login`. La respuesta observada en esa primera carga fue
    `200 text/html; charset=UTF-8`, con claves `data`, `count` y
    `transaction_status`; `data` fue `[]` en esa consulta inicial.
 3. Al abrir una película se observó
@@ -145,10 +147,14 @@ de cartelera estaban vacías; por eso ese resultado no acredita funciones de
 Cinemark en Valledupar. Cinépolis queda elegido como segundo scraper de la
 Fase 3: su respuesta confirmada entrega en una llamada los horarios completos
 de la ciudad. Royal Films también es viable, aunque requiere consultar las
-funciones película por película. En Cineland se reconocieron el dominio, el
-endpoint de cartelera, sus parámetros y el esquema de la respuesta con
-funciones. No se implementó ningún scraper adicional para esos cines en este
-paso.
+funciones película por película. El scraper de Cineland está implementado en
+`cines.scrapers.cineland` y registrado para Valledupar con el código de teatro
+`0051`. Consulta hasta siete días con una petición por fecha y una pausa de un
+segundo entre solicitudes; decodifica manualmente el JSON que llega con tipo de
+contenido `text/html`. Las variables `CINELAND_API_KEY`, `CINELAND_EMAIL` y
+`CINELAND_PASSWORD` deben configurarse localmente en el `.env`; sus valores no
+se guardan en el repositorio. Una llamada directa sin la autenticación observada
+fue rechazada con `400 Missing Key`.
 El scraper de Cinemark también lee
 `UpcomingReleases`; el comando actualiza las fechas y el estado de las películas
 que ya existen en `Media` y muestra los títulos sin coincidencia para revisión,
