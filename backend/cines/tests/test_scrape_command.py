@@ -1,6 +1,6 @@
 from io import StringIO
 from datetime import date, timedelta
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 from django.core.management import CommandError, call_command
 from django.test import TestCase
@@ -8,9 +8,14 @@ from django.utils import timezone
 
 from cines.models import Cine, Funcion, TituloPendiente
 from cines.scrapers.cinemark import CinemarkScraperError
-from cines.services import CarteleraData, CarteleraScrapeResult
+from cines.services import (
+    CarteleraData,
+    CarteleraScrapeResult,
+    SCRAPERS,
+    ScraperConfig,
+    scrape_and_save_cartelera,
+)
 from media.models import Media
-from cines.services import scrape_and_save_cartelera
 
 
 class ScrapeCarteleraCommandTests(TestCase):
@@ -49,8 +54,10 @@ class ScrapeCarteleraCommandTests(TestCase):
         function = Funcion.objects.get()
         self.assertEqual(function.media, media)
         self.assertEqual(function.cine.nombre, "Cine de prueba")
+        self.assertEqual(function.cine.ciudad, "bogota")
         self.assertEqual(function.formato, "2D, Doblada")
         self.assertEqual(TituloPendiente.objects.count(), 0)
+        scrape.assert_called_with(city_slug="bogota")
 
     @patch("cines.scrapers.cinemark.scrape_cartelera_completa")
     def test_unknown_title_is_recorded_for_manual_review(self, scrape):
@@ -257,3 +264,32 @@ class ScrapeCarteleraCommandTests(TestCase):
     def test_unknown_provider_is_rejected(self):
         with self.assertRaisesMessage(ValueError, "desconocido"):
             scrape_and_save_cartelera("desconocido")
+
+    def test_provider_city_key_and_canonical_city_are_used(self):
+        scrape = Mock(return_value=self.cartelera)
+        media = Media.objects.create(
+            titulo="Cómo entrenar a tu dragón",
+            tipo=Media.Tipo.PELICULA,
+        )
+
+        with patch.dict(
+            SCRAPERS,
+            {
+                "cinepolis": ScraperConfig(
+                    scrape=scrape,
+                    website="https://www.cinepolis.com.co/",
+                )
+            },
+        ):
+            scrape_and_save_cartelera("cinepolis", city_slug="valledupar")
+
+        scrape.assert_called_once_with("valledupar-colombia")
+        self.assertEqual(Funcion.objects.get().media, media)
+        self.assertEqual(Cine.objects.get().ciudad, "valledupar")
+
+    @patch("cines.scrapers.cinemark.scrape_cartelera_completa")
+    def test_cinemark_is_not_configured_for_valledupar(self, scrape):
+        with self.assertRaisesMessage(ValueError, "para la ciudad 'valledupar'"):
+            scrape_and_save_cartelera("cinemark", city_slug="valledupar")
+
+        scrape.assert_not_called()

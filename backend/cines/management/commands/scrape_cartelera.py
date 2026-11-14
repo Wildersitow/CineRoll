@@ -1,5 +1,10 @@
 from django.core.management.base import BaseCommand, CommandError
-from cines.services import SCRAPERS, ScraperError, scrape_and_save_cartelera
+from cines.services import (
+    CITY_PROVIDER_KEYS,
+    SCRAPERS,
+    ScraperError,
+    scrape_and_save_cartelera,
+)
 
 class Command(BaseCommand):
     help = "Obtiene la cartelera de un cine, relaciona películas y guarda funciones."
@@ -14,7 +19,8 @@ class Command(BaseCommand):
         parser.add_argument(
             "--ciudad",
             default="bogota",
-            help="Slug de la ciudad en el sitio del cine (por defecto: bogota).",
+            choices=tuple(CITY_PROVIDER_KEYS),
+            help="Ciudad canónica (por defecto: bogota).",
         )
 
     def handle(self, *_args, **options):

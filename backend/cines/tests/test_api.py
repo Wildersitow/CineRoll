@@ -268,3 +268,28 @@ class CarteleraApiTests(APITestCase):
         self.assertEqual(
             [item["id"] for item in response.data["resultados"]], [function.pk]
         )
+
+    def test_valledupar_filter_returns_functions_from_all_cinemas(self):
+        cinemas = [
+            Cine.objects.create(nombre=name, ciudad="valledupar")
+            for name in ("Cinépolis", "Royal Films", "Cineland")
+        ]
+        functions = [
+            Funcion.objects.create(
+                media=self.media,
+                cine=cinema,
+                fecha_hora=datetime(2026, 10, 15, 20, 0, tzinfo=timezone.utc),
+            )
+            for cinema in cinemas
+        ]
+
+        response = self.client.get(
+            reverse("funcion-list"),
+            {"fecha": "2026-10-15", "ciudad": "valledupar"},
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(
+            {item["id"] for item in response.data["resultados"]},
+            {function.pk for function in functions},
+        )

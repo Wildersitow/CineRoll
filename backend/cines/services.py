@@ -73,6 +73,19 @@ class ScraperConfig:
     website: str
 
 
+CANONICAL_CITY = "valledupar"
+CITY_PROVIDER_KEYS = {
+    CANONICAL_CITY: {
+        "cinepolis": "valledupar-colombia",
+        "royal_films": "1006",
+        "cineland": "0051",
+    },
+    "bogota": {
+        "cinemark": "bogota",
+    },
+}
+
+
 def _scrape_cinemark(city_slug: str) -> CarteleraData:
     from cines.scrapers.cinemark import scrape_cartelera_completa
 
@@ -155,9 +168,22 @@ def scrape_and_save_cartelera(
             f"No existe scraper configurado para '{cinema_provider}'."
         ) from exc
 
-    cartelera = scraper_config.scrape(city_slug)
+    city_provider_keys = CITY_PROVIDER_KEYS.get(city_slug)
+    if city_provider_keys is None:
+        raise ValueError(f"No existe configuración para la ciudad '{city_slug}'.")
+    provider_city_key = city_provider_keys.get(cinema_provider)
+    if provider_city_key is None:
+        raise ValueError(
+            f"No existe configuración de '{cinema_provider}' para la ciudad "
+            f"'{city_slug}'."
+        )
+
+    cartelera = scraper_config.scrape(provider_city_key)
     website = scraper_config.website
-    records = cartelera.funciones
+    records = [
+        {**record, "ciudad": city_slug}
+        for record in cartelera.funciones
+    ]
     movies = list(Media.objects.filter(tipo=Media.Tipo.PELICULA))
     manual_matches = _build_manual_matches()
     matched = 0

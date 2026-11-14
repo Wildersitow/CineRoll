@@ -135,6 +135,24 @@ El scraper de Cinemark también lee
 que ya existen en `Media` y muestra los títulos sin coincidencia para revisión,
 sin crear fichas automáticamente.
 
+## Ciudades canónicas
+
+El servicio recibe el slug canónico y lo traduce a la clave que requiere cada
+proveedor. Las funciones y los títulos pendientes se guardan usando ese slug en
+`Cine.ciudad` y `TituloPendiente.ciudad`, de modo que
+`/api/funciones/?ciudad=valledupar` reúne funciones de los cines configurados
+para Valledupar.
+
+| Ciudad canónica | Cinemark | Cinépolis | Royal Films | Cineland |
+|---|---|---|---|---|
+| `valledupar` | No habilitado: no se observaron funciones | `valledupar-colombia` | `1006` | `0051` |
+| `bogota` | `bogota` (solo manual; no programado) | — | — | — |
+
+Cinemark se conserva configurado, pero no está asociado a Valledupar. La clave
+`bogota` se mantiene para ejecuciones manuales del scraper; no se programa una
+ciudad de Cinemark hasta verificar que devuelve funciones. En esta fase todavía
+no hay una programación periódica de scraping configurada.
+
 ## Importar cartelera de Cinemark manualmente
 
 Desde `backend`, ejecutar:
@@ -153,7 +171,7 @@ inequívoca con una película del catálogo. Los títulos sin coincidencia (o co
 coincidencias ambiguas) quedan en `TituloPendiente` para revisión; no se crean
 fichas ficticias. Las ejecuciones posteriores actualizan las funciones
 existentes en vez de duplicarlas. Se puede consultar otra ciudad pasando su slug
-de Cinemark en `--ciudad`.
+canónico configurado en `--ciudad`.
 
 ## Endpoints de lectura
 
