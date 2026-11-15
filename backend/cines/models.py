@@ -1,5 +1,5 @@
 from django.db import models
-
+from django.utils import timezone
 
 class Cine(models.Model):
     nombre = models.CharField(max_length=150)
@@ -80,3 +80,57 @@ class TituloPendiente(models.Model):
 
     def __str__(self):
         return f"{self.titulo_original} — {self.cine_nombre} ({self.ciudad})"
+
+class EjecucionScraping(models.Model):
+    """Registro de cada ejecución del scraper de un cine (para auditar y depurar)."""
+
+    class Estado(models.TextChoices):
+        EN_CURSO = "en_curso", "En curso"
+        EXITOSA = "exitosa", "Exitosa"
+        FALLIDA = "fallida", "Fallida"
+        OMITIDA = "omitida", "Omitida (ya había una en curso)"
+
+    cine = models.CharField(max_length=50)
+    ciudad = models.CharField(max_length=100)
+    intento = models.PositiveSmallIntegerField(default=1)
+    inicio = models.DateTimeField(default=timezone.now)
+    fin = models.DateTimeField(blank=True, null=True)
+    estado = models.CharField(
+        max_length=10, choices=Estado.choices, default=Estado.EN_CURSO
+    )
+
+    # Conteos del CarteleraScrapeResult
+    funciones_leidas = models.PositiveIntegerField(default=0)
+    funciones_asociadas = models.PositiveIntegerField(default=0)
+    funciones_creadas = models.PositiveIntegerField(default=0)
+    funciones_actualizadas = models.PositiveIntegerField(default=0)
+    titulos_pendientes = models.PositiveIntegerField(default=0)
+    peliculas_en_cartelera = models.PositiveIntegerField(default=0)
+    estrenos_leidos = models.PositiveIntegerField(default=0)
+    estrenos_asociados = models.PositiveIntegerField(default=0)
+    funciones_vencidas_eliminadas = models.PositiveIntegerField(default=0)
+    funciones_obsoletas_eliminadas = models.PositiveIntegerField(default=0)
+    peliculas_fuera_cartelera = models.PositiveIntegerField(default=0)
+
+    advertencia = models.TextField(
+        blank=True,
+        help_text="Por ejemplo, cuando la salvaguarda impidió borrar funciones.",
+    )
+    mensaje_error = models.TextField(blank=True)
+
+    class Meta:
+        ordering = ["-inicio"]
+        verbose_name = "ejecución de scraping"
+        verbose_name_plural = "ejecuciones de scraping"
+        indexes = [
+            models.Index(
+                fields=["cine", "ciudad", "-inicio"], name="cines_ejec_cine_ciudad_idx"
+            ),
+        ]
+
+    def __str__(self):
+        return f"{self.cine} ({self.ciudad}) — {self.get_estado_display()} — {self.inicio:%Y-%m-%d %H:%M}"
+
+    @property
+    def duracion(self):
+        return self.fin - self.inicio if self.fin else None
