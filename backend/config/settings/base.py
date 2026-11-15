@@ -1,6 +1,6 @@
 from datetime import timedelta
 from pathlib import Path
-from decouple import config
+from decouple import Csv, config
 
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
 
@@ -116,3 +116,25 @@ CELERY_TIMEZONE = TIME_ZONE
 CELERY_TASK_SERIALIZER = "json"
 CELERY_RESULT_SERIALIZER = "json"
 CELERY_ACCEPT_CONTENT = ["json"]
+
+# --- Programación de la cartelera (Celery Beat) ---
+# Pares cine:ciudad que se scrapean automáticamente. Se puede cambiar desde el
+# .env sin tocar el código, por ejemplo para apagar un cine que está fallando.
+# Cinemark no está aquí: no devuelve funciones en Valledupar.
+from config.beat import construir_beat_schedule, parsear_pares  # noqa: E402
+
+CARTELERA_ACTIVA = parsear_pares(
+    config(
+        "CARTELERA_ACTIVA",
+        default="cinepolis:valledupar,royal_films:valledupar,cineland:valledupar",
+        cast=Csv(),
+    )
+)
+
+# Dos franjas al día (6:00 a. m. y 6:00 p. m., hora de Bogotá porque
+# CELERY_TIMEZONE = America/Bogota), con 10 minutos entre un cine y el siguiente.
+CELERY_BEAT_SCHEDULE = construir_beat_schedule(
+    CARTELERA_ACTIVA,
+    horas=(6, 18),
+    espaciado_minutos=10,
+)
