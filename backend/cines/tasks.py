@@ -9,6 +9,8 @@ from cines.services import (
     scrape_and_save_cartelera,
 )
 
+from cines.ejecuciones import aplicar_resultado, registrar_ejecucion, registrar_omitida
+
 MAX_REINTENTOS = 3
 LIMITE_SUAVE_SEGUNDOS = 300  # lanza SoftTimeLimitExceeded dentro de la tarea
 LIMITE_DURO_SEGUNDOS = 360  # el worker mata la tarea
@@ -37,16 +39,23 @@ def scrape_cartelera_task(self, cine, ciudad):
     Es solo un envoltorio: toda la lógica (scraping, matching, guardado,
     sincronización y limpieza) vive en cines.services.scrape_and_save_cartelera.
     Ante un ScraperError se reintenta con espera creciente (máximo 3 veces).
+    Cada intento queda registrado en EjecucionScraping.
     """
+    intento = self.request.retries + 1
     with candado_scraping(cine, ciudad, VIDA_CANDADO_SEGUNDOS) as libre:
         if not libre:
+            registrar_omitida(cine, ciudad, intento)
             return {
                 "cine": cine,
                 "ciudad": ciudad,
                 "omitido": True,
                 "motivo": "ya_en_ejecucion",
             }
-        resultado = scrape_and_save_cartelera(cinema_provider=cine, city_slug=ciudad)
+        with registrar_ejecucion(cine, ciudad, intento) as ejecucion:
+            resultado = scrape_and_save_cartelera(
+                cinema_provider=cine, city_slug=ciudad
+            )
+            aplicar_resultado(ejecucion, resultado)
     # Celery serializa en JSON, y un dataclass no lo es: se devuelve como dict.
     return asdict(resultado)
 
