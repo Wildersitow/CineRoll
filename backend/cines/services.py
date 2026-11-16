@@ -151,6 +151,7 @@ class CarteleraScrapeResult:
     estrenos_sin_coincidencia: tuple[str, ...]
     titulos_pendientes_mostrar: tuple[str, ...]
     funciones_obsoletas_eliminadas: int = 0
+    advertencia: str = ""
 
 
 def _fold_tokens(text: str) -> list[str]:
@@ -356,24 +357,25 @@ def scrape_and_save_cartelera(
     )
 
     return CarteleraScrapeResult(
-        cine=cinema_provider,
-        ciudad=city_slug,
-        funciones_leidas=len(records),
-        funciones_asociadas=matched,
-        funciones_creadas=created_functions,
-        funciones_actualizadas=updated_functions,
-        titulos_pendientes=pending,
-        peliculas_en_cartelera=now_showing,
-        estrenos_leidos=len(cartelera.proximos_estrenos),
-        estrenos_asociados=matched_releases,
-        funciones_vencidas_eliminadas=deleted_functions,
-        peliculas_fuera_cartelera=expired_media,
-        estrenos_sin_coincidencia=tuple(unmatched_releases),
-        titulos_pendientes_mostrar=tuple(
-            f"#{item.pk} {item.titulo_original} — {item.cine_nombre} ({item.ciudad})"
-            for item in pending_titles
-        ),
-        funciones_obsoletas_eliminadas=obsolete_functions_deleted,
+    cine=cinema_provider,
+    ciudad=city_slug,
+    funciones_leidas=len(records),
+    funciones_asociadas=matched,
+    funciones_creadas=created_functions,
+    funciones_actualizadas=updated_functions,
+    titulos_pendientes=pending,
+    peliculas_en_cartelera=now_showing,
+    estrenos_leidos=len(cartelera.proximos_estrenos),
+    estrenos_asociados=matched_releases,
+    funciones_vencidas_eliminadas=deleted_functions,
+    peliculas_fuera_cartelera=expired_media,
+    estrenos_sin_coincidencia=tuple(unmatched_releases),
+    titulos_pendientes_mostrar=tuple(
+        f"#{item.pk} {item.titulo_original} — {item.cine_nombre} ({item.ciudad})"
+        for item in pending_titles
+    ),
+    funciones_obsoletas_eliminadas=obsolete_functions_deleted,
+    advertencia=synchronization_warning or "",
     )
 
 

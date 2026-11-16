@@ -21,9 +21,9 @@ CAMPOS_CONTEO = (
 
 
 def aplicar_resultado(ejecucion, resultado):
-    """Copia los conteos de un CarteleraScrapeResult a la ejecución."""
     for campo in CAMPOS_CONTEO:
         setattr(ejecucion, campo, getattr(resultado, campo))
+    ejecucion.advertencia = resultado.advertencia
 
 
 @contextmanager

@@ -280,6 +280,7 @@ class ScrapeCarteleraCommandTests(TestCase):
         self.assertEqual(synced.media, media)
         self.assertEqual(synced.sala, self.showtime["sala"])
         self.assertEqual(synced.formato, self.showtime["formato"])
+        self.assertEqual(result.advertencia, "")
 
     @patch("cines.scrapers.cinemark.scrape_cartelera_completa")
     def test_empty_response_warns_and_preserves_future_functions(self, scrape):
@@ -307,6 +308,7 @@ class ScrapeCarteleraCommandTests(TestCase):
         self.assertTrue(Funcion.objects.filter(pk=existing.pk).exists())
         self.assertEqual(result.funciones_obsoletas_eliminadas, 0)
         self.assertIn("respuesta llegó vacía", logs.output[0])
+        self.assertIn("respuesta llegó vacía", result.advertencia)
 
     @patch("cines.scrapers.cinemark.scrape_cartelera_completa")
     def test_response_below_half_previous_functions_skips_synchronization(self, scrape):
@@ -354,6 +356,7 @@ class ScrapeCarteleraCommandTests(TestCase):
         self.assertEqual(result.funciones_obsoletas_eliminadas, 0)
         self.assertEqual(Funcion.objects.filter(cine=cinema).count(), 3)
         self.assertIn("menos del 50%", logs.output[0])
+        self.assertIn("menos del 50%", result.advertencia)
 
     @patch("cines.scrapers.cinemark.scrape_cartelera_completa")
     def test_upcoming_release_updates_matched_media_without_creating_movies(self, scrape):

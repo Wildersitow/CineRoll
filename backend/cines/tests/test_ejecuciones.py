@@ -10,8 +10,8 @@ from cines.tasks import scrape_cartelera_task
 from usuarios.models import Usuario
 
 
-def _resultado():
-    return CarteleraScrapeResult(
+def _resultado(**cambios):
+    datos = dict(
         cine="cinepolis",
         ciudad="valledupar",
         funciones_leidas=10,
@@ -28,6 +28,8 @@ def _resultado():
         titulos_pendientes_mostrar=(),
         funciones_obsoletas_eliminadas=6,
     )
+    datos.update(cambios)
+    return CarteleraScrapeResult(**datos)
 
 
 def _candado_falso(libre):
@@ -112,6 +114,26 @@ class RegistroDeEjecucionesTests(TestCase):
         servicio.assert_not_called()
         ejecucion = EjecucionScraping.objects.get()
         self.assertEqual(ejecucion.estado, EjecucionScraping.Estado.OMITIDA)
+
+    @patch("cines.tasks.scrape_and_save_cartelera")
+    def test_la_advertencia_de_la_salvaguarda_queda_registrada(self, servicio):
+        servicio.return_value = _resultado(
+            advertencia="Se omitió la sincronización: la respuesta llegó vacía."
+        )
+
+        scrape_cartelera_task.apply(args=("cinepolis", "valledupar")).get()
+
+        ejecucion = EjecucionScraping.objects.get()
+        self.assertEqual(ejecucion.estado, EjecucionScraping.Estado.EXITOSA)
+        self.assertIn("respuesta llegó vacía", ejecucion.advertencia)
+
+    @patch("cines.tasks.scrape_and_save_cartelera")
+    def test_sin_salvaguarda_la_advertencia_queda_vacia(self, servicio):
+        servicio.return_value = _resultado()
+
+        scrape_cartelera_task.apply(args=("cinepolis", "valledupar")).get()
+
+        self.assertEqual(EjecucionScraping.objects.get().advertencia, "")
 
 
 class EjecucionScrapingAdminTests(TestCase):
