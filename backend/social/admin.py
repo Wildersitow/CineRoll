@@ -1,10 +1,81 @@
 from django.contrib import admin
 
-from social.models import Resena
+from social.models import ElementoLista, Lista, Resena, Seguimiento, SugerenciaEdicion
+
+
+class ElementoListaInline(admin.TabularInline):
+    model = ElementoLista
+    extra = 1
+    autocomplete_fields = ("media",)
+
+
+@admin.register(Lista)
+class ListaAdmin(admin.ModelAdmin):
+    list_display = (
+        "nombre",
+        "usuario",
+        "tipo",
+        "publica",
+        "total_elementos",
+        "fecha_creacion",
+    )
+    list_filter = ("tipo", "publica", "fecha_creacion")
+    search_fields = ("nombre", "usuario__username", "descripcion")
+    autocomplete_fields = ("usuario",)
+    list_select_related = ("usuario",)
+    date_hierarchy = "fecha_creacion"
+    inlines = [ElementoListaInline]
+
+    @admin.display(description="Total elementos")
+    def total_elementos(self, obj):
+        return obj.total_elementos
+
+
+@admin.register(ElementoLista)
+class ElementoListaAdmin(admin.ModelAdmin):
+    list_display = ("lista", "media", "orden", "fecha_agregado")
+    list_filter = ("fecha_agregado",)
+    search_fields = ("lista__nombre", "media__titulo", "lista__usuario__username")
+    autocomplete_fields = ("lista", "media")
+    list_select_related = ("lista", "media", "lista__usuario")
+
+
+@admin.register(Seguimiento)
+class SeguimientoAdmin(admin.ModelAdmin):
+    list_display = ("seguidor", "seguido", "fecha_creacion")
+    list_filter = ("fecha_creacion",)
+    search_fields = ("seguidor__username", "seguido__username")
+    autocomplete_fields = ("seguidor", "seguido")
+    list_select_related = ("seguidor", "seguido")
+    date_hierarchy = "fecha_creacion"
+
+
+@admin.register(SugerenciaEdicion)
+class SugerenciaEdicionAdmin(admin.ModelAdmin):
+    list_display = (
+        "media",
+        "usuario",
+        "campo",
+        "estado",
+        "revisado_por",
+        "fecha_creacion",
+        "fecha_resolucion",
+    )
+    list_filter = ("estado", "campo", "fecha_creacion")
+    search_fields = (
+        "media__titulo",
+        "usuario__username",
+        "valor_propuesto",
+        "motivo",
+    )
+    autocomplete_fields = ("usuario", "media", "revisado_por")
+    list_select_related = ("usuario", "media", "revisado_por")
+    date_hierarchy = "fecha_creacion"
 
 
 @admin.register(Resena)
 class ResenaAdmin(admin.ModelAdmin):
+
     list_display = ("media", "usuario", "puntuacion", "oculta", "fecha_creacion")
     list_filter = ("oculta", "puntuacion", "fecha_creacion")
     search_fields = ("media__titulo", "usuario__username", "texto")

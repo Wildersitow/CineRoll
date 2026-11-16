@@ -1,4 +1,6 @@
-const API_BASE_URL = 'http://localhost:8000/api';
+const API_BASE_URL = (import.meta.env && import.meta.env.VITE_API_URL)
+  ? import.meta.env.VITE_API_URL
+  : 'http://localhost:8000/api';
 
 const FIELD_LABELS = {
   username: 'Usuario',
@@ -243,10 +245,205 @@ export async function changePassword(claveActual, claveNueva) {
     }),
   });
 
-    if (!response.ok) {
+  if (!response.ok) {
     const errorData = await response.json().catch(() => null);
     throw new Error(formatApiError(errorData?.error, 'Error al cambiar la contraseña.'));
   }
 
   return await response.json();
 }
+
+
+/**
+ * Convierte un objeto de parámetros en una query string URL válida.
+ */
+function buildQueryString(params = {}) {
+  const entries = Object.entries(params).filter(
+    ([, val]) => val !== undefined && val !== null && val !== ''
+  );
+  if (!entries.length) return '';
+  const searchParams = new URLSearchParams();
+  for (const [key, val] of entries) {
+    searchParams.append(key, val);
+  }
+  return `?${searchParams.toString()}`;
+}
+
+/**
+ * Obtiene el listado de películas, series y anime desde /api/media/.
+ * Admite filtros: { buscar, tipo, genero, anio, estado, cine, ordenar, page }
+ */
+export async function getMedia(params = {}) {
+  const qs = buildQueryString(params);
+  const response = await apiFetch(`/media/${qs}`);
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => null);
+    throw new Error(formatApiError(errorData?.error, 'Error al obtener el catálogo de media.'));
+  }
+  return await response.json();
+}
+
+/**
+ * Obtiene la ficha completa de un título desde /api/media/<id>/.
+ */
+export async function getMediaDetalle(id) {
+  const response = await apiFetch(`/media/${id}/`);
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => null);
+    throw new Error(formatApiError(errorData?.error, 'Error al obtener el detalle del título.'));
+  }
+  return await response.json();
+}
+
+/**
+ * Obtiene las funciones de cartelera desde /api/funciones/.
+ * Admite filtros: { ciudad, cine, fecha, formato, page }
+ */
+export async function getFunciones(params = {}) {
+  const qs = buildQueryString(params);
+  const response = await apiFetch(`/funciones/${qs}`);
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => null);
+    throw new Error(formatApiError(errorData?.error, 'Error al obtener las funciones en cartelera.'));
+  }
+  return await response.json();
+}
+
+/**
+ * Obtiene el listado de cines registrados desde /api/cines/.
+ * Admite filtro: { ciudad }
+ */
+export async function getCines(params = {}) {
+  const qs = buildQueryString(params);
+  const response = await apiFetch(`/cines/${qs}`);
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => null);
+    throw new Error(formatApiError(errorData?.error, 'Error al obtener los cines.'));
+  }
+  return await response.json();
+}
+
+/**
+ * Obtiene la ficha de una persona (actor, director) con su filmografía desde /api/personas/<id>/.
+ */
+export async function getPersona(id) {
+  const response = await apiFetch(`/personas/${id}/`);
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => null);
+    throw new Error(formatApiError(errorData?.error, 'Error al obtener los datos de la persona.'));
+  }
+  return await response.json();
+}
+
+/**
+ * Obtiene las listas de usuarios desde /api/listas/.
+ * Admite filtros: { usuario, usuario_id, tipo }
+ */
+export async function getListas(params = {}) {
+  const qs = buildQueryString(params);
+  const response = await apiFetch(`/listas/${qs}`);
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => null);
+    throw new Error(formatApiError(errorData?.error, 'Error al obtener las listas.'));
+  }
+  return await response.json();
+}
+
+/**
+ * Obtiene el detalle de una lista con sus elementos desde /api/listas/<id>/.
+ */
+export async function getListaDetalle(id) {
+  const response = await apiFetch(`/listas/${id}/`);
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => null);
+    throw new Error(formatApiError(errorData?.error, 'Error al obtener la lista.'));
+  }
+  return await response.json();
+}
+
+/**
+ * Crea una nueva lista para el usuario autenticado en /api/listas/.
+ */
+export async function createLista(listaData) {
+  const response = await apiFetch('/listas/', {
+    method: 'POST',
+    body: JSON.stringify(listaData),
+  });
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => null);
+    throw new Error(formatApiError(errorData?.error, 'Error al crear la lista.'));
+  }
+  return await response.json();
+}
+
+/**
+ * Modifica una lista propia en /api/listas/<id>/.
+ */
+export async function updateLista(id, listaData) {
+  const response = await apiFetch(`/listas/${id}/`, {
+    method: 'PATCH',
+    body: JSON.stringify(listaData),
+  });
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => null);
+    throw new Error(formatApiError(errorData?.error, 'Error al actualizar la lista.'));
+  }
+  return await response.json();
+}
+
+/**
+ * Elimina una lista propia en /api/listas/<id>/.
+ */
+export async function deleteLista(id) {
+  const response = await apiFetch(`/listas/${id}/`, {
+    method: 'DELETE',
+  });
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => null);
+    throw new Error(formatApiError(errorData?.error, 'Error al eliminar la lista.'));
+  }
+  return true;
+}
+
+/**
+ * Agrega un título de Media a una lista en /api/listas/<listaId>/elementos/.
+ */
+export async function addTituloToLista(listaId, mediaId, orden = 0) {
+  const response = await apiFetch(`/listas/${listaId}/elementos/`, {
+    method: 'POST',
+    body: JSON.stringify({ media_id: mediaId, orden }),
+  });
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => null);
+    throw new Error(formatApiError(errorData?.error, 'Error al agregar el título a la lista.'));
+  }
+  return await response.json();
+}
+
+/**
+ * Quita un título de Media de una lista en /api/listas/<listaId>/elementos/<mediaId>/.
+ */
+export async function removeTituloFromLista(listaId, mediaId) {
+  const response = await apiFetch(`/listas/${listaId}/elementos/${mediaId}/`, {
+    method: 'DELETE',
+  });
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => null);
+    throw new Error(formatApiError(errorData?.error, 'Error al quitar el título de la lista.'));
+  }
+  return true;
+}
+
+/**
+ * Obtiene las listas públicas de un usuario específico desde /api/usuarios/<username>/listas/.
+ */
+export async function getUsuarioListas(username) {
+  const response = await apiFetch(`/usuarios/${username}/listas/`);
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => null);
+    throw new Error(formatApiError(errorData?.error, `Error al obtener las listas de @${username}.`));
+  }
+  return await response.json();
+}
+
+
