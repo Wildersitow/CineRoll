@@ -3,7 +3,7 @@ from django.db import transaction
 
 from cines.models import Cine, Funcion, TituloPendiente
 from media.models import Media
-
+from cines.models import Cine, EjecucionScraping, Funcion, TituloPendiente
 
 @admin.register(Cine)
 class CineAdmin(admin.ModelAdmin):
@@ -115,3 +115,34 @@ class TituloPendienteAdmin(admin.ModelAdmin):
             estado=TituloPendiente.Estado.PENDIENTE, media_asociada=None
         )
         self.message_user(request, f"{cantidad} título(s) de nuevo pendiente(s).")
+
+@admin.register(EjecucionScraping)
+class EjecucionScrapingAdmin(admin.ModelAdmin):
+    """Historial de ejecuciones del scraper. Solo lectura: es un registro de auditoría."""
+
+    list_display = (
+        "inicio",
+        "cine",
+        "ciudad",
+        "estado",
+        "intento",
+        "duracion",
+        "funciones_leidas",
+        "funciones_creadas",
+        "titulos_pendientes",
+    )
+    list_filter = ("estado", "cine", "ciudad")
+    search_fields = ("cine", "ciudad", "mensaje_error")
+    date_hierarchy = "inicio"
+
+    def get_readonly_fields(self, request, obj=None):
+        return [campo.name for campo in self.model._meta.fields]
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
