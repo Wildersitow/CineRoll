@@ -1,9 +1,14 @@
 from django.urls import path
 
 from social.views import (
+    ListaDetailView,
+    ListaElementoDetailView,
+    ListaElementoListCreateView,
+    ListaListCreateView,
     MediaResenaListCreateView,
     MiResenaMediaView,
     ResenaDetailView,
+    UsuarioListasListView,
 )
 
 urlpatterns = [
@@ -28,4 +33,23 @@ urlpatterns = [
         name="media-resenas",
     ),
     path("resenas/<int:pk>/", ResenaDetailView.as_view(), name="resena-detail"),
+    # Endpoints de listas
+    path("listas/", ListaListCreateView.as_view(), name="lista-list-create"),
+    path("listas/<int:pk>/", ListaDetailView.as_view(), name="lista-detail"),
+    path(
+        "listas/<int:lista_id>/elementos/",
+        ListaElementoListCreateView.as_view(),
+        name="lista-elementos",
+    ),
+    path(
+        "listas/<int:lista_id>/elementos/<int:media_id>/",
+        ListaElementoDetailView.as_view(),
+        name="lista-elemento-detail",
+    ),
+    path(
+        "usuarios/<str:username>/listas/",
+        UsuarioListasListView.as_view(),
+        name="usuario-listas",
+    ),
 ]
+
