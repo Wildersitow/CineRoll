@@ -445,5 +445,3 @@ export async function getUsuarioListas(username) {
   }
   return await response.json();
 }
-
-

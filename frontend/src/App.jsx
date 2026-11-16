@@ -1,28 +1,27 @@
-import { useState, useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import './App.css'
 import {
-  loginUser,
-  registerUser,
-  logoutUser,
-  getCurrentUser,
-  clearStoredAuth,
-  getStoredAuth,
   changePassword,
+  clearStoredAuth,
+  getCurrentUser,
+  getStoredAuth,
+  loginUser,
+  logoutUser,
+  registerUser,
 } from './services/api'
-import ToastNotification from './components/ToastNotification'
 import AuthCard from './components/AuthCard'
 import ProfileView from './components/ProfileView'
+import ToastNotification from './components/ToastNotification'
 
 const MIN_PASSWORD_LENGTH = 8
 
 export default function App() {
   const [currentUser, setCurrentUser] = useState(() => getStoredAuth())
-  const [activeTab, setActiveTab] = useState('login') // 'login' | 'register'
+  const [activeTab, setActiveTab] = useState('login')
   const [toastNotice, setToastNotice] = useState('')
   const [authError, setAuthError] = useState('')
   const [isLoading, setIsLoading] = useState(false)
 
-  // Estados para cambio de contraseña desde perfil
   const [showChangePasswordModal, setShowChangePasswordModal] = useState(false)
   const [currentPasswordInput, setCurrentPasswordInput] = useState('')
   const [newPasswordInput, setNewPasswordInput] = useState('')
@@ -33,12 +32,9 @@ export default function App() {
     loading: false,
   })
 
-  // Form states - Login
   const [loginEmail, setLoginEmail] = useState('')
   const [loginPassword, setLoginPassword] = useState('')
   const [rememberMe, setRememberMe] = useState(false)
-
-  // Form states - Registro
   const [registerUsername, setRegisterUsername] = useState('')
   const [registerName, setRegisterName] = useState('')
   const [registerEmail, setRegisterEmail] = useState('')
@@ -46,23 +42,21 @@ export default function App() {
   const [registerConfirmPassword, setRegisterConfirmPassword] = useState('')
   const [agreeTerms, setAgreeTerms] = useState(false)
 
-  // Validar sesión activa al cargar la app
   useEffect(() => {
     if (currentUser?.token) {
       getCurrentUser()
         .then((userData) => {
-          setCurrentUser((prev) => ({ ...prev, ...userData }))
+          setCurrentUser((previousUser) => ({ ...previousUser, ...userData }))
         })
         .catch(() => {
-          // Token expirado o revocado
           setCurrentUser(null)
           clearStoredAuth()
         })
     }
+    // The initial stored session is checked once when the app mounts.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  // Limpieza de inputs
   const resetFormInputs = () => {
     setLoginEmail('')
     setLoginPassword('')
@@ -92,8 +86,8 @@ export default function App() {
     setTimeout(() => setToastNotice(''), duration)
   }
 
-  const handleLoginSubmit = async (e) => {
-    e.preventDefault()
+  const handleLoginSubmit = async (event) => {
+    event.preventDefault()
     setIsLoading(true)
     setAuthError('')
 
@@ -102,8 +96,8 @@ export default function App() {
       resetFormInputs()
       setCurrentUser(data)
       showToast(`¡Bienvenido de vuelta, ${data.nombre || data.username}!`)
-    } catch (err) {
-      setAuthError(err.message || 'Error en las credenciales.')
+    } catch (error) {
+      setAuthError(error.message || 'Error en las credenciales.')
     } finally {
       setIsLoading(false)
     }
@@ -124,8 +118,8 @@ export default function App() {
     }
   }
 
-  const handleRegisterSubmit = async (e) => {
-    e.preventDefault()
+  const handleRegisterSubmit = async (event) => {
+    event.preventDefault()
     setIsLoading(true)
     setAuthError('')
 
@@ -147,17 +141,12 @@ export default function App() {
       return
     }
 
-    // Si el usuario no ingresó un username explícito, derivar del correo
     const derivedUsername = (
       registerUsername.trim() ||
       registerEmail.split('@')[0].replace(/[^a-zA-Z0-9_]/g, '') ||
       'usuario'
     )
-
-    // Separar nombre y apellido si se ingresó
-    const partesNombre = registerName.trim().split(/\s+/)
-    const firstName = partesNombre[0] || ''
-    const lastName = partesNombre.slice(1).join(' ') || ''
+    const nameParts = registerName.trim().split(/\s+/)
 
     try {
       const data = await registerUser(
@@ -165,23 +154,23 @@ export default function App() {
           username: derivedUsername,
           email: registerEmail.trim(),
           password: registerPassword,
-          first_name: firstName,
-          last_name: lastName,
+          first_name: nameParts[0] || '',
+          last_name: nameParts.slice(1).join(' '),
         },
         rememberMe
       )
       resetFormInputs()
       setCurrentUser(data)
       showToast(`¡Cuenta creada con éxito! Bienvenido a CineRoll, ${data.nombre || data.username}.`)
-    } catch (err) {
-      setAuthError(err.message || 'Error al crear la cuenta.')
+    } catch (error) {
+      setAuthError(error.message || 'Error al crear la cuenta.')
     } finally {
       setIsLoading(false)
     }
   }
 
-  const handleChangePasswordSubmit = async (e) => {
-    e.preventDefault()
+  const handleChangePasswordSubmit = async (event) => {
+    event.preventDefault()
     setPasswordChangeStatus({ error: '', success: '', loading: true })
 
     if (newPasswordInput !== confirmNewPasswordInput) {
@@ -203,10 +192,10 @@ export default function App() {
     }
 
     try {
-      const res = await changePassword(currentPasswordInput, newPasswordInput)
+      const response = await changePassword(currentPasswordInput, newPasswordInput)
       setPasswordChangeStatus({
         error: '',
-        success: res.mensaje || 'Contraseña actualizada exitosamente.',
+        success: response.mensaje || 'Contraseña actualizada exitosamente.',
         loading: false,
       })
       setCurrentPasswordInput('')
@@ -214,9 +203,9 @@ export default function App() {
       setConfirmNewPasswordInput('')
       showToast('Contraseña actualizada con éxito.')
       setTimeout(() => setShowChangePasswordModal(false), 2000)
-    } catch (err) {
+    } catch (error) {
       setPasswordChangeStatus({
-        error: err.message || 'Error al actualizar la contraseña.',
+        error: error.message || 'Error al actualizar la contraseña.',
         success: '',
         loading: false,
       })
@@ -226,7 +215,6 @@ export default function App() {
   return (
     <>
       <ToastNotification message={toastNotice} />
-
       {currentUser ? (
         <ProfileView
           currentUser={currentUser}
