@@ -17,6 +17,11 @@ from media.models import Media
 
 COLOMBIA_TIMEZONE = ZoneInfo("America/Bogota")
 MINIMUM_SYNC_PERCENT = 50
+TITLE_MAX_LENGTH = TituloPendiente._meta.get_field("titulo_original").max_length
+CINEMA_NAME_MAX_LENGTH = Cine._meta.get_field("nombre").max_length
+ROOM_MAX_LENGTH = Funcion._meta.get_field("sala").max_length
+FORMAT_MAX_LENGTH = Funcion._meta.get_field("formato").max_length
+
 logger = logging.getLogger(__name__)
 TITLE_QUALIFIERS = {
     "2d",
@@ -559,13 +564,15 @@ def normalize_showtime(record: Mapping[str, object]) -> NormalizedShowtime:
     """Convert one scraper record to CineRoll's common showtime contract."""
     showtime = _parse_datetime(record)
     normalized: NormalizedShowtime = {
-        "titulo": _required_text(record, "titulo"),
-        "cine": _required_text(record, "cine"),
+        "titulo": _truncate(_required_text(record, "titulo"), TITLE_MAX_LENGTH),
+        "cine": _truncate(_required_text(record, "cine"), CINEMA_NAME_MAX_LENGTH),
         "ciudad": _required_text(record, "ciudad"),
         "fecha": showtime.date(),
         "hora": showtime.timetz(),
-        "sala": _optional_text(record.get("sala")),
-        "formato": _normalize_formats(record.get("formato")),
+        "sala": _truncate(_optional_text(record.get("sala")), ROOM_MAX_LENGTH),
+        "formato": _truncate(
+            _normalize_formats(record.get("formato")), FORMAT_MAX_LENGTH
+        ),
         "fuente_scraping": _optional_text(record.get("fuente_scraping")),
         "cine_id_origen": _optional_text(record.get("cine_id_origen")),
         "funcion_id_origen": _optional_text(record.get("funcion_id_origen")),
@@ -593,6 +600,9 @@ def _optional_text(value: object) -> str:
 
 def _clean_text(value: str) -> str:
     return re.sub(r"\s+", " ", value).strip()
+
+def _truncate(value: str, limit: int) -> str:
+    return value[:limit].rstrip()
 
 
 def _parse_datetime(record: Mapping[str, object]) -> datetime:
