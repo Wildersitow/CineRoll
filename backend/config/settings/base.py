@@ -138,3 +138,12 @@ CELERY_BEAT_SCHEDULE = construir_beat_schedule(
     horas=(6, 18),
     espaciado_minutos=10,
 )
+
+# Celery 5.3+ avisa si no se declara esto: reintenta conectar a Redis al arrancar
+# el worker en vez de morir si Redis todavía no está listo.
+CELERY_BROKER_CONNECTION_RETRY_ON_STARTUP = True
+
+# Modo síncrono: .delay() ejecuta la tarea en el mismo proceso, sin Redis ni worker.
+# Solo para pruebas/CI; en producción debe quedar en False.
+CELERY_TASK_ALWAYS_EAGER = config("CELERY_TASK_ALWAYS_EAGER", default=False, cast=bool)
+CELERY_TASK_EAGER_PROPAGATES = CELERY_TASK_ALWAYS_EAGER  # que los errores no se escondan
