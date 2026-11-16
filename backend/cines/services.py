@@ -1,13 +1,14 @@
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from datetime import date, datetime, time
+import logging
 import unicodedata
 import re
-from typing import TypedDict
+from typing import Callable, NotRequired, TypedDict
 from zoneinfo import ZoneInfo
 
 from django.db import transaction
-from django.db.models import Exists, F, OuterRef
+from django.db.models import Exists, F, OuterRef, QuerySet
 from django.utils import timezone
 
 from cines.models import Cine, Funcion, TituloPendiente
@@ -15,6 +16,8 @@ from media.models import Media
 
 
 COLOMBIA_TIMEZONE = ZoneInfo("America/Bogota")
+MINIMUM_SYNC_PERCENT = 50
+logger = logging.getLogger(__name__)
 TITLE_QUALIFIERS = {
     "2d",
     "3d",
@@ -38,6 +41,9 @@ TITLE_QUALIFIERS = {
     "xd",
 }
 
+class ScraperError(RuntimeError):
+    pass
+
 
 class NormalizedShowtime(TypedDict):
     titulo: str
@@ -50,6 +56,82 @@ class NormalizedShowtime(TypedDict):
     fuente_scraping: str
     cine_id_origen: str
     funcion_id_origen: str
+    titulo_alternativo: NotRequired[str]
+
+
+class UpcomingRelease(TypedDict):
+    titulo: str
+    fecha_estreno: date
+    fuente_scraping: str
+
+
+@dataclass(frozen=True)
+class CarteleraData:
+    funciones: list[NormalizedShowtime]
+    proximos_estrenos: list[UpcomingRelease]
+
+
+@dataclass(frozen=True)
+class ScraperConfig:
+    scrape: Callable[[str], CarteleraData]
+    website: str
+
+
+CANONICAL_CITY = "valledupar"
+CITY_PROVIDER_KEYS = {
+    CANONICAL_CITY: {
+        "cinepolis": "valledupar-colombia",
+        "royal_films": "1006",
+        "cineland": "0051",
+    },
+    "bogota": {
+        "cinemark": "bogota",
+    },
+}
+
+
+def _scrape_cinemark(city_slug: str) -> CarteleraData:
+    from cines.scrapers.cinemark import scrape_cartelera_completa
+
+    return scrape_cartelera_completa(city_slug=city_slug)
+
+
+def _scrape_cinepolis(city_key: str) -> CarteleraData:
+    from cines.scrapers.cinepolis import scrape_cartelera_completa
+
+    return scrape_cartelera_completa(city_key=city_key)
+
+
+def _scrape_royal_films(city_id: str) -> CarteleraData:
+    from cines.scrapers.royal_films import scrape_cartelera_completa
+
+    return scrape_cartelera_completa(city_id=city_id)
+
+
+def _scrape_cineland(theater_code: str) -> CarteleraData:
+    from cines.scrapers.cineland import scrape_cartelera_completa
+
+    return scrape_cartelera_completa(theater_code=theater_code)
+
+
+SCRAPERS = {
+    "cinemark": ScraperConfig(
+        scrape=_scrape_cinemark,
+        website="https://www.cinemark.com.co/",
+    ),
+    "cinepolis": ScraperConfig(
+        scrape=_scrape_cinepolis,
+        website="https://cinepolis.com.co/",
+    ),
+    "royal_films": ScraperConfig(
+        scrape=_scrape_royal_films,
+        website="https://cinemasroyalfilms.com/",
+    ),
+    "cineland": ScraperConfig(
+        scrape=_scrape_cineland,
+        website="https://home.cineland.co/",
+    ),
+}
 
 
 @dataclass(frozen=True)
@@ -68,37 +150,57 @@ class CarteleraScrapeResult:
     peliculas_fuera_cartelera: int
     estrenos_sin_coincidencia: tuple[str, ...]
     titulos_pendientes_mostrar: tuple[str, ...]
+    funciones_obsoletas_eliminadas: int = 0
+
+
+def _fold_tokens(text: str) -> list[str]:
+    decomposed = unicodedata.normalize("NFKD", text.casefold())
+    without_accents = "".join(
+        character for character in decomposed if not unicodedata.combining(character)
+    )
+    return re.findall(r"[a-z0-9]+", without_accents)
 
 
 def normalize_title(title: str) -> str:
     """Normalize title accents, punctuation, and exhibition-format suffixes."""
-    decomposed = unicodedata.normalize("NFKD", title.casefold())
-    without_accents = "".join(
-        character for character in decomposed if not unicodedata.combining(character)
-    )
-    tokens = re.findall(r"[a-z0-9]+", without_accents)
+    tokens = _fold_tokens(title)
     while tokens and tokens[-1] in TITLE_QUALIFIERS:
         tokens.pop()
     return " ".join(tokens)
 
 
-def match_media_title(title: str, catalog: Iterable[Media] | None = None) -> Media | None:
-    """Return a unique movie matching title/original title, or None if uncertain."""
-    normalized = normalize_title(title)
-    if not normalized:
+def normalize_city(city: str) -> str:
+    return " ".join(_fold_tokens(city))
+
+
+def match_media_title(
+    title: str,
+    catalog: Iterable[Media] | None = None,
+    alternate_title: str | None = None,
+) -> Media | None:
+    """Return a unique movie matching either title, or None if uncertain."""
+    normalized_titles: set[str] = set()
+    for candidate in (title, alternate_title):
+        if candidate:
+            normalized = normalize_title(candidate)
+            if normalized:
+                normalized_titles.add(normalized)
+    if not normalized_titles:
         return None
 
     movies = catalog if catalog is not None else Media.objects.filter(tipo=Media.Tipo.PELICULA)
     matches: dict[int, Media] = {}
     for movie in movies:
         candidates = (movie.titulo, movie.titulo_original)
-        if any(value and normalize_title(value) == normalized for value in candidates):
+        if any(
+            value and normalize_title(value) in normalized_titles
+            for value in candidates
+        ):
             matches[movie.pk] = movie
 
     if len(matches) != 1:
         return None
     return next(iter(matches.values()))
-
 
 def scrape_and_save_cartelera(
     cinema_provider: str,
@@ -106,14 +208,35 @@ def scrape_and_save_cartelera(
 ) -> CarteleraScrapeResult:
     """Scrape, match, persist, and clean one cinema's showtimes."""
     city_slug = city_slug.strip().lower()
-    if cinema_provider != "cinemark":
-        raise ValueError(f"No existe scraper configurado para '{cinema_provider}'.")
+    try:
+        scraper_config = SCRAPERS[cinema_provider]
+    except KeyError as exc:
+        raise ValueError(
+            f"No existe scraper configurado para '{cinema_provider}'."
+        ) from exc
 
-    # Import lazily because the scraper uses the normalization helpers in this module.
-    from cines.scrapers.cinemark import scrape_cartelera_completa
+    city_provider_keys = CITY_PROVIDER_KEYS.get(city_slug)
+    if city_provider_keys is None:
+        raise ValueError(f"No existe configuración para la ciudad '{city_slug}'.")
+    provider_city_key = city_provider_keys.get(cinema_provider)
+    if provider_city_key is None:
+        raise ValueError(
+            f"No existe configuración de '{cinema_provider}' para la ciudad "
+            f"'{city_slug}'."
+        )
 
-    cartelera = scrape_cartelera_completa(city_slug=city_slug)
-    records = cartelera.funciones
+    cartelera = scraper_config.scrape(provider_city_key)
+    website = scraper_config.website
+    synchronization_time = timezone.now()
+    previous_future_count = _future_showtimes_for_source(
+        city_slug,
+        website,
+        synchronization_time,
+    ).count()
+    records = [
+        {**record, "ciudad": city_slug}
+        for record in cartelera.funciones
+    ]
     movies = list(Media.objects.filter(tipo=Media.Tipo.PELICULA))
     manual_matches = _build_manual_matches()
     matched = 0
@@ -124,6 +247,10 @@ def scrape_and_save_cartelera(
     matched_media_ids: set[int] = set()
     matched_releases = 0
     unmatched_releases: list[str] = []
+    incoming_future_count = 0
+    expected_future_functions: set[tuple[int, int, datetime, str, str]] = set()
+    obsolete_functions_deleted = 0
+    synchronization_warning: str | None = None
 
     with transaction.atomic():
         for release in cartelera.proximos_estrenos:
@@ -137,7 +264,11 @@ def scrape_and_save_cartelera(
             matched_releases += 1
 
         for record in records:
-            media = match_media_title(record["titulo"], movies)
+            media = match_media_title(
+                record["titulo"],
+                movies,
+                alternate_title=record.get("titulo_alternativo"),
+            )
             if media is None:
                 media = manual_matches.get(normalize_title(record["titulo"]))
             if media is None:
@@ -155,7 +286,7 @@ def scrape_and_save_cartelera(
                 media_asociada=media,
                 ultima_deteccion=timezone.now(),
             )
-            cinema = _get_or_create_cinema(record, cinema_cache)
+            cinema = _get_or_create_cinema(record, cinema_cache, website)
             scheduled_at = datetime.combine(record["fecha"], record["hora"])
             _, created = Funcion.objects.update_or_create(
                 cine=cinema,
@@ -165,6 +296,17 @@ def scrape_and_save_cartelera(
                 formato=record["formato"],
                 defaults={"fuente_scraping": record["fuente_scraping"]},
             )
+            if scheduled_at >= synchronization_time:
+                incoming_future_count += 1
+                expected_future_functions.add(
+                    (
+                        cinema.pk,
+                        media.pk,
+                        scheduled_at,
+                        record["sala"],
+                        record["formato"],
+                    )
+                )
             matched += 1
             matched_media_ids.add(media.pk)
             if created:
@@ -172,8 +314,36 @@ def scrape_and_save_cartelera(
             else:
                 updated_functions += 1
 
+        if not records:
+            synchronization_warning = (
+                f"Se omitió la sincronización de funciones futuras de "
+                f"{cinema_provider} ({city_slug}): la respuesta llegó vacía."
+            )
+        elif (
+            previous_future_count
+            and incoming_future_count * 100
+            < previous_future_count * MINIMUM_SYNC_PERCENT
+        ):
+            synchronization_warning = (
+                f"Se omitió la sincronización de funciones futuras de "
+                f"{cinema_provider} ({city_slug}): "
+                f"{incoming_future_count} funciones válidas frente a "
+                f"{previous_future_count} previas, menos del "
+                f"{MINIMUM_SYNC_PERCENT}%."
+            )
+        else:
+            obsolete_functions_deleted = _delete_obsolete_future_showtimes(
+                city_slug,
+                website,
+                synchronization_time,
+                expected_future_functions,
+            )
+
         now_showing = _mark_now_showing(matched_media_ids)
         deleted_functions, expired_media = cleanup_expired_showtimes()
+
+    if synchronization_warning:
+        logger.warning(synchronization_warning)
 
     pending_titles = (
         TituloPendiente.objects.filter(
@@ -203,7 +373,50 @@ def scrape_and_save_cartelera(
             f"#{item.pk} {item.titulo_original} — {item.cine_nombre} ({item.ciudad})"
             for item in pending_titles
         ),
+        funciones_obsoletas_eliminadas=obsolete_functions_deleted,
     )
+
+
+def _future_showtimes_for_source(
+    city_slug: str,
+    website: str,
+    now: datetime,
+) -> QuerySet[Funcion]:
+    return Funcion.objects.filter(
+        cine__ciudad=city_slug,
+        cine__sitio_web=website,
+        fecha_hora__gte=now,
+    )
+
+
+def _delete_obsolete_future_showtimes(
+    city_slug: str,
+    website: str,
+    now: datetime,
+    expected_functions: set[tuple[int, int, datetime, str, str]],
+) -> int:
+    current_functions = _future_showtimes_for_source(
+        city_slug,
+        website,
+        now,
+    ).values_list("pk", "cine_id", "media_id", "fecha_hora", "sala", "formato")
+    obsolete_ids = [
+        function_id
+        for (
+            function_id,
+            cinema_id,
+            media_id,
+            scheduled_at,
+            room,
+            format_name,
+        ) in current_functions
+        if (cinema_id, media_id, scheduled_at, room, format_name)
+        not in expected_functions
+    ]
+    if not obsolete_ids:
+        return 0
+    Funcion.objects.filter(pk__in=obsolete_ids).delete()
+    return len(obsolete_ids)
 
 
 def _build_manual_matches() -> dict[str, Media]:
@@ -242,6 +455,7 @@ def _build_cinema_cache() -> dict[tuple[str, str], Cine]:
 def _get_or_create_cinema(
     record: NormalizedShowtime,
     cache: dict[tuple[str, str], Cine],
+    website: str,
 ) -> Cine:
     key = (normalize_title(record["cine"]), normalize_title(record["ciudad"]))
     cinema = cache.get(key)
@@ -250,7 +464,7 @@ def _get_or_create_cinema(
             nombre=record["cine"],
             ciudad=record["ciudad"],
             direccion="",
-            sitio_web="https://www.cinemark.com.co/",
+            sitio_web=website,
         )
         cache[key] = cinema
     return cinema
@@ -342,7 +556,7 @@ def normalize_showtimes(
 def normalize_showtime(record: Mapping[str, object]) -> NormalizedShowtime:
     """Convert one scraper record to CineRoll's common showtime contract."""
     showtime = _parse_datetime(record)
-    return {
+    normalized: NormalizedShowtime = {
         "titulo": _required_text(record, "titulo"),
         "cine": _required_text(record, "cine"),
         "ciudad": _required_text(record, "ciudad"),
@@ -354,6 +568,10 @@ def normalize_showtime(record: Mapping[str, object]) -> NormalizedShowtime:
         "cine_id_origen": _optional_text(record.get("cine_id_origen")),
         "funcion_id_origen": _optional_text(record.get("funcion_id_origen")),
     }
+    alternate_title = _optional_text(record.get("titulo_alternativo"))
+    if alternate_title:
+        normalized["titulo_alternativo"] = alternate_title
+    return normalized
 
 
 def _required_text(record: Mapping[str, object], field: str) -> str:

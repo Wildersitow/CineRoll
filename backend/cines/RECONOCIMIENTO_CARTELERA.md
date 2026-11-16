@@ -55,6 +55,11 @@ servicio.
    formato `DOB`, idioma `DOBLADA`, horarios 16:00, 18:30 y 21:00.
 4. La captura resumida correspondió a un complejo (ID `577`), 18 fechas, 41
    películas y 176 horarios. Los horarios y cantidades cambian con la cartelera.
+5. Se repitió la petición el 13 de noviembre de 2026 con el mismo cuerpo. La
+   respuesta `200 application/json` incluyó un complejo, 20 fechas, 52 películas,
+   67 formatos y 210 horarios. Se guardó un recorte de una función real en
+   `cines/fixtures/cinepolis_valledupar_sample.json`: *Cómo robar un banco*,
+   formato `DOB` + `DOBLADA`, `ShowtimeId` `64989` y `CinemaId` `577`.
 
 ### Cinemark: próximos estrenos
 
@@ -85,6 +90,20 @@ usa `OpeningDate` como fecha local de estreno.
    de ellas tenía fecha `2026-11-12`, hora `16:30`, formato `2D`, cine
    Multicine Unicentro Valledupar y sala `SALA 2 STD`. La hora se entrega como
    fecha ISO (`1970-01-01T16:30:00.000Z`) separada de `funcion_fecha`.
+5. El scraper consulta el listado y, secuencialmente, el endpoint de funciones
+   de cada película, esperando un segundo antes de cada consulta secundaria.
+   Conserva la hora y los minutos de `funcion_hora_inicio` tal cual (sin
+   conversión de zona) y los combina con `funcion_fecha`.
+
+### Títulos y calificadores de exhibición
+
+En las muestras revisadas, Cinépolis separa `Title` y `OriginalTitle`, Royal
+Films entrega `pelicula_titulo` y `pelicula_nombre_original`, y Cineland entrega
+`nombre_pelicula_original` y `nombre_pelicula`. No se observaron nuevos sufijos
+en los títulos: `3D`, `DOB` y `SUB` ya están contemplados por
+`TITLE_QUALIFIERS`; además, aparecen como formato o idioma de función. Cinépolis
+y Royal conservan el título alternativo cuando difiere del principal. Cineland
+aún no tiene scraper implementado.
 
 ### Cineland
 
@@ -93,8 +112,10 @@ usa `OpeningDate` como fecha local de estreno.
    títulos, fechas, cine (C.C. Mayales), formatos, salas y horarios.
 2. Al seleccionar Valledupar el navegador envió
    `POST https://cineland.website/api_point_back.php`, con JSON
-   `{"fechacon1":"2026-11-08","fechacon2":"2026-11-08","codteatro":"0051"}`.
-   La respuesta observada en esa primera carga fue
+   `usrlock`, `fechacon1`, `fechacon2` y `codteatro: "0051"`. También envía las
+   cabeceras `Api-Key`, `Route: get_cartelera_agrupada` y `Authorization`.
+   `usrlock` se obtiene mediante la ruta `get_consecutivo_temporal`; el token se
+   obtiene mediante `login`. La respuesta observada en esa primera carga fue
    `200 text/html; charset=UTF-8`, con claves `data`, `count` y
    `transaction_status`; `data` fue `[]` en esa consulta inicial.
 3. Al abrir una película se observó
@@ -126,14 +147,47 @@ de cartelera estaban vacías; por eso ese resultado no acredita funciones de
 Cinemark en Valledupar. Cinépolis queda elegido como segundo scraper de la
 Fase 3: su respuesta confirmada entrega en una llamada los horarios completos
 de la ciudad. Royal Films también es viable, aunque requiere consultar las
-funciones película por película. En Cineland se reconocieron el dominio, el
-endpoint de cartelera, sus parámetros y el esquema de la respuesta con
-funciones. No se implementó ningún scraper adicional para esos cines en este
-paso.
+funciones película por película. El scraper de Cineland está implementado en
+`cines.scrapers.cineland` y registrado para Valledupar con el código de teatro
+`0051`. Consulta hasta siete días con una petición por fecha y una pausa de un
+segundo entre solicitudes; decodifica manualmente el JSON que llega con tipo de
+contenido `text/html`. Las variables `CINELAND_API_KEY`, `CINELAND_EMAIL` y
+`CINELAND_PASSWORD` deben configurarse localmente en el `.env`; sus valores no
+se guardan en el repositorio. Una llamada directa sin la autenticación observada
+fue rechazada con `400 Missing Key`.
 El scraper de Cinemark también lee
 `UpcomingReleases`; el comando actualiza las fechas y el estado de las películas
 que ya existen en `Media` y muestra los títulos sin coincidencia para revisión,
 sin crear fichas automáticamente.
+
+## Decisión sobre Playwright
+
+Por ahora no se agrega Playwright ni otra dependencia de navegador. En los cuatro
+sitios reconocidos, la información de funciones se puede obtener con peticiones
+HTTP directas: HTML con datos incrustados en Cinemark y respuestas JSON en
+Cinépolis, Royal Films y Cineland. El navegador sirvió para descubrir las
+solicitudes y seleccionar ciudades durante el reconocimiento, pero no es
+necesario para ejecutar esas peticiones. Se reconsiderará Playwright solo si un
+proveedor deja de exponer los datos por HTTP directo y exige renderizado,
+interacción o estado de navegador para obtenerlos.
+
+## Ciudades canónicas
+
+El servicio recibe el slug canónico y lo traduce a la clave que requiere cada
+proveedor. Las funciones y los títulos pendientes se guardan usando ese slug en
+`Cine.ciudad` y `TituloPendiente.ciudad`, de modo que
+`/api/funciones/?ciudad=valledupar` reúne funciones de los cines configurados
+para Valledupar.
+
+| Ciudad canónica | Cinemark | Cinépolis | Royal Films | Cineland |
+|---|---|---|---|---|
+| `valledupar` | No habilitado: no se observaron funciones | `valledupar-colombia` | `1006` | `0051` |
+| `bogota` | `bogota` (solo manual; no programado) | — | — | — |
+
+Cinemark se conserva configurado, pero no está asociado a Valledupar. La clave
+`bogota` se mantiene para ejecuciones manuales del scraper; no se programa una
+ciudad de Cinemark hasta verificar que devuelve funciones. En esta fase todavía
+no hay una programación periódica de scraping configurada.
 
 ## Importar cartelera de Cinemark manualmente
 
@@ -148,18 +202,26 @@ Cada ejecución también elimina funciones vencidas y recalcula el estado de
 cartelera según las funciones futuras que queden en todos los cines. Esta
 limpieza es inmediata; no depende de Celery.
 
+Tras un scrape con funciones válidas, se eliminan las funciones futuras de ese
+proveedor y ciudad que ya no aparecen en la fuente; el cine, película, fecha,
+hora, sala y formato identifican cada función. Si la respuesta viene vacía o
+contiene menos del 50% de las funciones futuras previamente guardadas y
+asociadas al catálogo, no se borran funciones y se registra una advertencia.
+Una respuesta exactamente igual al 50% sí permite sincronizar.
+
 El comando guarda únicamente las funciones cuyo título coincide de forma
 inequívoca con una película del catálogo. Los títulos sin coincidencia (o con
 coincidencias ambiguas) quedan en `TituloPendiente` para revisión; no se crean
 fichas ficticias. Las ejecuciones posteriores actualizan las funciones
 existentes en vez de duplicarlas. Se puede consultar otra ciudad pasando su slug
-de Cinemark en `--ciudad`.
+canónico configurado en `--ciudad`.
 
 ## Endpoints de lectura
 
 - `GET /api/cines/` devuelve el catálogo paginado de cines. `POST` en esa ruta y
   `PUT`, `PATCH` o `DELETE /api/cines/<id>/` requieren un usuario administrador
-  (`is_staff`); las lecturas siguen siendo públicas.
+  (`is_staff`); las lecturas siguen siendo públicas. Acepta `?ciudad=<ciudad>`
+  y normaliza tildes, mayúsculas y separadores al comparar con `Cine.ciudad`.
 - `GET /api/cines/<id>/funciones/` devuelve las funciones de hoy de ese cine;
   acepta `?fecha=AAAA-MM-DD` para otra fecha.
 - `GET /api/funciones/` devuelve las funciones de hoy y acepta los filtros
@@ -167,8 +229,11 @@ de Cinemark en `--ciudad`.
   hoy en `America/Bogota`; la ciudad se compara sin distinguir mayúsculas y
   minúsculas con `Cine.ciudad`.
 - Ambos endpoints devuelven todos los resultados en una sola respuesta bajo la
-  clave `resultados` (sin paginación), para que el home cargue la cartelera
-  diaria o la de un cine con una llamada.
+  clave `resultados` (sin paginación), junto con `ultima_actualizacion`, para
+  que el home cargue la cartelera diaria o la de un cine con una llamada. La
+  fecha filtra los resultados; la última actualización se calcula sobre el
+  conjunto base, considerando ciudad o cine y todas las fechas. Es `null` si
+  ese conjunto no tiene funciones.
 - `GET /api/media/<id>/funciones/` devuelve funciones con la hora, la sala, el
   formato y la información del cine, junto con `ultima_actualizacion`.
 - Se puede filtrar con `?cine=<id>&fecha=AAAA-MM-DD`. La fecha filtra las

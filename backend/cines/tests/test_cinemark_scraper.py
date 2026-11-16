@@ -3,8 +3,8 @@ from datetime import date, time
 from unittest import TestCase
 from zoneinfo import ZoneInfo
 
+from cines.services import CarteleraData
 from cines.scrapers.cinemark import (
-    CinemarkCartelera,
     CinemarkScraperError,
     parse_cartelera_data,
     parse_cartelera_page,
@@ -104,7 +104,7 @@ class CinemarkScraperTests(TestCase):
 
         result = parse_cartelera_data(html, "bogota", source_url)
 
-        self.assertIsInstance(result, CinemarkCartelera)
+        self.assertIsInstance(result, CarteleraData)
         self.assertEqual(result.funciones, [])
         self.assertEqual(
             result.proximos_estrenos,
