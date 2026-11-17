@@ -7,6 +7,7 @@ from social.views import (
     ListaListCreateView,
     MediaResenaListCreateView,
     MiResenaMediaView,
+    MisListasView,
     ResenaDetailView,
     UsuarioListasListView,
 )
@@ -45,6 +46,16 @@ urlpatterns = [
         "listas/<int:lista_id>/elementos/<int:media_id>/",
         ListaElementoDetailView.as_view(),
         name="lista-elemento-detail",
+    ),
+        path(
+        "usuarios/me/listas/",
+        MisListasView.as_view(),
+        name="usuarios-me-listas",
+    ),
+    path(
+        "usuarios/<str:username>/listas/",
+        UsuarioListasListView.as_view(),
+        name="usuario-listas",
     ),
     path(
         "usuarios/<str:username>/listas/",

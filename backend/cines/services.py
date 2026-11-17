@@ -17,6 +17,13 @@ from media.models import Media
 
 COLOMBIA_TIMEZONE = ZoneInfo("America/Bogota")
 MINIMUM_SYNC_PERCENT = 50
+TITLE_MAX_LENGTH = TituloPendiente._meta.get_field("titulo_original").max_length
+CINEMA_NAME_MAX_LENGTH = Cine._meta.get_field("nombre").max_length
+ROOM_MAX_LENGTH = Funcion._meta.get_field("sala").max_length
+FORMAT_MAX_LENGTH = Funcion._meta.get_field("formato").max_length
+
+MediaIndex = dict[str, dict[int, Media]]
+
 logger = logging.getLogger(__name__)
 TITLE_QUALIFIERS = {
     "2d",
@@ -151,6 +158,7 @@ class CarteleraScrapeResult:
     estrenos_sin_coincidencia: tuple[str, ...]
     titulos_pendientes_mostrar: tuple[str, ...]
     funciones_obsoletas_eliminadas: int = 0
+    advertencia: str = ""
 
 
 def _fold_tokens(text: str) -> list[str]:
@@ -172,11 +180,40 @@ def normalize_title(title: str) -> str:
 def normalize_city(city: str) -> str:
     return " ".join(_fold_tokens(city))
 
+def format_display_title(raw_title: str, normalized_title: str) -> str:
+    tokens = list(re.finditer(r"[^\W_]+", raw_title))
+    while tokens and all(
+        part in TITLE_QUALIFIERS for part in _fold_tokens(tokens[-1].group())
+    ):
+        tokens.pop()
+    if not tokens:
+        return normalized_title
+
+    title = raw_title[: tokens[-1].end()].strip()
+    if title.isupper():
+        title = title[:1].upper() + title[1:].lower()
+    if normalize_title(title) != normalized_title:
+        return normalized_title
+    return title
+
+
+def build_media_index(catalog: Iterable[Media]) -> MediaIndex:
+    index: MediaIndex = {}
+    for movie in catalog:
+        for value in (movie.titulo, movie.titulo_original):
+            if not value:
+                continue
+            normalized = normalize_title(value)
+            if normalized:
+                index.setdefault(normalized, {})[movie.pk] = movie
+    return index
+
 
 def match_media_title(
     title: str,
     catalog: Iterable[Media] | None = None,
     alternate_title: str | None = None,
+    index: MediaIndex | None = None,
 ) -> Media | None:
     """Return a unique movie matching either title, or None if uncertain."""
     normalized_titles: set[str] = set()
@@ -188,15 +225,17 @@ def match_media_title(
     if not normalized_titles:
         return None
 
-    movies = catalog if catalog is not None else Media.objects.filter(tipo=Media.Tipo.PELICULA)
+    if index is None:
+        movies = (
+            catalog
+            if catalog is not None
+            else Media.objects.filter(tipo=Media.Tipo.PELICULA)
+        )
+        index = build_media_index(movies)
+
     matches: dict[int, Media] = {}
-    for movie in movies:
-        candidates = (movie.titulo, movie.titulo_original)
-        if any(
-            value and normalize_title(value) in normalized_titles
-            for value in candidates
-        ):
-            matches[movie.pk] = movie
+    for normalized in normalized_titles:
+        matches.update(index.get(normalized, {}))
 
     if len(matches) != 1:
         return None
@@ -356,24 +395,25 @@ def scrape_and_save_cartelera(
     )
 
     return CarteleraScrapeResult(
-        cine=cinema_provider,
-        ciudad=city_slug,
-        funciones_leidas=len(records),
-        funciones_asociadas=matched,
-        funciones_creadas=created_functions,
-        funciones_actualizadas=updated_functions,
-        titulos_pendientes=pending,
-        peliculas_en_cartelera=now_showing,
-        estrenos_leidos=len(cartelera.proximos_estrenos),
-        estrenos_asociados=matched_releases,
-        funciones_vencidas_eliminadas=deleted_functions,
-        peliculas_fuera_cartelera=expired_media,
-        estrenos_sin_coincidencia=tuple(unmatched_releases),
-        titulos_pendientes_mostrar=tuple(
-            f"#{item.pk} {item.titulo_original} — {item.cine_nombre} ({item.ciudad})"
-            for item in pending_titles
-        ),
-        funciones_obsoletas_eliminadas=obsolete_functions_deleted,
+    cine=cinema_provider,
+    ciudad=city_slug,
+    funciones_leidas=len(records),
+    funciones_asociadas=matched,
+    funciones_creadas=created_functions,
+    funciones_actualizadas=updated_functions,
+    titulos_pendientes=pending,
+    peliculas_en_cartelera=now_showing,
+    estrenos_leidos=len(cartelera.proximos_estrenos),
+    estrenos_asociados=matched_releases,
+    funciones_vencidas_eliminadas=deleted_functions,
+    peliculas_fuera_cartelera=expired_media,
+    estrenos_sin_coincidencia=tuple(unmatched_releases),
+    titulos_pendientes_mostrar=tuple(
+        f"#{item.pk} {item.titulo_original} — {item.cine_nombre} ({item.ciudad})"
+        for item in pending_titles
+    ),
+    funciones_obsoletas_eliminadas=obsolete_functions_deleted,
+    advertencia=synchronization_warning or "",
     )
 
 
@@ -427,6 +467,13 @@ def _build_manual_matches() -> dict[str, Media]:
             media_asociada__isnull=False,
         ).select_related("media_asociada")
     }
+
+def _build_ignored_titles() -> set[tuple[str, str, str]]:
+    return set(
+        TituloPendiente.objects.filter(
+            estado=TituloPendiente.Estado.IGNORADO
+        ).values_list("titulo_normalizado", "cine_nombre", "ciudad")
+    )
 
 
 def _mark_now_showing(media_ids: set[int]) -> int:
@@ -557,13 +604,15 @@ def normalize_showtime(record: Mapping[str, object]) -> NormalizedShowtime:
     """Convert one scraper record to CineRoll's common showtime contract."""
     showtime = _parse_datetime(record)
     normalized: NormalizedShowtime = {
-        "titulo": _required_text(record, "titulo"),
-        "cine": _required_text(record, "cine"),
+        "titulo": _truncate(_required_text(record, "titulo"), TITLE_MAX_LENGTH),
+        "cine": _truncate(_required_text(record, "cine"), CINEMA_NAME_MAX_LENGTH),
         "ciudad": _required_text(record, "ciudad"),
         "fecha": showtime.date(),
         "hora": showtime.timetz(),
-        "sala": _optional_text(record.get("sala")),
-        "formato": _normalize_formats(record.get("formato")),
+        "sala": _truncate(_optional_text(record.get("sala")), ROOM_MAX_LENGTH),
+        "formato": _truncate(
+            _normalize_formats(record.get("formato")), FORMAT_MAX_LENGTH
+        ),
         "fuente_scraping": _optional_text(record.get("fuente_scraping")),
         "cine_id_origen": _optional_text(record.get("cine_id_origen")),
         "funcion_id_origen": _optional_text(record.get("funcion_id_origen")),
@@ -591,6 +640,9 @@ def _optional_text(value: object) -> str:
 
 def _clean_text(value: str) -> str:
     return re.sub(r"\s+", " ", value).strip()
+
+def _truncate(value: str, limit: int) -> str:
+    return value[:limit].rstrip()
 
 
 def _parse_datetime(record: Mapping[str, object]) -> datetime:

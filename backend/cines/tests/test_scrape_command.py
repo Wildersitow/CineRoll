@@ -280,6 +280,7 @@ class ScrapeCarteleraCommandTests(TestCase):
         self.assertEqual(synced.media, media)
         self.assertEqual(synced.sala, self.showtime["sala"])
         self.assertEqual(synced.formato, self.showtime["formato"])
+        self.assertEqual(result.advertencia, "")
 
     @patch("cines.scrapers.cinemark.scrape_cartelera_completa")
     def test_empty_response_warns_and_preserves_future_functions(self, scrape):
@@ -307,6 +308,7 @@ class ScrapeCarteleraCommandTests(TestCase):
         self.assertTrue(Funcion.objects.filter(pk=existing.pk).exists())
         self.assertEqual(result.funciones_obsoletas_eliminadas, 0)
         self.assertIn("respuesta llegó vacía", logs.output[0])
+        self.assertIn("respuesta llegó vacía", result.advertencia)
 
     @patch("cines.scrapers.cinemark.scrape_cartelera_completa")
     def test_response_below_half_previous_functions_skips_synchronization(self, scrape):
@@ -354,6 +356,7 @@ class ScrapeCarteleraCommandTests(TestCase):
         self.assertEqual(result.funciones_obsoletas_eliminadas, 0)
         self.assertEqual(Funcion.objects.filter(cine=cinema).count(), 3)
         self.assertIn("menos del 50%", logs.output[0])
+        self.assertIn("menos del 50%", result.advertencia)
 
     @patch("cines.scrapers.cinemark.scrape_cartelera_completa")
     def test_upcoming_release_updates_matched_media_without_creating_movies(self, scrape):
@@ -587,3 +590,22 @@ class ScrapeCarteleraCommandTests(TestCase):
             scrape_and_save_cartelera("cinemark", city_slug="valledupar")
 
         scrape.assert_not_called()
+
+    @patch("cines.scrapers.cinemark.scrape_cartelera_completa")
+    def test_ignored_title_is_not_counted_or_recorded_again(self, scrape):
+        scrape.return_value = self.cartelera
+        TituloPendiente.objects.create(
+            titulo_original=self.showtime["titulo"],
+            titulo_normalizado="como entrenar a tu dragon",
+            cine_nombre=self.showtime["cine"],
+            ciudad="bogota",
+            estado=TituloPendiente.Estado.IGNORADO,
+        )
+
+        result = scrape_and_save_cartelera("cinemark", city_slug="bogota")
+
+        self.assertEqual(result.titulos_pendientes, 0)
+        self.assertEqual(Funcion.objects.count(), 0)
+        ignorado = TituloPendiente.objects.get()
+        self.assertEqual(ignorado.estado, TituloPendiente.Estado.IGNORADO)
+        self.assertEqual(ignorado.apariciones_detectadas, 1)

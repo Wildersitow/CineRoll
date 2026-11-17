@@ -79,7 +79,9 @@ def scrape_cartelera_completa(
         client_password,
     )
     token = _get_token(api_key, client_email, client_password, timeout)
+    sleep(REQUEST_PAUSE_SECONDS)
     usrlock = _get_usrlock(api_key, token, timeout)
+    sleep(REQUEST_PAUSE_SECONDS)
 
     showtimes: list[dict[str, object]] = []
     for day_index in range(days):

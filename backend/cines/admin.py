@@ -1,9 +1,9 @@
 from django.contrib import admin
 from django.db import transaction
 
-from cines.models import Cine, Funcion, TituloPendiente
-from media.models import Media
 from cines.models import Cine, EjecucionScraping, Funcion, TituloPendiente
+from cines.services import build_media_index, format_display_title
+from media.models import Media
 
 @admin.register(Cine)
 class CineAdmin(admin.ModelAdmin):
@@ -70,8 +70,12 @@ class TituloPendienteAdmin(admin.ModelAdmin):
 
     @admin.action(description="Crear ficha borrador en el catálogo")
     def crear_fichas_borrador(self, request, queryset):
+        indice = build_media_index(Media.objects.filter(tipo=Media.Tipo.PELICULA))
         fichas_por_titulo = {}
-        pendientes_resueltos = 0
+        creadas = 0
+        vinculadas = 0
+        resueltos = 0
+        ambiguos = 0
 
         with transaction.atomic():
             for pendiente in queryset:
@@ -82,24 +86,37 @@ class TituloPendienteAdmin(admin.ModelAdmin):
                 ):
                     continue
 
-                media = fichas_por_titulo.get(pendiente.titulo_normalizado)
+                clave = pendiente.titulo_normalizado
+                media = fichas_por_titulo.get(clave)
                 if media is None:
-                    media = Media.objects.create(
-                        titulo=pendiente.titulo_normalizado,
-                        tipo=Media.Tipo.PELICULA,
-                        estado=Media.Estado.EN_CARTELERA,
-                    )
-                    fichas_por_titulo[pendiente.titulo_normalizado] = media
+                    existentes = list(indice.get(clave, {}).values())
+                    if len(existentes) > 1:
+                        ambiguos += 1
+                        continue
+                    if existentes:
+                        media = existentes[0]
+                        vinculadas += 1
+                    else:
+                        media = Media.objects.create(
+                            titulo=format_display_title(
+                                pendiente.titulo_original, clave
+                            ),
+                            tipo=Media.Tipo.PELICULA,
+                            estado=Media.Estado.EN_CARTELERA,
+                        )
+                        creadas += 1
+                    fichas_por_titulo[clave] = media
 
                 pendiente.media_asociada = media
                 pendiente.estado = TituloPendiente.Estado.RESUELTO
                 pendiente.save(update_fields=("media_asociada", "estado"))
-                pendientes_resueltos += 1
+                resueltos += 1
 
         self.message_user(
             request,
-            f"{len(fichas_por_titulo)} ficha(s) borrador creada(s) y "
-            f"{pendientes_resueltos} título(s) pendiente(s) resuelto(s).",
+            f"{creadas} ficha(s) borrador creada(s), {vinculadas} vinculada(s) a "
+            f"fichas existentes, {resueltos} título(s) pendiente(s) resuelto(s) y "
+            f"{ambiguos} omitido(s) por tener varias fichas con ese título.",
         )
 
     @admin.action(description="Marcar como ignorados (no son películas del catálogo)")
@@ -118,8 +135,6 @@ class TituloPendienteAdmin(admin.ModelAdmin):
 
 @admin.register(EjecucionScraping)
 class EjecucionScrapingAdmin(admin.ModelAdmin):
-    """Historial de ejecuciones del scraper. Solo lectura: es un registro de auditoría."""
-
     list_display = (
         "inicio",
         "cine",
@@ -130,10 +145,15 @@ class EjecucionScrapingAdmin(admin.ModelAdmin):
         "funciones_leidas",
         "funciones_creadas",
         "titulos_pendientes",
+        "tiene_advertencia",
     )
     list_filter = ("estado", "cine", "ciudad")
-    search_fields = ("cine", "ciudad", "mensaje_error")
+    search_fields = ("cine", "ciudad", "mensaje_error", "advertencia")
     date_hierarchy = "inicio"
+
+    @admin.display(boolean=True, description="Advertencia")
+    def tiene_advertencia(self, obj):
+        return bool(obj.advertencia)
 
     def get_readonly_fields(self, request, obj=None):
         return [campo.name for campo in self.model._meta.fields]

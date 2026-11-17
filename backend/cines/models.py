@@ -23,7 +23,7 @@ class Funcion(models.Model):
     )
     fecha_hora = models.DateTimeField()
     sala = models.CharField(max_length=100, blank=True)
-    formato = models.CharField(max_length=50, blank=True)
+    formato = models.CharField(max_length=150, blank=True)
     fuente_scraping = models.URLField(blank=True)
     fecha_actualizacion = models.DateTimeField(auto_now=True)
 

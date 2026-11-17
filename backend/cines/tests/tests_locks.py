@@ -67,3 +67,38 @@ class CandadoScrapingTests(SimpleTestCase):
             with self.assertLogs("cines.locks", level="WARNING"):
                 with candado_scraping("cinepolis", "valledupar", 420) as libre:
                     self.assertTrue(libre)
+
+    def test_un_error_de_redis_en_el_cuerpo_con_candado_ocupado_se_propaga(self):
+        candado = MagicMock()
+        candado.acquire.return_value = False
+
+        with patch("cines.locks._cliente", return_value=_cliente_con(candado)):
+            with self.assertRaises(redis.exceptions.ConnectionError):
+                with candado_scraping("cinepolis", "valledupar", 420) as libre:
+                    self.assertFalse(libre)
+                    raise redis.exceptions.ConnectionError("cayó Redis")
+
+        candado.release.assert_not_called()
+
+    def test_un_error_de_redis_en_el_cuerpo_con_candado_tomado_se_propaga_y_libera(self):
+        candado = MagicMock()
+        candado.acquire.return_value = True
+
+        with patch("cines.locks._cliente", return_value=_cliente_con(candado)):
+            with self.assertRaises(redis.exceptions.ConnectionError):
+                with candado_scraping("cinepolis", "valledupar", 420) as libre:
+                    self.assertTrue(libre)
+                    raise redis.exceptions.ConnectionError("cayó Redis")
+
+        candado.release.assert_called_once()
+
+    def test_si_redis_falla_al_adquirir_continua_sin_candado_y_sin_liberar(self):
+        candado = MagicMock()
+        candado.acquire.side_effect = redis.exceptions.ConnectionError("sin Redis")
+
+        with patch("cines.locks._cliente", return_value=_cliente_con(candado)):
+            with self.assertLogs("cines.locks", level="WARNING"):
+                with candado_scraping("cinepolis", "valledupar", 420) as libre:
+                    self.assertTrue(libre)
+
+        candado.release.assert_not_called()
