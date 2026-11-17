@@ -145,7 +145,7 @@ class CinelandScraperTests(TestCase):
         self.assertEqual(urlopen.call_count, 9)
         self.assertEqual(
             sleep.call_args_list,
-            [call(REQUEST_PAUSE_SECONDS)] * 6,
+            [call(REQUEST_PAUSE_SECONDS)] * (urlopen.call_count - 1),
         )
 
         requests = [entry.args[0] for entry in urlopen.call_args_list]
@@ -201,3 +201,46 @@ class CinelandScraperTests(TestCase):
     def test_rejects_ranges_longer_than_seven_days(self):
         with self.assertRaisesRegex(ValueError, "entre 1 y 7"):
             scrape_cartelera_completa(days=8)
+
+    @patch("cines.scrapers.cineland.sleep")
+    @patch("cines.scrapers.cineland.urlopen")
+    def test_nunca_hace_dos_peticiones_seguidas_sin_pausa(self, urlopen, sleep):
+        eventos = []
+        respuesta_vacia = {
+            "data": [],
+            "transaction_status": {"status": True, "code": 200},
+        }
+        cuerpos = [
+            {"data": {"token": "test-token"}},
+            {"data": {"usrlock": "test-usrlock"}},
+            respuesta_vacia,
+            respuesta_vacia,
+        ]
+
+        def abrir(*_args, **_kwargs):
+            eventos.append("peticion")
+            return BytesIO(json.dumps(cuerpos.pop(0)).encode("utf-8"))
+
+        urlopen.side_effect = abrir
+        sleep.side_effect = lambda *_args: eventos.append("pausa")
+
+        scrape_cartelera_completa(
+            start_date=date(2026, 11, 8),
+            days=2,
+            api_key="test-api-key",
+            client_email="cineland@example.com",
+            client_password="test-password",
+        )
+
+        self.assertEqual(
+            eventos,
+            [
+                "peticion",
+                "pausa",
+                "peticion",
+                "pausa",
+                "peticion",
+                "pausa",
+                "peticion",
+            ],
+        )
