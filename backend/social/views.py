@@ -8,20 +8,30 @@ from rest_framework.exceptions import (
     PermissionDenied,
     ValidationError,
 )
-from rest_framework.generics import ListCreateAPIView, RetrieveUpdateDestroyAPIView
-from rest_framework.permissions import IsAuthenticated, IsAuthenticatedOrReadOnly
+from rest_framework.generics import (
+    ListAPIView,
+    ListCreateAPIView,
+    RetrieveUpdateDestroyAPIView,
+)
+from rest_framework.permissions import (
+    AllowAny,
+    IsAuthenticated,
+    IsAuthenticatedOrReadOnly,
+)
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from media.models import Media
-from social.models import ElementoLista, Lista, Resena
+from social.models import ElementoLista, Lista, ReporteResena, Resena
 from social.serializers import (
     AgregarElementoSerializer,
     ElementoListaSerializer,
     ListaDetalleSerializer,
     ListaSerializer,
+    ReporteResenaSerializer,
     ResenaSerializer,
 )
+from social.services import resumen_puntuacion
 from usuarios.permissions import EsAutorOLecturaPublica
 
 Usuario = get_user_model()
@@ -30,11 +40,14 @@ Usuario = get_user_model()
 MENSAJE_RESENA_REPETIDA = (
     "Ya reseñaste este título. Edita tu reseña existente en lugar de crear otra."
 )
+MENSAJE_REPORTE_RESENA_REPETIDO = "Ya reportaste esta reseña."
+
 
 def listas_con_total():
     return Lista.objects.select_related("usuario").annotate(
         total_elementos_anotado=models.Count("elementos_lista")
     )
+
 
 class MediaResenaListCreateView(ListCreateAPIView):
     """GET: reseñas visibles de un título (público, paginado). POST: crear la propia."""
@@ -46,6 +59,11 @@ class MediaResenaListCreateView(ListCreateAPIView):
         if not hasattr(self, "_media"):
             self._media = get_object_or_404(Media, pk=self.kwargs["media_id"])
         return self._media
+
+    def get_serializer_context(self):
+        context = super().get_serializer_context()
+        context["media"] = self.get_media()
+        return context
 
     def get_queryset(self):
         return (
@@ -66,6 +84,48 @@ class MediaResenaListCreateView(ListCreateAPIView):
             raise ValidationError({"detail": MENSAJE_RESENA_REPETIDA})
 
 
+class ResenasListView(ListAPIView):
+    serializer_class = ResenaSerializer
+    permission_classes = (AllowAny,)
+    http_method_names = ("get", "head", "options")
+
+    def get_queryset(self):
+        queryset = Resena.objects.visibles().select_related("usuario", "media")
+
+        con_texto = self.request.query_params.get("con_texto")
+        if con_texto is not None:
+            valor = con_texto.casefold()
+            if valor not in {"true", "false"}:
+                raise ValidationError(
+                    {"con_texto": "Debe ser 'true' o 'false'."}
+                )
+            if valor == "true":
+                queryset = queryset.exclude(texto="")
+            else:
+                queryset = queryset.filter(texto="")
+
+        media_id = self.request.query_params.get("media")
+        if media_id is not None:
+            if not media_id.isdecimal() or int(media_id) < 1:
+                raise ValidationError(
+                    {"media": "Debe ser un identificador de título válido."}
+                )
+            queryset = queryset.filter(media_id=int(media_id))
+
+        return queryset.order_by("-fecha_creacion", "-pk")
+
+
+class MediaResenaResumenView(APIView):
+    permission_classes = (AllowAny,)
+
+    def get(self, request, media_id):
+        try:
+            resumen = resumen_puntuacion(media_id)
+        except Media.DoesNotExist as exc:
+            raise NotFound("El título no existe.") from exc
+        return Response(resumen)
+
+
 class ResenaDetailView(RetrieveUpdateDestroyAPIView):
     """Ver una reseña (público); editarla o borrarla solo su autor."""
 
@@ -73,6 +133,34 @@ class ResenaDetailView(RetrieveUpdateDestroyAPIView):
     serializer_class = ResenaSerializer
     permission_classes = (EsAutorOLecturaPublica,)
     campo_autor = "usuario"
+
+
+class ReportarResenaView(APIView):
+    permission_classes = (IsAuthenticated,)
+
+    def post(self, request, pk):
+        resena = get_object_or_404(Resena.objects.visibles(), pk=pk)
+        if ReporteResena.objects.filter(resena=resena, usuario=request.user).exists():
+            raise ValidationError({"detail": MENSAJE_REPORTE_RESENA_REPETIDO})
+
+        serializer = ReporteResenaSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        try:
+            with transaction.atomic():
+                reporte = serializer.save(resena=resena, usuario=request.user)
+        except IntegrityError as exc:
+            if not ReporteResena.objects.filter(
+                resena=resena, usuario=request.user
+            ).exists():
+                raise
+            raise ValidationError(
+                {"detail": MENSAJE_REPORTE_RESENA_REPETIDO}
+            ) from exc
+
+        return Response(
+            ReporteResenaSerializer(reporte).data,
+            status=status.HTTP_201_CREATED,
+        )
 
 
 class MiResenaMediaView(APIView):

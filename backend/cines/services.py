@@ -278,6 +278,7 @@ def scrape_and_save_cartelera(
     ]
     movies = list(Media.objects.filter(tipo=Media.Tipo.PELICULA))
     manual_matches = _build_manual_matches()
+    ignored_titles = _build_ignored_titles()
     matched = 0
     pending = 0
     created_functions = 0
@@ -303,6 +304,14 @@ def scrape_and_save_cartelera(
             matched_releases += 1
 
         for record in records:
+            ignored_key = (
+                normalize_title(record["titulo"]),
+                record["cine"],
+                record["ciudad"],
+            )
+            if ignored_key in ignored_titles:
+                continue
+
             media = match_media_title(
                 record["titulo"],
                 movies,

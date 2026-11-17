@@ -3,7 +3,14 @@ from django.db import IntegrityError, transaction
 from django.test import TestCase
 
 from media.models import Media
-from social.models import ElementoLista, Lista, Seguimiento, SugerenciaEdicion
+from social.models import (
+    ElementoLista,
+    Lista,
+    ReporteResena,
+    Resena,
+    Seguimiento,
+    SugerenciaEdicion,
+)
 
 Usuario = get_user_model()
 
@@ -103,6 +110,25 @@ class ModelosSocialesTests(TestCase):
                     seguidor=self.user1,
                     seguido=self.user1,
                 )
+
+    def test_reporte_resena_es_unico_por_usuario_y_resena(self):
+        resena = Resena.objects.create(
+            usuario=self.user1,
+            media=self.media1,
+            puntuacion=8,
+        )
+        ReporteResena.objects.create(
+            resena=resena,
+            usuario=self.user2,
+            motivo="Contenido ofensivo",
+        )
+
+        with self.assertRaises(IntegrityError), transaction.atomic():
+            ReporteResena.objects.create(
+                resena=resena,
+                usuario=self.user2,
+                motivo="Otro motivo",
+            )
 
     def test_sugerencia_edicion_creacion_y_str(self):
         sugerencia = SugerenciaEdicion.objects.create(

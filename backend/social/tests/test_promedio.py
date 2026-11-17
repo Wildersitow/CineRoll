@@ -19,7 +19,14 @@ class ResumenPuntuacionTests(TestCase):
         self.usuarios = crear_usuarios(4)
 
     def test_sin_votos(self):
-        self.assertEqual(resumen_puntuacion(self.media.pk), {"promedio": None, "total_votos": 0})
+        self.assertEqual(
+            resumen_puntuacion(self.media.pk),
+            {
+                "promedio": None,
+                "total_votos": 0,
+                "distribucion": {str(nota): 0 for nota in range(1, 11)},
+            },
+        )
 
     def test_promedio_y_cantidad(self):
         for usuario, nota in zip(self.usuarios, (8, 5, 9)):
@@ -29,12 +36,39 @@ class ResumenPuntuacionTests(TestCase):
 
         self.assertEqual(resumen["total_votos"], 3)
         self.assertEqual(resumen["promedio"], 7.33)
+        self.assertEqual(
+            resumen["distribucion"],
+            {
+                **{str(nota): 0 for nota in range(1, 11)},
+                "5": 1,
+                "8": 1,
+                "9": 1,
+            },
+        )
 
     def test_las_reseñas_ocultas_no_cuentan(self):
         Resena.objects.create(usuario=self.usuarios[0], media=self.media, puntuacion=10)
         Resena.objects.create(usuario=self.usuarios[1], media=self.media, puntuacion=2, oculta=True)
 
-        self.assertEqual(resumen_puntuacion(self.media.pk), {"promedio": 10.0, "total_votos": 1})
+        self.assertEqual(
+            resumen_puntuacion(self.media.pk),
+            {
+                "promedio": 10.0,
+                "total_votos": 1,
+                "distribucion": {
+                    **{str(nota): 0 for nota in range(1, 11)},
+                    "10": 1,
+                },
+            },
+        )
+
+    def test_resumen_y_distribucion_se_consultan_con_una_sola_agregacion(self):
+        Resena.objects.create(usuario=self.usuarios[0], media=self.media, puntuacion=7)
+
+        with self.assertNumQueries(1):
+            resumen = resumen_puntuacion(self.media.pk)
+
+        self.assertEqual(resumen["distribucion"]["7"], 1)
 
     def test_no_mezcla_titulos(self):
         otra = Media.objects.create(titulo="B", tipo=Media.Tipo.SERIE)
@@ -59,7 +93,11 @@ class ResumenPuntuacionTests(TestCase):
 
 class PromedioEnElCatalogoTests(APITestCase):
     def setUp(self):
-        self.media = Media.objects.create(titulo="Con votos", tipo=Media.Tipo.PELICULA)
+        self.media = Media.objects.create(
+            titulo="Con votos",
+            tipo=Media.Tipo.PELICULA,
+            estado=Media.Estado.EN_CARTELERA,
+        )
         self.sin_votos = Media.objects.create(titulo="Sin votos", tipo=Media.Tipo.PELICULA)
         self.usuarios = crear_usuarios(3)
 
@@ -78,6 +116,65 @@ class PromedioEnElCatalogoTests(APITestCase):
 
         self.assertIsNone(response.data["promedio_puntuacion"])
         self.assertEqual(response.data["total_votos"], 0)
+
+    def test_endpoint_publico_devuelve_promedio_total_y_distribucion_sin_ocultas(self):
+        Resena.objects.create(
+            usuario=self.usuarios[0],
+            media=self.media,
+            puntuacion=8,
+        )
+        Resena.objects.create(
+            usuario=self.usuarios[1],
+            media=self.media,
+            puntuacion=8,
+        )
+        Resena.objects.create(
+            usuario=self.usuarios[2],
+            media=self.media,
+            puntuacion=10,
+            oculta=True,
+        )
+
+        with self.assertNumQueries(1):
+            response = self.client.get(
+                reverse("media-resenas-resumen", kwargs={"media_id": self.media.pk})
+            )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(
+            response.data,
+            {
+                "promedio": 8.0,
+                "total_votos": 2,
+                "distribucion": {
+                    **{str(nota): 0 for nota in range(1, 11)},
+                    "8": 2,
+                },
+            },
+        )
+
+    def test_endpoint_resumen_devuelve_ceros_para_titulo_sin_votos(self):
+        response = self.client.get(
+            reverse(
+                "media-resenas-resumen",
+                kwargs={"media_id": self.sin_votos.pk},
+            )
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertIsNone(response.data["promedio"])
+        self.assertEqual(response.data["total_votos"], 0)
+        self.assertEqual(
+            response.data["distribucion"],
+            {str(nota): 0 for nota in range(1, 11)},
+        )
+
+    def test_endpoint_resumen_retorna_404_si_no_existe_el_titulo(self):
+        response = self.client.get(
+            reverse("media-resenas-resumen", kwargs={"media_id": 999999})
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
 
     def test_el_listado_tambien_trae_promedio(self):
         Resena.objects.create(usuario=self.usuarios[0], media=self.media, puntuacion=9)

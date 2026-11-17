@@ -1,6 +1,13 @@
 from django.contrib import admin
 
-from social.models import ElementoLista, Lista, Resena, Seguimiento, SugerenciaEdicion
+from social.models import (
+    ElementoLista,
+    Lista,
+    ReporteResena,
+    Resena,
+    Seguimiento,
+    SugerenciaEdicion,
+)
 
 
 class ElementoListaInline(admin.TabularInline):
@@ -93,3 +100,26 @@ class ResenaAdmin(admin.ModelAdmin):
     def mostrar_resenas(self, request, queryset):
         cantidad = queryset.update(oculta=False)
         self.message_user(request, f"{cantidad} reseña(s) visible(s) de nuevo.")
+
+
+@admin.register(ReporteResena)
+class ReporteResenaAdmin(admin.ModelAdmin):
+    list_display = ("resena", "usuario", "motivo", "fecha")
+    list_filter = ("fecha",)
+    search_fields = (
+        "resena__media__titulo",
+        "resena__usuario__username",
+        "usuario__username",
+        "motivo",
+    )
+    raw_id_fields = ("resena", "usuario")
+    list_select_related = ("resena", "resena__media", "resena__usuario", "usuario")
+    date_hierarchy = "fecha"
+    actions = ("ocultar_resenas_reportadas",)
+
+    @admin.action(description="Ocultar reseñas de los reportes seleccionados")
+    def ocultar_resenas_reportadas(self, request, queryset):
+        cantidad = Resena.objects.filter(
+            pk__in=queryset.values("resena_id"), oculta=False
+        ).update(oculta=True)
+        self.message_user(request, f"{cantidad} reseña(s) reportada(s) ocultada(s).")

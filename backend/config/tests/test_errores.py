@@ -16,7 +16,7 @@ class FormatoErroresTests(APITestCase):
         cls.usuario = Usuario.objects.create_user(
             username="ana", email="ana@example.com", password="Secur3Passw0rd!"
         )
-        cls.media = Media.objects.create(titulo="Ficha", tipo=Media.Tipo.PELICULA)
+        cls.media = Media.objects.create(titulo="Ficha", tipo=Media.Tipo.PELICULA, estado=Media.Estado.EN_CARTELERA)
 
     def assertFormatoError(self, response, status_esperado, codigo):
         self.assertEqual(response.status_code, status_esperado)

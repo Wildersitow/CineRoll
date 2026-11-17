@@ -1,4 +1,5 @@
 from datetime import datetime, time, timedelta, timezone
+from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
 from django.urls import reverse
@@ -6,7 +7,7 @@ from django.utils import timezone as django_timezone
 from rest_framework import status
 from rest_framework.test import APITestCase
 
-from cines.models import Cine, Funcion
+from cines.models import Cine, EjecucionScraping, Funcion
 from media.models import Media
 
 
@@ -72,6 +73,86 @@ class CarteleraApiTests(APITestCase):
                     {item["id"] for item in response.data["results"]},
                     expected_ids,
                 )
+
+    @patch("cines.views.timezone.now")
+    def test_billboard_status_reports_latest_attempt_success_and_freshness(self, now):
+        current_time = datetime(2026, 11, 17, 18, 0, tzinfo=timezone.utc)
+        now.return_value = current_time
+        success = EjecucionScraping.objects.create(
+            cine="cinepolis",
+            ciudad="valledupar",
+            estado=EjecucionScraping.Estado.EXITOSA,
+            inicio=current_time - timedelta(hours=23, minutes=5),
+            fin=current_time - timedelta(hours=23),
+        )
+        EjecucionScraping.objects.create(
+            cine="cinepolis",
+            ciudad="valledupar",
+            estado=EjecucionScraping.Estado.FALLIDA,
+            inicio=current_time - timedelta(hours=1),
+            fin=current_time - timedelta(minutes=59),
+            mensaje_error="no debe mostrarse",
+        )
+        warning = EjecucionScraping.objects.create(
+            cine="royal_films",
+            ciudad="valledupar",
+            estado=EjecucionScraping.Estado.EXITOSA,
+            inicio=current_time - timedelta(hours=25, minutes=5),
+            fin=current_time - timedelta(hours=25),
+            advertencia="respuesta parcial",
+        )
+        EjecucionScraping.objects.create(
+            cine="cinemark",
+            ciudad="bogota",
+            estado=EjecucionScraping.Estado.EXITOSA,
+            inicio=current_time - timedelta(hours=24, minutes=5),
+            fin=current_time - timedelta(hours=24),
+        )
+
+        with self.assertNumQueries(1):
+            response = self.client.get(reverse("cartelera-estado"))
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        estados = {
+            (item["cine"], item["ciudad"]): item
+            for item in response.data["resultados"]
+        }
+        self.assertEqual(
+            estados[("cinepolis", "valledupar")]["ultima_ejecucion_exitosa"],
+            success.fin,
+        )
+        self.assertTrue(estados[("cinepolis", "valledupar")]["ultima_fallo"])
+        self.assertFalse(
+            estados[("cinepolis", "valledupar")]["ultima_tuvo_advertencia"]
+        )
+        self.assertFalse(estados[("cinepolis", "valledupar")]["desactualizada"])
+        self.assertEqual(
+            estados[("royal_films", "valledupar")]["ultima_ejecucion_exitosa"],
+            warning.fin,
+        )
+        self.assertTrue(
+            estados[("royal_films", "valledupar")]["ultima_tuvo_advertencia"]
+        )
+        self.assertFalse(estados[("royal_films", "valledupar")]["ultima_fallo"])
+        self.assertTrue(estados[("royal_films", "valledupar")]["desactualizada"])
+        self.assertFalse(estados[("cinemark", "bogota")]["desactualizada"])
+        self.assertNotIn("mensaje_error", response.data)
+        self.assertNotIn(
+            "no debe mostrarse",
+            str(response.data),
+        )
+        self.assertEqual(EjecucionScraping.objects.count(), 4)
+
+    def test_billboard_status_marks_configured_cines_without_runs_as_stale(self):
+        response = self.client.get(reverse("cartelera-estado"))
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertTrue(response.data["resultados"])
+        for item in response.data["resultados"]:
+            self.assertIsNone(item["ultima_ejecucion_exitosa"])
+            self.assertFalse(item["ultima_tuvo_advertencia"])
+            self.assertFalse(item["ultima_fallo"])
+            self.assertTrue(item["desactualizada"])
 
     def test_cinema_list_rejects_an_empty_city_filter(self):
         response = self.client.get(reverse("cine-list"), {"ciudad": "  "})

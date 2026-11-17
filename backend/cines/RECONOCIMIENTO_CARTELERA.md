@@ -189,6 +189,12 @@ Cinemark se conserva configurado, pero no está asociado a Valledupar. La clave
 ciudad de Cinemark hasta verificar que devuelve funciones. En esta fase todavía
 no hay una programación periódica de scraping configurada.
 
+El 17 de noviembre de 2026 se volvió a consultar
+`https://www.cinemark.com.co/cartelera/valledupar` y se ejecutó el parser de
+Cinemark para esa ruta: devolvió cero funciones y cero próximos estrenos. Por
+tanto, Cinemark sigue fuera de `CITY_PROVIDER_KEYS["valledupar"]` y de
+`CARTELERA_ACTIVA`.
+
 ## Importar cartelera de Cinemark manualmente
 
 Desde `backend`, ejecutar:
@@ -218,6 +224,11 @@ canónico configurado en `--ciudad`.
 
 ## Endpoints de lectura
 
+- `GET /api/cartelera/estado/` es público y devuelve una entrada por cada
+  proveedor/ciudad configurado. Incluye la fecha de finalización de la última
+  ejecución exitosa, si el último intento tuvo advertencia o falló, y
+  `desactualizada` cuando no hay ejecución exitosa o han pasado más de 24 horas
+  desde ella. No expone el mensaje de error del scraper.
 - `GET /api/cines/` devuelve el catálogo paginado de cines. `POST` en esa ruta y
   `PUT`, `PATCH` o `DELETE /api/cines/<id>/` requieren un usuario administrador
   (`is_staff`); las lecturas siguen siendo públicas. Acepta `?ciudad=<ciudad>`

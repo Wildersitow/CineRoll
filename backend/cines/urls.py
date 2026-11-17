@@ -4,12 +4,14 @@ from cines.views import (
     CineDetailView,
     CineFuncionListView,
     CineListView,
+    CarteleraEstadoView,
     FuncionListView,
     MediaFuncionListView,
 )
 
 
 urlpatterns = [
+    path("cartelera/estado/", CarteleraEstadoView.as_view(), name="cartelera-estado"),
     path("cines/", CineListView.as_view(), name="cine-list"),
     path("cines/<int:pk>/", CineDetailView.as_view(), name="cine-detail"),
     path(

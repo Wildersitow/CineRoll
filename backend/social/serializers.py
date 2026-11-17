@@ -1,6 +1,10 @@
 from rest_framework import serializers
 
-from social.models import ElementoLista, Lista, Resena
+from media.models import Media
+from social.models import ElementoLista, Lista, ReporteResena, Resena
+
+
+MAX_RESENA_TEXTO_LENGTH = 5000
 
 
 class ResenaSerializer(serializers.ModelSerializer):
@@ -10,6 +14,11 @@ class ResenaSerializer(serializers.ModelSerializer):
     media_titulo = serializers.CharField(source="media.titulo", read_only=True)
     media_poster_url = serializers.CharField(source="media.poster_url", read_only=True)
     media_tipo = serializers.CharField(source="media.tipo", read_only=True)
+    texto = serializers.CharField(
+        required=False,
+        allow_blank=True,
+        max_length=MAX_RESENA_TEXTO_LENGTH,
+    )
 
     class Meta:
         model = Resena
@@ -27,6 +36,39 @@ class ResenaSerializer(serializers.ModelSerializer):
             "fecha_actualizacion",
         )
         read_only_fields = ("id", "fecha_creacion", "fecha_actualizacion")
+
+    def validate_texto(self, value):
+        normalized = " ".join(value.split())
+        if len(normalized) > MAX_RESENA_TEXTO_LENGTH:
+            raise serializers.ValidationError(
+                f"El texto de la reseña no puede superar "
+                f"{MAX_RESENA_TEXTO_LENGTH} caracteres."
+            )
+        return normalized
+
+    def validate(self, attrs):
+        media = (
+            self.instance.media
+            if self.instance is not None
+            else self.context.get("media")
+        )
+        if media and media.estado == Media.Estado.PROXIMO_ESTRENO:
+            raise serializers.ValidationError(
+                {
+                    "detail": (
+                        "No se pueden crear ni editar reseñas de títulos "
+                        "próximos a estrenarse."
+                    )
+                }
+            )
+        return attrs
+
+
+class ReporteResenaSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = ReporteResena
+        fields = ("id", "resena", "usuario", "motivo", "fecha")
+        read_only_fields = ("id", "resena", "usuario", "fecha")
 
 
 class ElementoListaSerializer(serializers.ModelSerializer):

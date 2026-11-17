@@ -3,7 +3,14 @@ from django.test import TestCase
 from django.urls import reverse
 
 from media.models import Media
-from social.models import ElementoLista, Lista, Resena, Seguimiento, SugerenciaEdicion
+from social.models import (
+    ElementoLista,
+    Lista,
+    ReporteResena,
+    Resena,
+    Seguimiento,
+    SugerenciaEdicion,
+)
 from usuarios.models import Usuario
 
 
@@ -17,6 +24,11 @@ class SocialAdminTests(TestCase):
         cls.lector = Usuario.objects.create_user(username="lector", password="x")
         cls.resena = Resena.objects.create(
             usuario=cls.lector, media=cls.media, puntuacion=1, texto="Spam"
+        )
+        cls.reporte = ReporteResena.objects.create(
+            resena=cls.resena,
+            usuario=cls.admin,
+            motivo="Contenido ofensivo",
         )
         cls.lista = Lista.objects.create(
             usuario=cls.lector, nombre="Favoritas", tipo=Lista.Tipo.FAVORITAS
@@ -43,6 +55,7 @@ class SocialAdminTests(TestCase):
         self.assertIn(ElementoLista, admin.site._registry)
         self.assertIn(Seguimiento, admin.site._registry)
         self.assertIn(SugerenciaEdicion, admin.site._registry)
+        self.assertIn(ReporteResena, admin.site._registry)
 
     def test_paginas_del_admin(self):
         self.assertEqual(
@@ -78,6 +91,12 @@ class SocialAdminTests(TestCase):
             ).status_code,
             200,
         )
+        self.assertEqual(
+            self.client.get(
+                reverse("admin:social_reporteresena_changelist")
+            ).status_code,
+            200,
+        )
 
     def _accion(self, nombre):
         return self.client.post(
@@ -94,6 +113,20 @@ class SocialAdminTests(TestCase):
         self._accion("mostrar_resenas")
         self.resena.refresh_from_db()
         self.assertFalse(self.resena.oculta)
+
+    def test_el_administrador_puede_ocultar_resenas_desde_sus_reportes(self):
+        response = self.client.post(
+            reverse("admin:social_reporteresena_changelist"),
+            {
+                "action": "ocultar_resenas_reportadas",
+                "_selected_action": [self.reporte.pk],
+            },
+            follow=True,
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.resena.refresh_from_db()
+        self.assertTrue(self.resena.oculta)
 
     def test_el_administrador_puede_borrar_resenas_inapropiadas(self):
         response = self.client.post(
