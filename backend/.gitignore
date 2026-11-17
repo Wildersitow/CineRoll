@@ -10,3 +10,4 @@ CineRoll Responsabilidades.pdf
 # Archivos estáticos generados por collectstatic
 staticfiles/
 celerybeat-schedule*
+.env.prod

@@ -1,0 +1,73 @@
+# Producción en un solo servidor. Se usa siempre con el archivo de entorno:
+#   docker compose -f docker-compose.prod.yml --env-file .env.prod up -d --build
+x-django: &django
+  build: .
+  env_file: .env.prod
+  restart: unless-stopped
+  depends_on:
+    db:
+      condition: service_healthy
+    redis:
+      condition: service_healthy
+
+services:
+  db:
+    image: postgres:16
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${DB_NAME}
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER} -d ${DB_NAME}"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  redis:
+    image: redis:7
+    restart: unless-stopped
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  web:
+    <<: *django
+    command: >
+      sh -c "python manage.py migrate --noinput &&
+             python manage.py collectstatic --noinput &&
+             gunicorn config.wsgi:application --bind 0.0.0.0:8000 --workers 3"
+
+  worker:
+    <<: *django
+    command: celery -A config worker --loglevel=info --concurrency=2
+
+  # Debe haber UNA sola instancia de beat; si no, cada scrape se lanzaría dos veces.
+  beat:
+    <<: *django
+    command: celery -A config beat --loglevel=info --schedule /tmp/celerybeat-schedule
+
+  caddy:
+    image: caddy:2
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      DOMINIO: ${DOMINIO}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+    depends_on:
+      - web
+
+volumes:
+  pgdata:
+  redisdata:
+  caddy_data:
