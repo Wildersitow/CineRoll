@@ -6,6 +6,7 @@ from social.views import (
     ListaElementoListCreateView,
     ListaListCreateView,
     MediaResenaListCreateView,
+    MediaResenaResumenView,
     MiResenaMediaView,
     MisListasView,
     ResenaDetailView,
@@ -27,6 +28,11 @@ urlpatterns = [
         "media/<int:media_id>/resenas/me/",
         MiResenaMediaView.as_view(),
         name="media-resenas-me",
+    ),
+    path(
+        "media/<int:media_id>/resenas/resumen/",
+        MediaResenaResumenView.as_view(),
+        name="media-resenas-resumen",
     ),
     path(
         "media/<int:media_id>/resenas/",

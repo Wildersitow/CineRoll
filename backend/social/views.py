@@ -9,7 +9,11 @@ from rest_framework.exceptions import (
     ValidationError,
 )
 from rest_framework.generics import ListCreateAPIView, RetrieveUpdateDestroyAPIView
-from rest_framework.permissions import IsAuthenticated, IsAuthenticatedOrReadOnly
+from rest_framework.permissions import (
+    AllowAny,
+    IsAuthenticated,
+    IsAuthenticatedOrReadOnly,
+)
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
@@ -22,6 +26,7 @@ from social.serializers import (
     ListaSerializer,
     ResenaSerializer,
 )
+from social.services import resumen_puntuacion
 from usuarios.permissions import EsAutorOLecturaPublica
 
 Usuario = get_user_model()
@@ -69,6 +74,17 @@ class MediaResenaListCreateView(ListCreateAPIView):
                 serializer.save(usuario=usuario, media=media)
         except IntegrityError:  # dos peticiones simultáneas del mismo usuario
             raise ValidationError({"detail": MENSAJE_RESENA_REPETIDA})
+
+
+class MediaResenaResumenView(APIView):
+    permission_classes = (AllowAny,)
+
+    def get(self, request, media_id):
+        try:
+            resumen = resumen_puntuacion(media_id)
+        except Media.DoesNotExist as exc:
+            raise NotFound("El título no existe.") from exc
+        return Response(resumen)
 
 
 class ResenaDetailView(RetrieveUpdateDestroyAPIView):

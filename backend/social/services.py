@@ -1,22 +1,49 @@
-from django.db.models import Avg, Count, FloatField, IntegerField, OuterRef, Subquery
+from django.db.models import (
+    Avg,
+    Count,
+    FloatField,
+    IntegerField,
+    Max,
+    OuterRef,
+    Q,
+    Subquery,
+)
 from django.db.models.functions import Coalesce
 
-from social.models import Resena
+from media.models import Media
+from social.models import PUNTUACION_MAXIMA, PUNTUACION_MINIMA, Resena
 
 
 def resumen_puntuacion(media_id):
-    """Promedio de la comunidad y cantidad de votos de un título (sin reseñas ocultas).
+    """Agrega el promedio, total y distribución de notas sin reseñas ocultas.
 
-    Devuelve {"promedio": float | None, "total_votos": int}. El promedio es None
-    mientras nadie haya puntuado.
+    El promedio es None mientras nadie haya puntuado. Todos los datos se
+    obtienen en una sola consulta agregada.
     """
-    datos = Resena.objects.visibles().filter(media_id=media_id).aggregate(
-        promedio=Avg("puntuacion"), total_votos=Count("id")
+    resenas_visibles = Q(resenas__oculta=False)
+    datos = Media.objects.filter(pk=media_id).aggregate(
+        existe_media=Max("pk"),
+        promedio=Avg("resenas__puntuacion", filter=resenas_visibles),
+        total_votos=Count("resenas__id", filter=resenas_visibles),
+        **{
+            f"nota_{nota}": Count(
+                "resenas__id",
+                filter=resenas_visibles & Q(resenas__puntuacion=nota),
+            )
+            for nota in range(PUNTUACION_MINIMA, PUNTUACION_MAXIMA + 1)
+        },
     )
+    if datos["existe_media"] is None:
+        raise Media.DoesNotExist(f"No existe Media con id {media_id}.")
+
     promedio = datos["promedio"]
     return {
         "promedio": None if promedio is None else round(float(promedio), 2),
         "total_votos": datos["total_votos"],
+        "distribucion": {
+            str(nota): datos[f"nota_{nota}"]
+            for nota in range(PUNTUACION_MINIMA, PUNTUACION_MAXIMA + 1)
+        },
     }
 
 
