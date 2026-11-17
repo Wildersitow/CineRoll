@@ -189,6 +189,12 @@ Cinemark se conserva configurado, pero no está asociado a Valledupar. La clave
 ciudad de Cinemark hasta verificar que devuelve funciones. En esta fase todavía
 no hay una programación periódica de scraping configurada.
 
+El 17 de noviembre de 2026 se volvió a consultar
+`https://www.cinemark.com.co/cartelera/valledupar` y se ejecutó el parser de
+Cinemark para esa ruta: devolvió cero funciones y cero próximos estrenos. Por
+tanto, Cinemark sigue fuera de `CITY_PROVIDER_KEYS["valledupar"]` y de
+`CARTELERA_ACTIVA`.
+
 ## Importar cartelera de Cinemark manualmente
 
 Desde `backend`, ejecutar:
