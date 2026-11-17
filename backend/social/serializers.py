@@ -1,7 +1,7 @@
 from rest_framework import serializers
 
 from media.models import Media
-from social.models import ElementoLista, Lista, Resena
+from social.models import ElementoLista, Lista, ReporteResena, Resena
 
 
 MAX_RESENA_TEXTO_LENGTH = 5000
@@ -62,6 +62,13 @@ class ResenaSerializer(serializers.ModelSerializer):
                 }
             )
         return attrs
+
+
+class ReporteResenaSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = ReporteResena
+        fields = ("id", "resena", "usuario", "motivo", "fecha")
+        read_only_fields = ("id", "resena", "usuario", "fecha")
 
 
 class ElementoListaSerializer(serializers.ModelSerializer):

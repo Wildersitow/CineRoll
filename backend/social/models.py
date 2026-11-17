@@ -58,6 +58,32 @@ class Resena(models.Model):
         return f"{self.usuario} → {self.media}: {self.puntuacion}/{PUNTUACION_MAXIMA}"
 
 
+class ReporteResena(models.Model):
+    resena = models.ForeignKey(
+        Resena, on_delete=models.CASCADE, related_name="reportes"
+    )
+    usuario = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="reportes_resenas",
+    )
+    motivo = models.TextField()
+    fecha = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-fecha", "-id"]
+        verbose_name = "reporte de reseña"
+        verbose_name_plural = "reportes de reseñas"
+        constraints = [
+            models.UniqueConstraint(
+                fields=["resena", "usuario"], name="social_reporte_resena_unico"
+            ),
+        ]
+
+    def __str__(self):
+        return f"Reporte de {self.usuario} sobre reseña {self.resena_id}"
+
+
 class Lista(models.Model):
     """Listas de títulos de usuarios: favoritas, por ver y personalizadas."""
 

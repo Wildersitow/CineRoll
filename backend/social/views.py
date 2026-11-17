@@ -22,12 +22,13 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from media.models import Media
-from social.models import ElementoLista, Lista, Resena
+from social.models import ElementoLista, Lista, ReporteResena, Resena
 from social.serializers import (
     AgregarElementoSerializer,
     ElementoListaSerializer,
     ListaDetalleSerializer,
     ListaSerializer,
+    ReporteResenaSerializer,
     ResenaSerializer,
 )
 from social.services import resumen_puntuacion
@@ -39,11 +40,14 @@ Usuario = get_user_model()
 MENSAJE_RESENA_REPETIDA = (
     "Ya reseñaste este título. Edita tu reseña existente en lugar de crear otra."
 )
+MENSAJE_REPORTE_RESENA_REPETIDO = "Ya reportaste esta reseña."
+
 
 def listas_con_total():
     return Lista.objects.select_related("usuario").annotate(
         total_elementos_anotado=models.Count("elementos_lista")
     )
+
 
 class MediaResenaListCreateView(ListCreateAPIView):
     """GET: reseñas visibles de un título (público, paginado). POST: crear la propia."""
@@ -129,6 +133,34 @@ class ResenaDetailView(RetrieveUpdateDestroyAPIView):
     serializer_class = ResenaSerializer
     permission_classes = (EsAutorOLecturaPublica,)
     campo_autor = "usuario"
+
+
+class ReportarResenaView(APIView):
+    permission_classes = (IsAuthenticated,)
+
+    def post(self, request, pk):
+        resena = get_object_or_404(Resena.objects.visibles(), pk=pk)
+        if ReporteResena.objects.filter(resena=resena, usuario=request.user).exists():
+            raise ValidationError({"detail": MENSAJE_REPORTE_RESENA_REPETIDO})
+
+        serializer = ReporteResenaSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        try:
+            with transaction.atomic():
+                reporte = serializer.save(resena=resena, usuario=request.user)
+        except IntegrityError as exc:
+            if not ReporteResena.objects.filter(
+                resena=resena, usuario=request.user
+            ).exists():
+                raise
+            raise ValidationError(
+                {"detail": MENSAJE_REPORTE_RESENA_REPETIDO}
+            ) from exc
+
+        return Response(
+            ReporteResenaSerializer(reporte).data,
+            status=status.HTTP_201_CREATED,
+        )
 
 
 class MiResenaMediaView(APIView):

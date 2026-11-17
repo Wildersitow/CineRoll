@@ -4,7 +4,7 @@ from rest_framework import status
 from rest_framework.test import APITestCase
 
 from media.models import Media
-from social.models import Resena
+from social.models import ReporteResena, Resena
 from usuarios.models import Usuario
 
 
@@ -391,3 +391,73 @@ class EditarYBorrarResenaTests(ResenasBase):
         response = self.client.patch(self.detalle(self.resena), {"puntuacion": 99})
 
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+
+class ReportarResenaTests(ResenasBase):
+    def setUp(self):
+        super().setUp()
+        self.resena = Resena.objects.create(
+            usuario=self.ana,
+            media=self.media,
+            puntuacion=8,
+            texto="Reseña para reportar",
+        )
+        self.url = reverse("resena-reportar", kwargs={"pk": self.resena.pk})
+
+    def test_usuario_autenticado_puede_reportar_una_resena(self):
+        self.client.force_authenticate(self.beto)
+
+        response = self.client.post(self.url, {"motivo": "Contenido ofensivo"})
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        reporte = ReporteResena.objects.get()
+        self.assertEqual((reporte.resena, reporte.usuario), (self.resena, self.beto))
+        self.assertEqual(reporte.motivo, "Contenido ofensivo")
+        self.assertEqual(response.data["resena"], self.resena.pk)
+        self.assertEqual(response.data["usuario"], self.beto.pk)
+        self.assertIn("fecha", response.data)
+
+    def test_visitante_no_puede_reportar(self):
+        response = self.client.post(self.url, {"motivo": "Contenido ofensivo"})
+
+        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+        self.assertFalse(ReporteResena.objects.exists())
+
+    def test_un_usuario_no_puede_reportar_dos_veces_la_misma_resena(self):
+        self.client.force_authenticate(self.beto)
+        self.client.post(self.url, {"motivo": "Contenido ofensivo"})
+
+        response = self.client.post(self.url, {"motivo": "Otro motivo"})
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("Ya reportaste esta reseña", str(response.data))
+        self.assertEqual(ReporteResena.objects.count(), 1)
+
+    def test_usuarios_distintos_pueden_reportar_la_misma_resena(self):
+        carla = Usuario.objects.create_user(username="carla", password="x")
+        for usuario in (self.beto, carla):
+            self.client.force_authenticate(usuario)
+            response = self.client.post(self.url, {"motivo": "Contenido ofensivo"})
+            self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+
+        self.assertEqual(ReporteResena.objects.filter(resena=self.resena).count(), 2)
+
+    def test_motivo_es_obligatorio_y_no_puede_ser_vacio(self):
+        self.client.force_authenticate(self.beto)
+
+        for datos in ({}, {"motivo": "   "}):
+            with self.subTest(datos=datos):
+                response = self.client.post(self.url, datos)
+                self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+        self.assertFalse(ReporteResena.objects.exists())
+
+    def test_no_se_puede_reportar_una_resena_oculta_o_inexistente(self):
+        self.client.force_authenticate(self.beto)
+        self.resena.oculta = True
+        self.resena.save(update_fields=["oculta"])
+
+        response = self.client.post(self.url, {"motivo": "Contenido ofensivo"})
+
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+        self.assertFalse(ReporteResena.objects.exists())
