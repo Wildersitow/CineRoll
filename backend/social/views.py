@@ -8,7 +8,11 @@ from rest_framework.exceptions import (
     PermissionDenied,
     ValidationError,
 )
-from rest_framework.generics import ListCreateAPIView, RetrieveUpdateDestroyAPIView
+from rest_framework.generics import (
+    ListAPIView,
+    ListCreateAPIView,
+    RetrieveUpdateDestroyAPIView,
+)
 from rest_framework.permissions import (
     AllowAny,
     IsAuthenticated,
@@ -74,6 +78,37 @@ class MediaResenaListCreateView(ListCreateAPIView):
                 serializer.save(usuario=usuario, media=media)
         except IntegrityError:  # dos peticiones simultáneas del mismo usuario
             raise ValidationError({"detail": MENSAJE_RESENA_REPETIDA})
+
+
+class ResenasListView(ListAPIView):
+    serializer_class = ResenaSerializer
+    permission_classes = (AllowAny,)
+    http_method_names = ("get", "head", "options")
+
+    def get_queryset(self):
+        queryset = Resena.objects.visibles().select_related("usuario", "media")
+
+        con_texto = self.request.query_params.get("con_texto")
+        if con_texto is not None:
+            valor = con_texto.casefold()
+            if valor not in {"true", "false"}:
+                raise ValidationError(
+                    {"con_texto": "Debe ser 'true' o 'false'."}
+                )
+            if valor == "true":
+                queryset = queryset.exclude(texto="")
+            else:
+                queryset = queryset.filter(texto="")
+
+        media_id = self.request.query_params.get("media")
+        if media_id is not None:
+            if not media_id.isdecimal() or int(media_id) < 1:
+                raise ValidationError(
+                    {"media": "Debe ser un identificador de título válido."}
+                )
+            queryset = queryset.filter(media_id=int(media_id))
+
+        return queryset.order_by("-fecha_creacion", "-pk")
 
 
 class MediaResenaResumenView(APIView):

@@ -281,6 +281,44 @@ class CatalogApiTests(APITestCase):
             ["Zulu", "Ficha de prueba", "Alfa"],
         )
 
+    def test_min_votos_excluye_titulos_con_pocos_votos_del_orden_por_promedio(self):
+        one_vote = Media.objects.create(titulo="Una nota", tipo=Media.Tipo.PELICULA)
+        several_votes = Media.objects.create(
+            titulo="Varias notas",
+            tipo=Media.Tipo.PELICULA,
+        )
+        for username, media, score in (
+            ("one-vote-user", one_vote, 10),
+            ("many-vote-user-1", several_votes, 9),
+            ("many-vote-user-2", several_votes, 9),
+        ):
+            user = Usuario.objects.create_user(username=username, password="x")
+            Resena.objects.create(usuario=user, media=media, puntuacion=score)
+
+        response = self.client.get(
+            reverse("media-list"),
+            {"ordering": "-promedio_puntuacion", "min_votos": 2},
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(
+            [item["titulo"] for item in response.data["results"]],
+            ["Varias notas"],
+        )
+        self.assertEqual(response.data["results"][0]["total_votos"], 2)
+
+    def test_min_votos_rechaza_valores_invalidos(self):
+        for value in ("abc", "-1", "1.5"):
+            with self.subTest(value=value):
+                response = self.client.get(
+                    reverse("media-list"),
+                    {"min_votos": value},
+                )
+                self.assertEqual(
+                    response.status_code,
+                    status.HTTP_400_BAD_REQUEST,
+                )
+
     def test_filters_can_be_combined_and_genre_ignores_accents(self):
         genero = Genero.objects.create(nombre="Acción")
         media = Media.objects.create(

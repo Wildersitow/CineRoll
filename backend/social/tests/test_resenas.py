@@ -223,6 +223,83 @@ class ListarResenasTests(ResenasBase):
         self.assertEqual(response.data["count"], 2)
         self.assertEqual([r["id"] for r in response.data["results"]], [segunda.pk, primera.pk])
 
+    def test_feed_publico_filtra_con_texto_y_por_media(self):
+        text_review = Resena.objects.create(
+            usuario=self.ana,
+            media=self.media,
+            puntuacion=8,
+            texto="Recomendado",
+        )
+        no_text_review = Resena.objects.create(
+            usuario=self.beto,
+            media=self.media,
+            puntuacion=6,
+        )
+        other_title_review = Resena.objects.create(
+            usuario=Usuario.objects.create_user(username="carla", password="x"),
+            media=self.otra_media,
+            puntuacion=9,
+            texto="Otro título",
+        )
+        Resena.objects.create(
+            usuario=Usuario.objects.create_user(username="diego", password="x"),
+            media=self.media,
+            puntuacion=1,
+            texto="Moderación",
+            oculta=True,
+        )
+
+        feed_url = reverse("resenas-list")
+        all_reviews = self.client.get(feed_url)
+        with_text = self.client.get(feed_url, {"con_texto": "true"})
+        without_text = self.client.get(feed_url, {"con_texto": "false"})
+        by_title = self.client.get(feed_url, {"media": self.otra_media.pk})
+
+        self.assertEqual(all_reviews.data["count"], 3)
+        self.assertEqual(
+            [item["id"] for item in all_reviews.data["results"]],
+            [other_title_review.pk, no_text_review.pk, text_review.pk],
+        )
+        self.assertEqual(
+            {item["id"] for item in with_text.data["results"]},
+            {text_review.pk, other_title_review.pk},
+        )
+        self.assertEqual(
+            [item["id"] for item in without_text.data["results"]],
+            [no_text_review.pk],
+        )
+        self.assertEqual(
+            [item["id"] for item in by_title.data["results"]],
+            [other_title_review.pk],
+        )
+
+    def test_feed_rechaza_filtros_invalidos(self):
+        feed_url = reverse("resenas-list")
+
+        invalid_boolean = self.client.get(feed_url, {"con_texto": "yes"})
+        invalid_media = self.client.get(feed_url, {"media": "abc"})
+
+        self.assertEqual(invalid_boolean.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(invalid_media.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_feed_uses_constant_queries(self):
+        for index in range(5):
+            usuario = Usuario.objects.create_user(
+                username=f"feed-{index}",
+                password="x",
+            )
+            Resena.objects.create(
+                usuario=usuario,
+                media=self.media,
+                puntuacion=5,
+                texto=f"Reseña {index}",
+            )
+
+        with self.assertNumQueries(2):
+            response = self.client.get(reverse("resenas-list"))
+
+        self.assertEqual(response.data["count"], 5)
+
     def test_paginacion(self):
         for i in range(25):
             usuario = Usuario.objects.create_user(username=f"u{i}", password="x")

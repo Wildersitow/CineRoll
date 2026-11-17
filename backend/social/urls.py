@@ -9,11 +9,13 @@ from social.views import (
     MediaResenaResumenView,
     MiResenaMediaView,
     MisListasView,
+    ResenasListView,
     ResenaDetailView,
     UsuarioListasListView,
 )
 
 urlpatterns = [
+    path("resenas/", ResenasListView.as_view(), name="resenas-list"),
     path(
         "media/<int:media_id>/resenas/propia/",
         MiResenaMediaView.as_view(),

@@ -74,6 +74,12 @@ class MediaListView(ListCreateAPIView):
 				raise ValidationError({"cine": "Debe ser un identificador de cine válido."})
 			queryset = queryset.filter(funciones__cine_id=int(cine)).distinct()
 
+		min_votos = params.get("min_votos")
+		if min_votos is not None:
+			if not min_votos.isdecimal():
+				raise ValidationError({"min_votos": "Debe ser un entero no negativo."})
+			queryset = queryset.filter(total_votos__gte=int(min_votos))
+
 		return queryset
 
 	@staticmethod
