@@ -54,3 +54,15 @@ class SettingsProduccionTests(SimpleTestCase):
             os.environ.pop("ALLOWED_HOSTS", None)
             with self.assertRaises(UndefinedValueError):
                 self.cargar(**variables)
+
+    def test_sirve_los_estaticos_con_whitenoise(self):
+        produccion = self.cargar(**VARIABLES)
+
+        seguridad = produccion.MIDDLEWARE.index(
+            "django.middleware.security.SecurityMiddleware"
+        )
+        self.assertEqual(
+            produccion.MIDDLEWARE[seguridad + 1],
+            "whitenoise.middleware.WhiteNoiseMiddleware",
+        )
+        self.assertIn("whitenoise", produccion.STORAGES["staticfiles"]["BACKEND"])
