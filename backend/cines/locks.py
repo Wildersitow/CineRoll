@@ -30,9 +30,7 @@ def candado_scraping(cine, ciudad, timeout):
     candado = None
     try:
         candado = _cliente().lock(f"cartelera:candado:{cine}:{ciudad}", timeout=timeout)
-        if not candado.acquire(blocking=False):
-            yield False
-            return
+        adquirido = candado.acquire(blocking=False)
     except redis.exceptions.RedisError:
         logger.warning(
             "No se pudo usar el candado de Redis para %s (%s); se continúa sin él.",
@@ -41,6 +39,11 @@ def candado_scraping(cine, ciudad, timeout):
             exc_info=True,
         )
         candado = None
+        adquirido = True
+
+    if not adquirido:
+        yield False
+        return
 
     try:
         yield True
@@ -49,7 +52,6 @@ def candado_scraping(cine, ciudad, timeout):
             try:
                 candado.release()
             except redis.exceptions.RedisError:
-                # LockError: ya expiró. Otros errores de Redis: no se puede liberar.
                 logger.warning(
                     "No se pudo liberar el candado de %s (%s).", cine, ciudad
                 )
