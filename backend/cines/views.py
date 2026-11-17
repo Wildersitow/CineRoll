@@ -1,4 +1,6 @@
-from django.db.models import Max
+from datetime import timedelta
+
+from django.db.models import Max, OuterRef, Q, Subquery
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from django.utils.dateparse import parse_date
@@ -11,9 +13,9 @@ from rest_framework.generics import (
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from cines.models import Cine, Funcion
+from cines.models import Cine, EjecucionScraping, Funcion
 from cines.serializers import CineSerializer, FuncionSerializer
-from cines.services import normalize_city
+from cines.services import CITY_PROVIDER_KEYS, normalize_city
 from media.models import Media
 from usuarios.permissions import EsAdministradorOLecturaPublica
 
@@ -34,6 +36,60 @@ class CineDetailView(RetrieveUpdateDestroyAPIView):
     queryset = Cine.objects.all()
     serializer_class = CineSerializer
     permission_classes = (EsAdministradorOLecturaPublica,)
+
+
+class CarteleraEstadoView(APIView):
+    permission_classes = (EsAdministradorOLecturaPublica,)
+
+    def get(self, request):
+        ultima_ejecucion = EjecucionScraping.objects.filter(
+            cine=OuterRef("cine"),
+            ciudad=OuterRef("ciudad"),
+        ).order_by("-inicio", "-pk")
+        estados_guardados = {
+            (item["cine"], item["ciudad"]): item
+            for item in (
+                EjecucionScraping.objects.values("cine", "ciudad")
+                .annotate(
+                    ultima_ejecucion_exitosa=Max(
+                        "fin",
+                        filter=Q(estado=EjecucionScraping.Estado.EXITOSA),
+                    ),
+                    ultimo_estado=Subquery(ultima_ejecucion.values("estado")[:1]),
+                    ultima_advertencia=Subquery(
+                        ultima_ejecucion.values("advertencia")[:1]
+                    ),
+                )
+            )
+        }
+
+        ahora = timezone.now()
+        limite_desactualizacion = ahora - timedelta(hours=24)
+        resultados = []
+        for ciudad, proveedores in CITY_PROVIDER_KEYS.items():
+            for cine in proveedores:
+                estado = estados_guardados.get((cine, ciudad), {})
+                ultima_exitosa = estado.get("ultima_ejecucion_exitosa")
+                resultados.append(
+                    {
+                        "cine": cine,
+                        "ciudad": ciudad,
+                        "ultima_ejecucion_exitosa": ultima_exitosa,
+                        "ultima_tuvo_advertencia": bool(
+                            estado.get("ultima_advertencia")
+                        ),
+                        "ultima_fallo": (
+                            estado.get("ultimo_estado")
+                            == EjecucionScraping.Estado.FALLIDA
+                        ),
+                        "desactualizada": (
+                            ultima_exitosa is None
+                            or ultima_exitosa < limite_desactualizacion
+                        ),
+                    }
+                )
+
+        return Response({"resultados": resultados})
 
 
 class UnpaginatedFuncionListView(ListAPIView):
