@@ -1,8 +1,14 @@
 from unittest import TestCase
+from unittest.mock import patch
 
 from django.test import TestCase as DjangoTestCase
 
-from cines.services import match_media_title, normalize_city, normalize_title
+from cines.services import (
+    build_media_index,
+    match_media_title,
+    normalize_city,
+    normalize_title,
+)
 from media.models import Media
 
 
@@ -93,6 +99,40 @@ class MediaTitleMatchingTests(DjangoTestCase):
         Media.objects.create(titulo="PELICULA REPETIDA (DOB 2D)", tipo=Media.Tipo.PELICULA)
 
         self.assertIsNone(match_media_title("Película repetida"))
+
+    def test_el_indice_da_el_mismo_resultado_que_recorrer_el_catalogo(self):
+        Media.objects.create(
+            titulo="El caballero oscuro",
+            titulo_original="The Dark Knight",
+            tipo=Media.Tipo.PELICULA,
+        )
+        Media.objects.create(titulo="Película repetida", tipo=Media.Tipo.PELICULA)
+        Media.objects.create(titulo="PELICULA REPETIDA (SUB)", tipo=Media.Tipo.PELICULA)
+        indice = build_media_index(Media.objects.filter(tipo=Media.Tipo.PELICULA))
+
+        for titulo in ("THE DARK KNIGHT (SUB 3D)", "Película repetida", "Desconocida"):
+            with self.subTest(titulo=titulo):
+                self.assertEqual(
+                    match_media_title(titulo, index=indice),
+                    match_media_title(titulo),
+                )
+
+    def test_con_indice_no_vuelve_a_normalizar_el_catalogo(self):
+        for numero in range(5):
+            Media.objects.create(
+                titulo=f"Película {numero}", tipo=Media.Tipo.PELICULA
+            )
+        indice = build_media_index(Media.objects.filter(tipo=Media.Tipo.PELICULA))
+
+        with patch(
+            "cines.services.normalize_title", wraps=normalize_title
+        ) as espia:
+            for numero in range(5):
+                self.assertIsNotNone(
+                    match_media_title(f"Película {numero}", index=indice)
+                )
+
+        self.assertEqual(espia.call_count, 5)
 
 class CityNormalizationTests(TestCase):
     def test_ignores_accents_case_and_separators(self):

@@ -105,6 +105,9 @@ class Lista(models.Model):
 
     @property
     def total_elementos(self):
+        anotado = getattr(self, "total_elementos_anotado", None)
+        if anotado is not None:
+            return anotado
         return self.elementos_lista.count()
 
 

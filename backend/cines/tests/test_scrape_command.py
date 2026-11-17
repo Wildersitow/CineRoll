@@ -590,3 +590,22 @@ class ScrapeCarteleraCommandTests(TestCase):
             scrape_and_save_cartelera("cinemark", city_slug="valledupar")
 
         scrape.assert_not_called()
+
+    @patch("cines.scrapers.cinemark.scrape_cartelera_completa")
+    def test_ignored_title_is_not_counted_or_recorded_again(self, scrape):
+        scrape.return_value = self.cartelera
+        TituloPendiente.objects.create(
+            titulo_original=self.showtime["titulo"],
+            titulo_normalizado="como entrenar a tu dragon",
+            cine_nombre=self.showtime["cine"],
+            ciudad="bogota",
+            estado=TituloPendiente.Estado.IGNORADO,
+        )
+
+        result = scrape_and_save_cartelera("cinemark", city_slug="bogota")
+
+        self.assertEqual(result.titulos_pendientes, 0)
+        self.assertEqual(Funcion.objects.count(), 0)
+        ignorado = TituloPendiente.objects.get()
+        self.assertEqual(ignorado.estado, TituloPendiente.Estado.IGNORADO)
+        self.assertEqual(ignorado.apariciones_detectadas, 1)

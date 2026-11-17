@@ -198,3 +198,61 @@ class ListasAPITests(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
         self.assertEqual(self.lista_publica_user1.total_elementos, 1)
 
+    def test_mis_listas_devuelve_todas_las_propias(self):
+        self.client.force_authenticate(self.user1)
+
+        response = self.client.get(reverse("usuarios-me-listas"))
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(
+            {item["nombre"] for item in response.data},
+            {"Ciencia Ficción", "Secretos"},
+        )
+
+    def test_mis_listas_exige_sesion(self):
+        response = self.client.get(reverse("usuarios-me-listas"))
+
+        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+
+    def test_el_listado_no_hace_una_consulta_por_lista(self):
+        for indice in range(5):
+            Lista.objects.create(usuario=self.user1, nombre=f"Extra {indice}")
+        self.client.force_authenticate(self.user1)
+
+        with self.assertNumQueries(2):
+            response = self.client.get(reverse("lista-list-create"))
+
+        totales = {
+            item["nombre"]: item["total_elementos"]
+            for item in response.data["results"]
+        }
+        self.assertEqual(totales["Ciencia Ficción"], 1)
+        self.assertEqual(totales["Extra 0"], 0)
+
+    def test_elementos_de_lista_privada_ajena_dan_404(self):
+        self.client.force_authenticate(self.user2)
+        url = reverse("lista-elementos", args=[self.lista_privada_user1.pk])
+
+        self.assertEqual(self.client.get(url).status_code, status.HTTP_404_NOT_FOUND)
+        self.assertEqual(
+            self.client.post(url, {"media_id": self.media2.pk}).status_code,
+            status.HTTP_404_NOT_FOUND,
+        )
+
+    def test_modificar_elementos_sin_sesion_da_401(self):
+        url = reverse("lista-elementos", args=[self.lista_publica_user1.pk])
+        url_elemento = reverse(
+            "lista-elemento-detail",
+            args=[self.lista_publica_user1.pk, self.media1.pk],
+        )
+
+        agregar = self.client.post(url, {"media_id": self.media2.pk})
+        quitar = self.client.delete(url_elemento)
+
+        self.assertEqual(agregar.status_code, status.HTTP_401_UNAUTHORIZED)
+        self.assertEqual(agregar.data["error"]["codigo"], "not_authenticated")
+        self.assertEqual(quitar.status_code, status.HTTP_401_UNAUTHORIZED)
+        self.assertTrue(
+            ElementoLista.objects.filter(pk=self.elemento1.pk).exists()
+        )
+

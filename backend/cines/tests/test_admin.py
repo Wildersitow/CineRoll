@@ -113,3 +113,34 @@ class CinesAdminTests(TestCase):
             self.assertEqual(titulo_pendiente.media_asociada, ficha)
 
         self.assertEqual(match_media_title(pendiente.titulo_original), ficha)
+
+    def test_create_draft_action_links_to_existing_media_instead_of_duplicating(self):
+        pendiente = self._pendiente()
+
+        self.client.post(
+            reverse("admin:cines_titulopendiente_changelist"),
+            {"action": "crear_fichas_borrador", "_selected_action": [pendiente.pk]},
+        )
+
+        self.assertEqual(Media.objects.count(), 1)
+        pendiente.refresh_from_db()
+        self.assertEqual(pendiente.media_asociada, self.media)
+        self.assertEqual(pendiente.estado, TituloPendiente.Estado.RESUELTO)
+
+    def test_create_draft_action_skips_titles_with_several_matching_media(self):
+        Media.objects.create(titulo="Duplicada", tipo=Media.Tipo.PELICULA)
+        Media.objects.create(titulo="DUPLICADA (SUB)", tipo=Media.Tipo.PELICULA)
+        pendiente = self._pendiente(
+            titulo_original="DUPLICADA",
+            titulo_normalizado="duplicada",
+        )
+
+        self.client.post(
+            reverse("admin:cines_titulopendiente_changelist"),
+            {"action": "crear_fichas_borrador", "_selected_action": [pendiente.pk]},
+        )
+
+        self.assertEqual(Media.objects.count(), 3)
+        pendiente.refresh_from_db()
+        self.assertEqual(pendiente.estado, TituloPendiente.Estado.PENDIENTE)
+        self.assertIsNone(pendiente.media_asociada)

@@ -9,6 +9,8 @@ from cines.services import (
     FORMAT_MAX_LENGTH,
     ROOM_MAX_LENGTH,
     TITLE_MAX_LENGTH,
+    format_display_title,
+    format_display_title,
     normalize_showtime,
     normalize_showtimes,
 )
@@ -156,3 +158,21 @@ class ShowtimeNormalizationTests(TestCase):
 
         self.assertEqual(result["sala"], "Sala 1")
         self.assertEqual(result["formato"], "2D, Doblada")
+
+class DisplayTitleTests(TestCase):
+    def test_quita_sufijos_y_pasa_mayusculas_a_formato_oracion(self):
+        self.assertEqual(
+            format_display_title(
+                "COMO ROBAR UN BANCO (DOB 2D)", "como robar un banco"
+            ),
+            "Como robar un banco",
+        )
+
+    def test_conserva_tildes_y_mayusculas_de_titulos_mixtos(self):
+        self.assertEqual(
+            format_display_title("Cómo robar un banco 3D", "como robar un banco"),
+            "Cómo robar un banco",
+        )
+
+    def test_titulo_sin_sufijos_no_cambia(self):
+        self.assertEqual(format_display_title("Encanto", "encanto"), "Encanto")

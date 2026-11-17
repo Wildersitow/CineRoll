@@ -22,6 +22,8 @@ CINEMA_NAME_MAX_LENGTH = Cine._meta.get_field("nombre").max_length
 ROOM_MAX_LENGTH = Funcion._meta.get_field("sala").max_length
 FORMAT_MAX_LENGTH = Funcion._meta.get_field("formato").max_length
 
+MediaIndex = dict[str, dict[int, Media]]
+
 logger = logging.getLogger(__name__)
 TITLE_QUALIFIERS = {
     "2d",
@@ -178,11 +180,40 @@ def normalize_title(title: str) -> str:
 def normalize_city(city: str) -> str:
     return " ".join(_fold_tokens(city))
 
+def format_display_title(raw_title: str, normalized_title: str) -> str:
+    tokens = list(re.finditer(r"[^\W_]+", raw_title))
+    while tokens and all(
+        part in TITLE_QUALIFIERS for part in _fold_tokens(tokens[-1].group())
+    ):
+        tokens.pop()
+    if not tokens:
+        return normalized_title
+
+    title = raw_title[: tokens[-1].end()].strip()
+    if title.isupper():
+        title = title[:1].upper() + title[1:].lower()
+    if normalize_title(title) != normalized_title:
+        return normalized_title
+    return title
+
+
+def build_media_index(catalog: Iterable[Media]) -> MediaIndex:
+    index: MediaIndex = {}
+    for movie in catalog:
+        for value in (movie.titulo, movie.titulo_original):
+            if not value:
+                continue
+            normalized = normalize_title(value)
+            if normalized:
+                index.setdefault(normalized, {})[movie.pk] = movie
+    return index
+
 
 def match_media_title(
     title: str,
     catalog: Iterable[Media] | None = None,
     alternate_title: str | None = None,
+    index: MediaIndex | None = None,
 ) -> Media | None:
     """Return a unique movie matching either title, or None if uncertain."""
     normalized_titles: set[str] = set()
@@ -194,15 +225,17 @@ def match_media_title(
     if not normalized_titles:
         return None
 
-    movies = catalog if catalog is not None else Media.objects.filter(tipo=Media.Tipo.PELICULA)
+    if index is None:
+        movies = (
+            catalog
+            if catalog is not None
+            else Media.objects.filter(tipo=Media.Tipo.PELICULA)
+        )
+        index = build_media_index(movies)
+
     matches: dict[int, Media] = {}
-    for movie in movies:
-        candidates = (movie.titulo, movie.titulo_original)
-        if any(
-            value and normalize_title(value) in normalized_titles
-            for value in candidates
-        ):
-            matches[movie.pk] = movie
+    for normalized in normalized_titles:
+        matches.update(index.get(normalized, {}))
 
     if len(matches) != 1:
         return None
@@ -434,6 +467,13 @@ def _build_manual_matches() -> dict[str, Media]:
             media_asociada__isnull=False,
         ).select_related("media_asociada")
     }
+
+def _build_ignored_titles() -> set[tuple[str, str, str]]:
+    return set(
+        TituloPendiente.objects.filter(
+            estado=TituloPendiente.Estado.IGNORADO
+        ).values_list("titulo_normalizado", "cine_nombre", "ciudad")
+    )
 
 
 def _mark_now_showing(media_ids: set[int]) -> int:

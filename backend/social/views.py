@@ -2,7 +2,12 @@ from django.contrib.auth import get_user_model
 from django.db import IntegrityError, models, transaction
 from django.shortcuts import get_object_or_404
 from rest_framework import status
-from rest_framework.exceptions import NotFound, PermissionDenied, ValidationError
+from rest_framework.exceptions import (
+    NotAuthenticated,
+    NotFound,
+    PermissionDenied,
+    ValidationError,
+)
 from rest_framework.generics import ListCreateAPIView, RetrieveUpdateDestroyAPIView
 from rest_framework.permissions import IsAuthenticated, IsAuthenticatedOrReadOnly
 from rest_framework.response import Response
@@ -26,6 +31,10 @@ MENSAJE_RESENA_REPETIDA = (
     "Ya reseñaste este título. Edita tu reseña existente en lugar de crear otra."
 )
 
+def listas_con_total():
+    return Lista.objects.select_related("usuario").annotate(
+        total_elementos_anotado=models.Count("elementos_lista")
+    )
 
 class MediaResenaListCreateView(ListCreateAPIView):
     """GET: reseñas visibles de un título (público, paginado). POST: crear la propia."""
@@ -105,7 +114,7 @@ class ListaListCreateView(ListCreateAPIView):
         return [IsAuthenticatedOrReadOnly()]
 
     def get_queryset(self):
-        qs = Lista.objects.select_related("usuario").all()
+        qs = listas_con_total()
         username = self.request.query_params.get("usuario")
         usuario_id = self.request.query_params.get("usuario_id")
         tipo = self.request.query_params.get("tipo")
@@ -180,18 +189,20 @@ class ListaElementoListCreateView(APIView):
 
     def get_lista(self, lista_id):
         lista = get_object_or_404(
-            Lista.objects.select_related("usuario").prefetch_related("elementos_lista__media"),
+            Lista.objects.select_related("usuario").prefetch_related(
+                "elementos_lista__media"
+            ),
             pk=lista_id,
         )
-        if self.request.method == "GET":
-            if not lista.publica:
-                if not (self.request.user.is_authenticated and lista.usuario == self.request.user):
-                    raise PermissionDenied("Esta lista es privada.")
-        else:
-            if not self.request.user.is_authenticated:
-                raise PermissionDenied("Se requiere autenticación.")
-            if lista.usuario != self.request.user:
-                raise PermissionDenied("No tienes permiso para modificar esta lista.")
+        autenticado = self.request.user.is_authenticated
+        es_autor = autenticado and lista.usuario == self.request.user
+
+        if self.request.method != "GET" and not autenticado:
+            raise NotAuthenticated()
+        if not lista.publica and not es_autor:
+            raise NotFound()
+        if self.request.method != "GET" and not es_autor:
+            raise PermissionDenied("No tienes permiso para modificar esta lista.")
         return lista
 
     def get(self, request, lista_id):
@@ -245,8 +256,10 @@ class ListaElementoDetailView(APIView):
     def delete(self, request, lista_id, media_id):
         lista = get_object_or_404(Lista.objects.select_related("usuario"), pk=lista_id)
         if not request.user.is_authenticated:
-            raise PermissionDenied("Se requiere autenticación.")
+            raise NotAuthenticated()
         if lista.usuario != request.user:
+            if not lista.publica:
+                raise NotFound()
             raise PermissionDenied("No tienes permiso para modificar esta lista.")
 
         elemento = get_object_or_404(ElementoLista, lista=lista, media_id=media_id)
@@ -263,10 +276,22 @@ class UsuarioListasListView(APIView):
 
     def get(self, request, username):
         target_user = get_object_or_404(Usuario, username=username)
-        if request.user.is_authenticated and request.user == target_user:
-            listas = Lista.objects.filter(usuario=target_user)
-        else:
-            listas = Lista.objects.filter(usuario=target_user, publica=True)
+        listas = listas_con_total().filter(usuario=target_user)
+        if not (request.user.is_authenticated and request.user == target_user):
+            listas = listas.filter(publica=True)
 
+        serializer = ListaSerializer(listas, many=True)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+
+class MisListasView(APIView):
+    """
+    GET: todas las listas del usuario autenticado (/api/usuarios/me/listas/).
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        listas = listas_con_total().filter(usuario=request.user)
         serializer = ListaSerializer(listas, many=True)
         return Response(serializer.data, status=status.HTTP_200_OK)
