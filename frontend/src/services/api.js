@@ -273,14 +273,17 @@ function buildQueryString(params = {}) {
  * Obtiene el listado de películas, series y anime desde /api/media/.
  * Admite filtros: { buscar, tipo, genero, anio, estado, cine, ordenar, page }
  */
+/**
+ * Obtiene el listado de películas, series y anime desde /api/media/.
+ * Filtros: { search, tipo, genero, anio, estado, cine, ordering, page }
+ * ordering acepta fecha_estreno, titulo y promedio_puntuacion, con "-" delante para orden descendente.
+ * Responde paginado: { count, next, previous, results }.
+ */
 export async function getMedia(params = {}) {
-  const qs = buildQueryString(params);
-  const response = await apiFetch(`/media/${qs}`);
-  if (!response.ok) {
-    const errorData = await response.json().catch(() => null);
-    throw new Error(formatApiError(errorData?.error, 'Error al obtener el catálogo de media.'));
-  }
-  return await response.json();
+  return leerJson(
+    `/media/${buildQueryString(params)}`,
+    'Error al obtener el catálogo de media.'
+  );
 }
 
 /**
@@ -299,19 +302,46 @@ export async function getMediaDetalle(id) {
  * Obtiene las funciones de cartelera desde /api/funciones/.
  * Admite filtros: { ciudad, cine, fecha, formato, page }
  */
+/**
+ * Obtiene las funciones de todos los cines desde /api/funciones/.
+ * Filtros: { ciudad, fecha } con fecha AAAA-MM-DD o "hoy" (por defecto, hoy).
+ * Responde sin paginar: { ultima_actualizacion, resultados }.
+ */
 export async function getFunciones(params = {}) {
-  const qs = buildQueryString(params);
-  const response = await apiFetch(`/funciones/${qs}`);
-  if (!response.ok) {
-    const errorData = await response.json().catch(() => null);
-    throw new Error(formatApiError(errorData?.error, 'Error al obtener las funciones en cartelera.'));
-  }
-  return await response.json();
+  return leerJson(
+    `/funciones/${buildQueryString(params)}`,
+    'Error al obtener las funciones en cartelera.'
+  );
+}
+
+/**
+ * Obtiene las funciones de un cine desde /api/cines/<id>/funciones/.
+ * Filtros: { fecha } con fecha AAAA-MM-DD o "hoy" (por defecto, hoy).
+ * Responde sin paginar: { ultima_actualizacion, resultados }.
+ */
+export async function getFuncionesDeCine(cineId, params = {}) {
+  return leerJson(
+    `/cines/${cineId}/funciones/${buildQueryString(params)}`,
+    'Error al obtener las funciones del cine.'
+  );
+}
+
+/**
+ * Obtiene las funciones de un título desde /api/media/<id>/funciones/.
+ * Filtros: { cine, fecha }. Sin fecha devuelve todas las fechas.
+ * Responde sin paginar: { ultima_actualizacion, resultados }.
+ */
+export async function getFuncionesDeMedia(mediaId, params = {}) {
+  return leerJson(
+    `/media/${mediaId}/funciones/${buildQueryString(params)}`,
+    'Error al obtener las funciones del título.'
+  );
 }
 
 /**
  * Obtiene el listado de cines registrados desde /api/cines/.
- * Admite filtro: { ciudad }
+ * Filtros: { ciudad } (se compara sin tildes ni mayúsculas, por ejemplo "valledupar").
+ * Responde paginado: { count, next, previous, results }.
  */
 export async function getCines(params = {}) {
   const qs = buildQueryString(params);
@@ -442,6 +472,15 @@ export async function getUsuarioListas(username) {
   if (!response.ok) {
     const errorData = await response.json().catch(() => null);
     throw new Error(formatApiError(errorData?.error, `Error al obtener las listas de @${username}.`));
+  }
+  return await response.json();
+}
+
+async function leerJson(endpoint, mensajeError) {
+  const response = await apiFetch(endpoint);
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => null);
+    throw new Error(formatApiError(errorData?.error, mensajeError));
   }
   return await response.json();
 }
