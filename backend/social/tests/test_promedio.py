@@ -59,7 +59,11 @@ class ResumenPuntuacionTests(TestCase):
 
 class PromedioEnElCatalogoTests(APITestCase):
     def setUp(self):
-        self.media = Media.objects.create(titulo="Con votos", tipo=Media.Tipo.PELICULA)
+        self.media = Media.objects.create(
+            titulo="Con votos",
+            tipo=Media.Tipo.PELICULA,
+            estado=Media.Estado.EN_CARTELERA,
+        )
         self.sin_votos = Media.objects.create(titulo="Sin votos", tipo=Media.Tipo.PELICULA)
         self.usuarios = crear_usuarios(3)
 

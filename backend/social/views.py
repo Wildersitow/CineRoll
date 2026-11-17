@@ -47,6 +47,11 @@ class MediaResenaListCreateView(ListCreateAPIView):
             self._media = get_object_or_404(Media, pk=self.kwargs["media_id"])
         return self._media
 
+    def get_serializer_context(self):
+        context = super().get_serializer_context()
+        context["media"] = self.get_media()
+        return context
+
     def get_queryset(self):
         return (
             Resena.objects.visibles()

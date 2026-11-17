@@ -10,8 +10,16 @@ from usuarios.models import Usuario
 
 class ResenasBase(APITestCase):
     def setUp(self):
-        self.media = Media.objects.create(titulo="Película A", tipo=Media.Tipo.PELICULA)
-        self.otra_media = Media.objects.create(titulo="Película B", tipo=Media.Tipo.PELICULA)
+        self.media = Media.objects.create(
+            titulo="Película A",
+            tipo=Media.Tipo.PELICULA,
+            estado=Media.Estado.EN_CARTELERA,
+        )
+        self.otra_media = Media.objects.create(
+            titulo="Película B",
+            tipo=Media.Tipo.PELICULA,
+            estado=Media.Estado.FUERA_CARTELERA,
+        )
         self.ana = Usuario.objects.create_user(username="ana", email="ana@example.com", password="x")
         self.beto = Usuario.objects.create_user(username="beto", email="beto@example.com", password="x")
         self.url_lista = reverse("media-resenas", kwargs={"media_id": self.media.pk})
@@ -45,6 +53,98 @@ class CrearResenaTests(ResenasBase):
 
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
         self.assertEqual(response.data["texto"], "")
+
+    def test_texto_normaliza_espacios_y_espacios_solos_quedan_vacios(self):
+        self.client.force_authenticate(self.ana)
+        response = self.client.post(
+            self.url_lista,
+            {"puntuacion": 5, "texto": "  Muy   buena \n película.  "},
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(response.data["texto"], "Muy buena película.")
+
+        self.client.force_authenticate(self.beto)
+        empty_response = self.client.post(
+            self.url_lista,
+            {"puntuacion": 6, "texto": " \n\t  "},
+        )
+
+        self.assertEqual(empty_response.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(empty_response.data["texto"], "")
+
+    def test_texto_admite_hasta_5000_caracteres_y_rechaza_mas(self):
+        self.client.force_authenticate(self.ana)
+        accepted = self.client.post(
+            self.url_lista,
+            {"puntuacion": 5, "texto": "x" * 5000},
+        )
+
+        self.assertEqual(accepted.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(len(accepted.data["texto"]), 5000)
+
+        self.client.force_authenticate(self.beto)
+        rejected = self.client.post(
+            self.url_lista,
+            {"puntuacion": 5, "texto": "x" * 5001},
+        )
+
+        self.assertEqual(rejected.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("texto", rejected.data["error"]["campos"])
+        self.assertEqual(Resena.objects.count(), 1)
+
+    def test_no_se_puede_reseñar_un_proximo_estreno(self):
+        self.client.force_authenticate(self.ana)
+        self.media.estado = Media.Estado.PROXIMO_ESTRENO
+        self.media.save(update_fields=["estado"])
+        response = self.client.post(self.url_lista, {"puntuacion": 8})
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn(
+            "próximos a estrenarse",
+            response.data["error"]["mensaje"],
+        )
+        self.assertFalse(Resena.objects.exists())
+
+    def test_no_se_puede_editar_resena_si_titulo_pasa_a_proximo_estreno(self):
+        review = Resena.objects.create(
+            usuario=self.ana,
+            media=self.media,
+            puntuacion=8,
+            texto="Original",
+        )
+        self.media.estado = Media.Estado.PROXIMO_ESTRENO
+        self.media.save(update_fields=["estado"])
+        self.client.force_authenticate(self.ana)
+
+        response = self.client.patch(
+            self.detalle(review),
+            {"texto": "Editada"},
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn(
+            "próximos a estrenarse",
+            response.data["error"]["mensaje"],
+        )
+        review.refresh_from_db()
+        self.assertEqual(review.texto, "Original")
+
+    def test_se_puede_reseñar_en_cartelera_y_fuera_de_cartelera(self):
+        self.client.force_authenticate(self.ana)
+        for title, state in (
+            (self.media, Media.Estado.EN_CARTELERA),
+            (self.otra_media, Media.Estado.FUERA_CARTELERA),
+        ):
+            with self.subTest(state=state):
+                title.estado = state
+                title.save(update_fields=["estado"])
+                response = self.client.post(
+                    reverse("media-resenas", kwargs={"media_id": title.pk}),
+                    {"puntuacion": 8},
+                )
+
+                self.assertEqual(response.status_code, status.HTTP_201_CREATED)
 
     def test_no_se_puede_suplantar_a_otro_usuario_ni_cambiar_de_titulo(self):
         self.client.force_authenticate(self.ana)
