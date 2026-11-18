@@ -15,7 +15,7 @@ from social.views import (
     ResenasListView,
     ResenaDetailView,
     ReportarResenaView,
-    SugerenciasPendientesView,
+    SugerenciasModeracionView,
     UsuarioListasListView,
 )
 
@@ -86,8 +86,13 @@ urlpatterns = [
         name="media-sugerencias",
     ),
     path(
+        "sugerencias/",
+        SugerenciasModeracionView.as_view(),
+        name="sugerencias-moderacion",
+    ),
+    path(
         "sugerencias/pendientes/",
-        SugerenciasPendientesView.as_view(),
+        SugerenciasModeracionView.as_view(),
         name="sugerencias-pendientes",
     ),
     path(

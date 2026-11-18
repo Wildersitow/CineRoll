@@ -432,16 +432,30 @@ class MediaSugerenciaListCreateView(ListCreateAPIView):
             )
 
 
-class SugerenciasPendientesView(ListAPIView):
-    """Listado administrativo de sugerencias pendientes."""
+class SugerenciasModeracionView(ListAPIView):
+    """Listado administrativo paginado de todas las sugerencias."""
 
     permission_classes = (EsAdministrador,)
     serializer_class = SugerenciaEdicionSerializer
 
     def get_queryset(self):
-        return SugerenciaEdicion.objects.select_related(
+        queryset = SugerenciaEdicion.objects.select_related(
             "usuario", "media", "revisado_por"
-        ).filter(estado=SugerenciaEdicion.Estado.PENDIENTE)
+        ).order_by("-fecha_creacion", "-id")
+
+        estado = self.request.query_params.get("estado")
+        if estado:
+            if estado not in SugerenciaEdicion.Estado.values:
+                raise ValidationError({"estado": "Estado de sugerencia no válido."})
+            queryset = queryset.filter(estado=estado)
+
+        media = self.request.query_params.get("media")
+        if media:
+            if not media.isdecimal() or int(media) < 1:
+                raise ValidationError({"media": "Debe ser un identificador de título válido."})
+            queryset = queryset.filter(media_id=int(media))
+
+        return queryset
 
 
 class AprobarSugerenciaView(APIView):

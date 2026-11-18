@@ -502,13 +502,18 @@ export async function crearSugerenciaEdicion(mediaId, sugerencia) {
 }
 
 /**
- * Obtiene las sugerencias pendientes de aprobación desde /api/sugerencias/pendientes/.
+ * Obtiene todas las sugerencias para moderación desde /api/sugerencias/.
+ * Filtros: { estado, media, page }.
  */
-export async function getSugerenciasPendientes(params = {}) {
+export async function getSugerenciasModeracion(params = {}) {
   return leerJson(
-    `/sugerencias/pendientes/${buildQueryString(params)}`,
-    'Error al obtener las sugerencias pendientes.'
+    `/sugerencias/${buildQueryString(params)}`,
+    'Error al obtener las sugerencias.'
   );
+}
+
+export async function getSugerenciasPendientes(params = {}) {
+  return getSugerenciasModeracion({ ...params, estado: 'pendiente' });
 }
 
 /**

@@ -235,3 +235,50 @@ class SugerenciasEdicionApiTests(APITestCase):
         sugerencia.refresh_from_db()
         self.assertEqual(sugerencia.estado, SugerenciaEdicion.Estado.RECHAZADA)
         self.assertEqual(sugerencia.motivo_rechazo, "No coincide con la ficha oficial")
+
+    def test_listado_general_solo_admin_y_filtra_estado_media(self):
+        otra_media = Media.objects.create(
+            titulo="Otra película",
+            tipo=Media.Tipo.PELICULA,
+            estado=Media.Estado.EN_CARTELERA,
+        )
+        pendiente = SugerenciaEdicion.objects.create(
+            usuario=self.usuario,
+            media=self.media,
+            campo="sinopsis",
+            valor_propuesto="Sinopsis pendiente",
+        )
+        aprobada = SugerenciaEdicion.objects.create(
+            usuario=self.usuario,
+            media=otra_media,
+            campo="titulo",
+            valor_propuesto="Título aprobado",
+            estado=SugerenciaEdicion.Estado.APROBADA,
+        )
+
+        self.client.force_authenticate(self.usuario)
+        visitante = self.client.get("/api/sugerencias/")
+        self.assertEqual(visitante.status_code, status.HTTP_403_FORBIDDEN)
+
+        self.client.force_authenticate(self.admin)
+        todas = self.client.get("/api/sugerencias/")
+        pendientes = self.client.get("/api/sugerencias/?estado=pendiente")
+        por_media = self.client.get(f"/api/sugerencias/?media={otra_media.pk}")
+
+        self.assertEqual(todas.status_code, status.HTTP_200_OK)
+        self.assertEqual(todas.data["count"], 2)
+        self.assertEqual(pendientes.data["count"], 1)
+        self.assertEqual(pendientes.data["results"][0]["id"], pendiente.pk)
+        self.assertEqual(por_media.data["count"], 1)
+        self.assertEqual(por_media.data["results"][0]["id"], aprobada.pk)
+
+    def test_filtros_invalidos_de_moderacion_usan_formato_unico(self):
+        self.client.force_authenticate(self.admin)
+
+        estado = self.client.get("/api/sugerencias/?estado=desconocido")
+        media = self.client.get("/api/sugerencias/?media=abc")
+
+        self.assertEqual(estado.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("estado", estado.data["error"]["campos"])
+        self.assertEqual(media.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("media", media.data["error"]["campos"])
