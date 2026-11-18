@@ -8,6 +8,7 @@ from social.models import (
     Seguimiento,
     SugerenciaEdicion,
 )
+from social.services import aprobar_sugerencia, rechazar_sugerencia
 
 
 class ElementoListaInline(admin.TabularInline):
@@ -78,6 +79,37 @@ class SugerenciaEdicionAdmin(admin.ModelAdmin):
     autocomplete_fields = ("usuario", "media", "revisado_por")
     list_select_related = ("usuario", "media", "revisado_por")
     date_hierarchy = "fecha_creacion"
+    actions = ("aprobar_sugerencias", "rechazar_sugerencias")
+
+    @admin.action(description="Aprobar sugerencias seleccionadas")
+    def aprobar_sugerencias(self, request, queryset):
+        aprobadas = 0
+        errores = 0
+        for sugerencia in queryset:
+            try:
+                aprobar_sugerencia(sugerencia, request.user)
+                aprobadas += 1
+            except Exception:
+                errores += 1
+        if aprobadas:
+            self.message_user(request, f"{aprobadas} sugerencia(s) aprobada(s).")
+        if errores:
+            self.message_user(request, f"{errores} sugerencia(s) no pudieron aprobarse.")
+
+    @admin.action(description="Rechazar sugerencias seleccionadas")
+    def rechazar_sugerencias(self, request, queryset):
+        rechazadas = 0
+        errores = 0
+        for sugerencia in queryset:
+            try:
+                rechazar_sugerencia(sugerencia, request.user)
+                rechazadas += 1
+            except Exception:
+                errores += 1
+        if rechazadas:
+            self.message_user(request, f"{rechazadas} sugerencia(s) rechazada(s).")
+        if errores:
+            self.message_user(request, f"{errores} sugerencia(s) no pudieron rechazarse.")
 
 
 @admin.register(Resena)

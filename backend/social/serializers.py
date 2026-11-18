@@ -1,7 +1,8 @@
 from rest_framework import serializers
 
 from media.models import Media
-from social.models import ElementoLista, Lista, ReporteResena, Resena
+from social.models import ElementoLista, Lista, ReporteResena, Resena, SugerenciaEdicion
+from social.services import CAMPOS_SUGERENCIA_EDITABLES
 
 
 MAX_RESENA_TEXTO_LENGTH = 5000
@@ -147,4 +148,72 @@ class ListaDetalleSerializer(ListaSerializer):
 class AgregarElementoSerializer(serializers.Serializer):
     media_id = serializers.IntegerField(required=True)
     orden = serializers.IntegerField(required=False, default=0)
+
+
+class SugerenciaEdicionSerializer(serializers.ModelSerializer):
+    usuario = serializers.CharField(source="usuario.username", read_only=True)
+    usuario_id = serializers.IntegerField(read_only=True)
+    media_id = serializers.IntegerField(read_only=True)
+    media_titulo = serializers.CharField(source="media.titulo", read_only=True)
+    revisado_por = serializers.CharField(
+        source="revisado_por.username", read_only=True, default=None
+    )
+
+    class Meta:
+        model = SugerenciaEdicion
+        fields = (
+            "id",
+            "usuario",
+            "usuario_id",
+            "media_id",
+            "media_titulo",
+            "campo",
+            "valor_propuesto",
+            "motivo",
+            "estado",
+            "motivo_rechazo",
+            "revisado_por",
+            "fecha_creacion",
+            "fecha_resolucion",
+        )
+        read_only_fields = (
+            "id",
+            "usuario",
+            "usuario_id",
+            "media_id",
+            "media_titulo",
+            "estado",
+            "motivo_rechazo",
+            "revisado_por",
+            "fecha_creacion",
+            "fecha_resolucion",
+        )
+
+    def validate_campo(self, value):
+        if value not in CAMPOS_SUGERENCIA_EDITABLES:
+            raise serializers.ValidationError(
+                "Campo no editable. Solo se permiten: "
+                + ", ".join(CAMPOS_SUGERENCIA_EDITABLES)
+                + "."
+            )
+        return value
+
+    def validate_valor_propuesto(self, value):
+        normalized = value.strip()
+        if not normalized:
+            raise serializers.ValidationError("El valor propuesto no puede estar vacío.")
+        if len(normalized) > 10000:
+            raise serializers.ValidationError(
+                "El valor propuesto no puede superar 10000 caracteres."
+            )
+        return normalized
+
+
+class ResolverSugerenciaSerializer(serializers.Serializer):
+    motivo_rechazo = serializers.CharField(
+        required=False,
+        allow_blank=True,
+        max_length=1000,
+        default="",
+    )
 

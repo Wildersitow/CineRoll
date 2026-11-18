@@ -22,7 +22,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from media.models import Media
-from social.models import ElementoLista, Lista, ReporteResena, Resena
+from social.models import ElementoLista, Lista, ReporteResena, Resena, SugerenciaEdicion
 from social.serializers import (
     AgregarElementoSerializer,
     ElementoListaSerializer,
@@ -30,9 +30,15 @@ from social.serializers import (
     ListaSerializer,
     ReporteResenaSerializer,
     ResenaSerializer,
+    ResolverSugerenciaSerializer,
+    SugerenciaEdicionSerializer,
 )
-from social.services import resumen_puntuacion
-from usuarios.permissions import EsAutorOLecturaPublica
+from social.services import (
+    aprobar_sugerencia,
+    rechazar_sugerencia,
+    resumen_puntuacion,
+)
+from usuarios.permissions import EsAdministrador, EsAutorOLecturaPublica
 
 Usuario = get_user_model()
 
@@ -383,3 +389,83 @@ class MisListasView(APIView):
         listas = listas_con_total().filter(usuario=request.user)
         serializer = ListaSerializer(listas, many=True)
         return Response(serializer.data, status=status.HTTP_200_OK)
+
+
+class MediaSugerenciaListCreateView(ListCreateAPIView):
+    """Crea sugerencias y permite listar las pendientes de un título."""
+
+    permission_classes = (IsAuthenticatedOrReadOnly,)
+    serializer_class = SugerenciaEdicionSerializer
+
+    def get_media(self):
+        if not hasattr(self, "_media"):
+            self._media = get_object_or_404(Media, pk=self.kwargs["media_id"])
+        return self._media
+
+    def get_serializer_context(self):
+        context = super().get_serializer_context()
+        context["media"] = self.get_media()
+        return context
+
+    def get_queryset(self):
+        queryset = SugerenciaEdicion.objects.select_related(
+            "usuario", "media", "revisado_por"
+        ).filter(media=self.get_media())
+        if not (self.request.user.is_authenticated and self.request.user.is_staff):
+            queryset = queryset.filter(usuario=self.request.user) if self.request.user.is_authenticated else queryset.none()
+        estado = self.request.query_params.get("estado")
+        if estado:
+            if estado not in SugerenciaEdicion.Estado.values:
+                raise ValidationError({"estado": "Estado de sugerencia no válido."})
+            queryset = queryset.filter(estado=estado)
+        return queryset
+
+    def get_permissions(self):
+        if self.request.method == "POST":
+            return [IsAuthenticated()]
+        return super().get_permissions()
+
+    def perform_create(self, serializer):
+        serializer.save(usuario=self.request.user, media=self.get_media())
+
+
+class SugerenciasPendientesView(ListAPIView):
+    """Listado administrativo de sugerencias pendientes."""
+
+    permission_classes = (EsAdministrador,)
+    serializer_class = SugerenciaEdicionSerializer
+
+    def get_queryset(self):
+        return SugerenciaEdicion.objects.select_related(
+            "usuario", "media", "revisado_por"
+        ).filter(estado=SugerenciaEdicion.Estado.PENDIENTE)
+
+
+class AprobarSugerenciaView(APIView):
+    permission_classes = (EsAdministrador,)
+
+    def post(self, request, pk):
+        sugerencia = get_object_or_404(
+            SugerenciaEdicion.objects.select_related("usuario", "media", "revisado_por"),
+            pk=pk,
+        )
+        sugerencia = aprobar_sugerencia(sugerencia, request.user)
+        return Response(SugerenciaEdicionSerializer(sugerencia).data)
+
+
+class RechazarSugerenciaView(APIView):
+    permission_classes = (EsAdministrador,)
+
+    def post(self, request, pk):
+        sugerencia = get_object_or_404(
+            SugerenciaEdicion.objects.select_related("usuario", "media", "revisado_por"),
+            pk=pk,
+        )
+        serializer = ResolverSugerenciaSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        sugerencia = rechazar_sugerencia(
+            sugerencia,
+            request.user,
+            serializer.validated_data["motivo_rechazo"],
+        )
+        return Response(SugerenciaEdicionSerializer(sugerencia).data)

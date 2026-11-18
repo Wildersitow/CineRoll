@@ -476,6 +476,70 @@ export async function getUsuarioListas(username) {
   return await response.json();
 }
 
+/**
+ * Obtiene las sugerencias de edición para un título desde /api/media/<id>/sugerencias/.
+ */
+export async function getSugerenciasMedia(mediaId, params = {}) {
+  return leerJson(
+    `/media/${mediaId}/sugerencias/${buildQueryString(params)}`,
+    'Error al obtener las sugerencias de edición.'
+  );
+}
+
+/**
+ * Crea una nueva sugerencia de edición para un título en /api/media/<id>/sugerencias/.
+ */
+export async function crearSugerenciaEdicion(mediaId, sugerencia) {
+  const response = await apiFetch(`/media/${mediaId}/sugerencias/`, {
+    method: 'POST',
+    body: JSON.stringify(sugerencia),
+  });
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => null);
+    throw new Error(formatApiError(errorData?.error, 'Error al enviar la sugerencia de edición.'));
+  }
+  return await response.json();
+}
+
+/**
+ * Obtiene las sugerencias pendientes de aprobación desde /api/sugerencias/pendientes/.
+ */
+export async function getSugerenciasPendientes(params = {}) {
+  return leerJson(
+    `/sugerencias/pendientes/${buildQueryString(params)}`,
+    'Error al obtener las sugerencias pendientes.'
+  );
+}
+
+/**
+ * Aprueba una sugerencia en /api/sugerencias/<id>/aprobar/.
+ */
+export async function aprobarSugerencia(sugerenciaId) {
+  const response = await apiFetch(`/sugerencias/${sugerenciaId}/aprobar/`, {
+    method: 'POST',
+  });
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => null);
+    throw new Error(formatApiError(errorData?.error, 'Error al aprobar la sugerencia.'));
+  }
+  return await response.json();
+}
+
+/**
+ * Rechaza una sugerencia en /api/sugerencias/<id>/rechazar/.
+ */
+export async function rechazarSugerencia(sugerenciaId, motivoRechazo = '') {
+  const response = await apiFetch(`/sugerencias/${sugerenciaId}/rechazar/`, {
+    method: 'POST',
+    body: JSON.stringify({ motivo_rechazo: motivoRechazo }),
+  });
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => null);
+    throw new Error(formatApiError(errorData?.error, 'Error al rechazar la sugerencia.'));
+  }
+  return await response.json();
+}
+
 async function leerJson(endpoint, mensajeError) {
   const response = await apiFetch(endpoint);
   if (!response.ok) {
