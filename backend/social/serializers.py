@@ -3,7 +3,7 @@ from rest_framework import serializers
 from media.models import Media
 from media.serializers import MediaWriteSerializer
 from social.models import ElementoLista, Lista, ReporteResena, Resena, SugerenciaEdicion
-from social.services import CAMPOS_SUGERENCIA_EDITABLES
+from social.sugerencias import CAMPOS_SUGERENCIA_EDITABLES
 
 
 MAX_RESENA_TEXTO_LENGTH = 5000
@@ -170,6 +170,7 @@ class SugerenciaEdicionSerializer(serializers.ModelSerializer):
             "media_titulo",
             "campo",
             "valor_propuesto",
+            "valor_anterior",
             "motivo",
             "estado",
             "motivo_rechazo",
@@ -184,6 +185,7 @@ class SugerenciaEdicionSerializer(serializers.ModelSerializer):
             "media_id",
             "media_titulo",
             "estado",
+            "valor_anterior",
             "motivo_rechazo",
             "revisado_por",
             "fecha_creacion",
@@ -254,9 +256,9 @@ class SugerenciaEdicionSerializer(serializers.ModelSerializer):
 
 class ResolverSugerenciaSerializer(serializers.Serializer):
     motivo_rechazo = serializers.CharField(
-        required=False,
-        allow_blank=True,
+        required=True,
+        allow_blank=False,
+        trim_whitespace=True,
         max_length=1000,
-        default="",
     )
 

@@ -33,11 +33,8 @@ from social.serializers import (
     ResolverSugerenciaSerializer,
     SugerenciaEdicionSerializer,
 )
-from social.services import (
-    aprobar_sugerencia,
-    rechazar_sugerencia,
-    resumen_puntuacion,
-)
+from social.services import resumen_puntuacion
+from social.sugerencias import aprobar_sugerencia, rechazar_sugerencia
 from usuarios.permissions import EsAdministrador, EsAutorOLecturaPublica
 
 Usuario = get_user_model()
@@ -472,6 +469,6 @@ class RechazarSugerenciaView(APIView):
         sugerencia = rechazar_sugerencia(
             sugerencia,
             request.user,
-            serializer.validated_data["motivo_rechazo"],
+            motivo_rechazo=serializer.validated_data["motivo_rechazo"],
         )
         return Response(SugerenciaEdicionSerializer(sugerencia).data)

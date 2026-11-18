@@ -217,6 +217,11 @@ class SugerenciaEdicion(models.Model):
     valor_propuesto = models.TextField(
         help_text="Nuevo valor sugerido para el campo indicado."
     )
+    valor_anterior = models.TextField(
+        blank=True,
+        default="",
+        help_text="Valor que tenía el campo antes de aprobar la sugerencia.",
+    )
     motivo = models.TextField(
         blank=True,
         help_text="Explicación o fuente que justifica la corrección.",

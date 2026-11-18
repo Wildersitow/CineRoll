@@ -1,4 +1,3 @@
-from django.db import transaction
 from django.db.models import (
     Avg,
     Count,
@@ -10,12 +9,12 @@ from django.db.models import (
     Subquery,
 )
 from django.db.models.functions import Coalesce
-from django.utils import timezone
-from rest_framework.exceptions import ValidationError
 
 from media.models import Media
-from social.models import PUNTUACION_MAXIMA, PUNTUACION_MINIMA, Resena, SugerenciaEdicion
+from social.models import PUNTUACION_MAXIMA, PUNTUACION_MINIMA, Resena
 
+
+# # 
 
 def resumen_puntuacion(media_id):
     """Agrega el promedio, total y distribución de notas sin reseñas ocultas.
@@ -75,88 +74,3 @@ def anotar_puntuacion(queryset):
             0,
         ),
     )
-
-
-CAMPOS_SUGERENCIA_EDITABLES = (
-    "titulo",
-    "titulo_original",
-    "sinopsis",
-    "fecha_estreno",
-    "duracion",
-    "poster_url",
-    "trailer_url",
-)
-
-
-def aprobar_sugerencia(sugerencia, administrador):
-    """Aplica una sugerencia pendiente a Media y deja auditada la revisión."""
-    if sugerencia.estado != SugerenciaEdicion.Estado.PENDIENTE:
-        raise ValidationError({"detail": "Solo se pueden aprobar sugerencias pendientes."})
-
-    with transaction.atomic():
-        sugerencia = SugerenciaEdicion.objects.select_for_update().select_related("media").get(pk=sugerencia.pk)
-        if sugerencia.estado != SugerenciaEdicion.Estado.PENDIENTE:
-            raise ValidationError({"detail": "Solo se pueden aprobar sugerencias pendientes."})
-
-        from django.core.exceptions import ValidationError as DjangoValidationError
-
-        media = sugerencia.media
-        campo = sugerencia.campo
-
-        if campo not in CAMPOS_SUGERENCIA_EDITABLES:
-            raise ValidationError({"campo": ["Este campo no admite sugerencias de edición."]})
-
-        valor = sugerencia.valor_propuesto
-        if campo == "fecha_estreno":
-            from datetime import date
-
-            try:
-                valor = date.fromisoformat(valor)
-            except (TypeError, ValueError) as exc:
-                raise ValidationError({"valor_propuesto": ["Debe ser una fecha válida."]}) from exc
-        elif campo == "duracion":
-            try:
-                valor = int(valor)
-            except (TypeError, ValueError) as exc:
-                raise ValidationError({"valor_propuesto": ["Debe ser un número entero válido."]}) from exc
-            if valor < 1:
-                raise ValidationError({"valor_propuesto": ["La duración debe ser mayor que cero."]})
-
-        setattr(media, campo, valor)
-        try:
-            media.full_clean(exclude=["tipo", "estado", "generos", "personas"])
-        except DjangoValidationError as exc:
-            campos = {nombre: mensajes for nombre, mensajes in exc.message_dict.items()}
-            raise ValidationError(campos) from exc
-
-        media.save(update_fields=[campo])
-        sugerencia.estado = SugerenciaEdicion.Estado.APROBADA
-        sugerencia.revisado_por = administrador
-        sugerencia.fecha_resolucion = timezone.now()
-        sugerencia.save(update_fields=["estado", "revisado_por", "fecha_resolucion"])
-
-    return sugerencia
-
-
-def rechazar_sugerencia(sugerencia, administrador, motivo_rechazo=""):
-    """Marca una sugerencia pendiente como rechazada."""
-    if sugerencia.estado != SugerenciaEdicion.Estado.PENDIENTE:
-        raise ValidationError({"detail": "Solo se pueden rechazar sugerencias pendientes."})
-
-    with transaction.atomic():
-        sugerencia = SugerenciaEdicion.objects.select_for_update().get(pk=sugerencia.pk)
-        if sugerencia.estado != SugerenciaEdicion.Estado.PENDIENTE:
-            raise ValidationError({"detail": "Solo se pueden rechazar sugerencias pendientes."})
-        sugerencia.estado = SugerenciaEdicion.Estado.RECHAZADA
-        sugerencia.revisado_por = administrador
-        sugerencia.motivo_rechazo = motivo_rechazo.strip()
-        sugerencia.fecha_resolucion = timezone.now()
-        sugerencia.save(
-            update_fields=[
-                "estado",
-                "revisado_por",
-                "motivo_rechazo",
-                "fecha_resolucion",
-            ]
-        )
-    return sugerencia

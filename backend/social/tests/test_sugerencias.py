@@ -179,3 +179,59 @@ class SugerenciasEdicionApiTests(APITestCase):
         self.assertIn("count", response.data)
         self.assertEqual(response.data["count"], 1)
         self.assertEqual(response.data["results"][0]["motivo_rechazo"], "Fuente insuficiente")
+
+    def test_aprobacion_guarda_valor_anterior_y_no_se_puede_aprobar_dos_veces(self):
+        sugerencia = SugerenciaEdicion.objects.create(
+            usuario=self.usuario,
+            media=self.media,
+            campo="titulo",
+            valor_propuesto="Título aprobado",
+        )
+        self.client.force_authenticate(self.admin)
+
+        aprobada = self.client.post(
+            reverse("sugerencia-aprobar", kwargs={"pk": sugerencia.pk}),
+            format="json",
+        )
+        repetida = self.client.post(
+            reverse("sugerencia-aprobar", kwargs={"pk": sugerencia.pk}),
+            format="json",
+        )
+
+        self.assertEqual(aprobada.status_code, status.HTTP_200_OK)
+        self.assertEqual(repetida.status_code, status.HTTP_400_BAD_REQUEST)
+        sugerencia.refresh_from_db()
+        self.media.refresh_from_db()
+        self.assertEqual(sugerencia.valor_anterior, "Título original")
+        self.assertEqual(self.media.titulo, "Título aprobado")
+
+    def test_rechazo_exige_motivo_y_resolucion_impide_segundo_rechazo(self):
+        sugerencia = SugerenciaEdicion.objects.create(
+            usuario=self.usuario,
+            media=self.media,
+            campo="sinopsis",
+            valor_propuesto="Sinopsis propuesta",
+        )
+        self.client.force_authenticate(self.admin)
+
+        sin_motivo = self.client.post(
+            reverse("sugerencia-rechazar", kwargs={"pk": sugerencia.pk}),
+            {"motivo_rechazo": "  "},
+            format="json",
+        )
+        rechazada = self.client.post(
+            reverse("sugerencia-rechazar", kwargs={"pk": sugerencia.pk}),
+            {"motivo_rechazo": "No coincide con la ficha oficial"},
+            format="json",
+        )
+        segunda_resolucion = self.client.post(
+            reverse("sugerencia-rechazar", kwargs={"pk": sugerencia.pk}),
+            {"motivo_rechazo": "Intento duplicado"},
+            format="json",
+        )
+
+        self.assertEqual(rechazada.status_code, status.HTTP_200_OK)
+        self.assertEqual(sin_motivo.status_code, status.HTTP_400_BAD_REQUEST)
+        sugerencia.refresh_from_db()
+        self.assertEqual(sugerencia.estado, SugerenciaEdicion.Estado.RECHAZADA)
+        self.assertEqual(sugerencia.motivo_rechazo, "No coincide con la ficha oficial")

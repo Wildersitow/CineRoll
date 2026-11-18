@@ -8,7 +8,7 @@ from social.models import (
     Seguimiento,
     SugerenciaEdicion,
 )
-from social.services import aprobar_sugerencia, rechazar_sugerencia
+from social.sugerencias import aprobar_sugerencia, rechazar_sugerencia
 
 
 class ElementoListaInline(admin.TabularInline):
@@ -102,7 +102,7 @@ class SugerenciaEdicionAdmin(admin.ModelAdmin):
         errores = 0
         for sugerencia in queryset:
             try:
-                rechazar_sugerencia(sugerencia, request.user)
+                rechazar_sugerencia(sugerencia, request.user, motivo_rechazo="Rechazada desde administración.")
                 rechazadas += 1
             except Exception:
                 errores += 1
