@@ -110,3 +110,72 @@ class SugerenciasEdicionApiTests(APITestCase):
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(response.data["count"], 0)
+
+    def test_no_permite_valor_igual_al_actual(self):
+        self.client.force_authenticate(self.usuario)
+        response = self.client.post(
+            self.url,
+            {"campo": "titulo", "valor_propuesto": "Título original"},
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("valor_propuesto", response.data["error"]["campos"])
+
+    def test_reutiliza_validaciones_de_media(self):
+        self.client.force_authenticate(self.usuario)
+
+        duracion = self.client.post(
+            self.url,
+            {"campo": "duracion", "valor_propuesto": 0},
+            format="json",
+        )
+        self.assertEqual(duracion.status_code, status.HTTP_400_BAD_REQUEST)
+
+        fecha = self.client.post(
+            self.url,
+            {"campo": "fecha_estreno", "valor_propuesto": "fecha-invalida"},
+            format="json",
+        )
+        self.assertEqual(fecha.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_no_permite_dos_sugerencias_pendientes_del_mismo_usuario_titulo_y_campo(self):
+        self.client.force_authenticate(self.usuario)
+        primera = self.client.post(
+            self.url,
+            {"campo": "sinopsis", "valor_propuesto": "Primera sinopsis"},
+            format="json",
+        )
+        repetida = self.client.post(
+            self.url,
+            {"campo": "sinopsis", "valor_propuesto": "Otra sinopsis"},
+            format="json",
+        )
+        self.assertEqual(primera.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(repetida.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(SugerenciaEdicion.objects.count(), 1)
+
+    def test_listado_propio_esta_paginado_filtra_estado_y_oculta_otras(self):
+        otra = Usuario.objects.create_user(username="otra", password="x")
+        propia = SugerenciaEdicion.objects.create(
+            usuario=self.usuario,
+            media=self.media,
+            campo="sinopsis",
+            valor_propuesto="Sinopsis propia",
+        )
+        SugerenciaEdicion.objects.create(
+            usuario=otra,
+            media=self.media,
+            campo="titulo",
+            valor_propuesto="Título ajeno",
+        )
+        propia.estado = SugerenciaEdicion.Estado.RECHAZADA
+        propia.motivo_rechazo = "Fuente insuficiente"
+        propia.save(update_fields=["estado", "motivo_rechazo"])
+
+        self.client.force_authenticate(self.usuario)
+        response = self.client.get("/api/usuarios/me/sugerencias/?estado=rechazada")
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertIn("count", response.data)
+        self.assertEqual(response.data["count"], 1)
+        self.assertEqual(response.data["results"][0]["motivo_rechazo"], "Fuente insuficiente")

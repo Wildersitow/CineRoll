@@ -540,6 +540,17 @@ export async function rechazarSugerencia(sugerenciaId, motivoRechazo = '') {
   return await response.json();
 }
 
+/**
+ * Obtiene tus sugerencias de edición desde /api/usuarios/me/sugerencias/.
+ * Admite filtros: { tipo, estado, page }
+ */
+export async function getMisSugerencias(params = {}) {
+  return leerJson(
+    `/usuarios/me/sugerencias/${buildQueryString(params)}`,
+    'Error al obtener tus sugerencias de edición.'
+  );
+}
+
 async function leerJson(endpoint, mensajeError) {
   const response = await apiFetch(endpoint);
   if (!response.ok) {

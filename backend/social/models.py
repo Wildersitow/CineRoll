@@ -250,6 +250,13 @@ class SugerenciaEdicion(models.Model):
                 fields=["media", "estado"], name="social_sugerencia_med_est_idx"
             ),
         ]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["usuario", "media", "campo"],
+                condition=models.Q(estado="pendiente"),
+                name="social_sugerencia_pendiente_unica",
+            ),
+        ]
 
     def __str__(self):
         return f"Sugerencia de {self.usuario} sobre {self.media} ({self.campo})"

@@ -1,6 +1,7 @@
 from rest_framework import serializers
 
 from media.models import Media
+from media.serializers import MediaWriteSerializer
 from social.models import ElementoLista, Lista, ReporteResena, Resena, SugerenciaEdicion
 from social.services import CAMPOS_SUGERENCIA_EDITABLES
 
@@ -199,14 +200,56 @@ class SugerenciaEdicionSerializer(serializers.ModelSerializer):
         return value
 
     def validate_valor_propuesto(self, value):
-        normalized = value.strip()
-        if not normalized:
-            raise serializers.ValidationError("El valor propuesto no puede estar vacío.")
-        if len(normalized) > 10000:
-            raise serializers.ValidationError(
-                "El valor propuesto no puede superar 10000 caracteres."
-            )
+        normalized = str(value).strip()
         return normalized
+
+    def validate(self, attrs):
+        if self.instance is not None:
+            return attrs
+
+        campo = attrs.get("campo")
+        valor = attrs.get("valor_propuesto")
+        media = self.context.get("media")
+        request = self.context.get("request")
+
+        if not campo or valor is None or media is None:
+            return attrs
+
+        media_serializer = MediaWriteSerializer(
+            media,
+            data={campo: valor},
+            partial=True,
+        )
+        if not media_serializer.is_valid():
+            raise serializers.ValidationError(
+                {"valor_propuesto": media_serializer.errors.get(campo, ["Valor no válido."])}
+            )
+
+        valor_validado = media_serializer.validated_data[campo]
+        valor_actual = getattr(media, campo)
+
+        if valor_validado == valor_actual:
+            raise serializers.ValidationError(
+                {"valor_propuesto": ["El valor propuesto debe ser diferente al valor actual."]}
+            )
+
+        if hasattr(valor_validado, "isoformat"):
+            valor_validado = valor_validado.isoformat()
+        attrs["valor_propuesto"] = str(valor_validado)
+
+        if request and request.user.is_authenticated:
+            existe_pendiente = SugerenciaEdicion.objects.filter(
+                usuario=request.user,
+                media=media,
+                campo=campo,
+                estado=SugerenciaEdicion.Estado.PENDIENTE,
+            ).exists()
+            if existe_pendiente:
+                raise serializers.ValidationError(
+                    {"detail": "Ya existe una sugerencia pendiente para este título y campo."}
+                )
+
+        return attrs
 
 
 class ResolverSugerenciaSerializer(serializers.Serializer):

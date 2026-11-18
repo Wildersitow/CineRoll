@@ -10,8 +10,8 @@ from rest_framework_simplejwt.exceptions import InvalidToken, TokenError
 from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework_simplejwt.views import TokenObtainPairView
 
-from social.models import Resena
-from social.serializers import ResenaSerializer
+from social.models import Resena, SugerenciaEdicion
+from social.serializers import ResenaSerializer, SugerenciaEdicionSerializer
 
 from .serializers import (
     CambioPasswordSerializer,
@@ -211,3 +211,51 @@ class MisResenasView(ListAPIView):
             .select_related("media", "usuario")
             .order_by("-fecha_creacion", "-id")
         )
+
+
+class SugerenciaEdicionView(APIView):
+    """
+    Endpoint para crear y listar sugerencias de edición de perfil.
+    POST /api/usuarios/me/sugerencias/ para crear una sugerencia.
+    GET /api/usuarios/me/sugerencias/ para listar las sugerencias del usuario.
+    """
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        serializer = SugerenciaEdicionSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        sugerencia = serializer.save(usuario=request.user)
+        return Response(
+            {
+                "mensaje": "Sugerencia de edición enviada exitosamente.",
+                "sugerencia": SugerenciaEdicionSerializer(sugerencia).data,
+            },
+            status=status.HTTP_201_CREATED,
+        )
+
+    def get(self, request):
+        sugerencias = SugerenciaEdicion.objects.filter(usuario=request.user)
+        serializer = SugerenciaEdicionSerializer(sugerencias, many=True)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+
+class MisSugerenciasView(ListAPIView):
+    """Sugerencias propias del usuario autenticado (/api/usuarios/me/sugerencias/)."""
+
+    serializer_class = SugerenciaEdicionSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        queryset = (
+            SugerenciaEdicion.objects.filter(usuario=self.request.user)
+            .select_related("usuario", "media", "revisado_por")
+            .order_by("-fecha_creacion", "-id")
+        )
+
+        estado = self.request.query_params.get("estado")
+        if estado:
+            if estado not in SugerenciaEdicion.Estado.values:
+                raise ValidationError({"estado": "Estado de sugerencia no válido."})
+            queryset = queryset.filter(estado=estado)
+
+        return queryset

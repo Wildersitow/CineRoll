@@ -55,6 +55,7 @@ class MediaWriteSerializer(serializers.ModelSerializer):
 	generos = serializers.PrimaryKeyRelatedField(
 		many=True, queryset=Genero.objects.all(), required=False
 	)
+	duracion = serializers.IntegerField(min_value=1, required=False, allow_null=True)  # Asegura que la duración sea positiva
 
 	class Meta:
 		model = Media
@@ -71,6 +72,11 @@ class MediaWriteSerializer(serializers.ModelSerializer):
 			"estado",
 			"generos",
 		)
+
+	def validate_duracion(self, value):
+		if value is not None and value < 1:
+			raise serializers.ValidationError("La duración debe ser mayor que cero.")
+		return value
 
 
 class MediaListSerializer(serializers.ModelSerializer):

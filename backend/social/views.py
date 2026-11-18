@@ -426,7 +426,13 @@ class MediaSugerenciaListCreateView(ListCreateAPIView):
         return super().get_permissions()
 
     def perform_create(self, serializer):
-        serializer.save(usuario=self.request.user, media=self.get_media())
+        try:
+            with transaction.atomic():
+                serializer.save(usuario=self.request.user, media=self.get_media())
+        except IntegrityError:
+            raise ValidationError(
+                {"detail": "Ya existe una sugerencia pendiente para este título y campo."}
+            )
 
 
 class SugerenciasPendientesView(ListAPIView):

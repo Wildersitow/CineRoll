@@ -8,6 +8,7 @@ from .views import (
     LoginView,
     LogoutView,
     MisResenasView,
+    MisSugerenciasView,
     PerfilPublicoView,
     RegistroView,
     UsuarioResenasPublicasView,
@@ -26,6 +27,7 @@ urlpatterns = [
     path("usuarios/me/clave/", CambiarPasswordView.as_view(), name="usuarios_me_clave"),
     path("usuarios/me/password/", CambiarPasswordView.as_view(), name="usuarios_me_password"),
     path("usuarios/me/resenas/", MisResenasView.as_view(), name="usuarios_me_resenas"),
+    path("usuarios/me/sugerencias/", MisSugerenciasView.as_view(), name="usuarios_me_sugerencias"),
 
     # Perfil público y reseñas de otros usuarios
     path("usuarios/<int:pk>/", PerfilPublicoView.as_view(), name="usuarios_perfil_publico_id"),
