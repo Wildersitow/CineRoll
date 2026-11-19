@@ -1,0 +1,40 @@
+{% extends "admin/base_site.html" %}
+{% load i18n %}
+
+{% block content %}
+  <div id="content-main">
+    <h1>{{ title }}</h1>
+    <p>Indica el motivo que se guardará en todas las sugerencias seleccionadas.</p>
+
+    <ul>
+      {% for sugerencia in sugerencias %}
+        <li>
+          {{ sugerencia.media }} — {{ sugerencia.campo }}:
+          <strong>{{ sugerencia.valor_propuesto }}</strong>
+        </li>
+      {% endfor %}
+    </ul>
+
+    <form method="post">
+      {% csrf_token %}
+      <input type="hidden" name="action" value="rechazar_sugerencias">
+      <input type="hidden" name="confirmar_rechazo" value="1">
+      {% for hidden in form.hidden_fields %}
+        {{ hidden }}
+      {% endfor %}
+
+      {{ form.motivo_rechazo.errors }}
+      <p>
+        <label for="{{ form.motivo_rechazo.id_for_label }}">
+          {{ form.motivo_rechazo.label }}:
+        </label>
+        {{ form.motivo_rechazo }}
+      </p>
+
+      <div class="submit-row">
+        <input type="submit" class="default" value="Rechazar sugerencias">
+        <a href="." class="button cancel-link">Cancelar</a>
+      </div>
+    </form>
+  </div>
+{% endblock %}
