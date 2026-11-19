@@ -94,6 +94,7 @@ export async function refreshAccessToken() {
   }
 
   clearStoredAuth();
+  notifySessionExpired();
   return null;
 }
 
@@ -133,11 +134,16 @@ export async function apiFetch(endpoint, options = {}) {
       } catch {
         throw new Error('No se pudo conectar con el servidor Django.');
       }
+      if (response.status === 401) {
+        clearStoredAuth();
+        notifySessionExpired();
+      }
     } else {
       clearStoredAuth();
     }
   } else if (response.status === 401) {
     clearStoredAuth();
+    notifySessionExpired();
   }
 
   return response;
@@ -563,4 +569,13 @@ async function leerJson(endpoint, mensajeError) {
     throw new Error(formatApiError(errorData?.error, mensajeError));
   }
   return await response.json();
+}
+
+/**
+ * Notifica que la sesión ha expirado, disparando un evento global.
+ */
+export function notifySessionExpired() {
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('cineroll:session-expired'))
+  }
 }

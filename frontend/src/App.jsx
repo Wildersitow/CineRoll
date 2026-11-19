@@ -12,10 +12,15 @@ import {
 import AuthCard from './components/AuthCard'
 import ProfileView from './components/ProfileView'
 import ToastNotification from './components/ToastNotification'
+import { Navigate, Route, Routes, useNavigate } from 'react-router-dom'
+import MainLayout from './components/MainLayout'
+import MarcadorRuta from './components/MarcadorRuta'
+import RutaProtegida from './components/RutaProtegida'
 
 const MIN_PASSWORD_LENGTH = 8
 
 export default function App() {
+  const navigate = useNavigate()
   const [currentUser, setCurrentUser] = useState(() => getStoredAuth())
   const [activeTab, setActiveTab] = useState('login')
   const [toastNotice, setToastNotice] = useState('')
@@ -57,6 +62,19 @@ export default function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
+  useEffect(() => {
+    const manejarSesionVencida = () => {
+      setCurrentUser(null)
+      clearStoredAuth()
+      setAuthError('Tu sesión venció. Inicia sesión nuevamente.')
+      setActiveTab('login')
+      navigate('/acceso', { replace: true })
+    }
+
+    window.addEventListener('cineroll:session-expired', manejarSesionVencida)
+    return () => window.removeEventListener('cineroll:session-expired', manejarSesionVencida)
+  }, [navigate])
+
   const resetFormInputs = () => {
     setLoginEmail('')
     setLoginPassword('')
@@ -96,6 +114,7 @@ export default function App() {
       resetFormInputs()
       setCurrentUser(data)
       showToast(`¡Bienvenido de vuelta, ${data.nombre || data.username}!`)
+      navigate('/perfil', { replace: true })
     } catch (error) {
       setAuthError(error.message || 'Error en las credenciales.')
     } finally {
@@ -114,6 +133,7 @@ export default function App() {
       setActiveTab('login')
       setCurrentUser(null)
       setIsLoading(false)
+      navigate('/acceso', { replace: true })
       showToast('Sesión cerrada de forma segura.')
     }
   }
@@ -162,6 +182,7 @@ export default function App() {
       resetFormInputs()
       setCurrentUser(data)
       showToast(`¡Cuenta creada con éxito! Bienvenido a CineRoll, ${data.nombre || data.username}.`)
+      navigate('/perfil', { replace: true })
     } catch (error) {
       setAuthError(error.message || 'Error al crear la cuenta.')
     } finally {
@@ -215,51 +236,83 @@ export default function App() {
   return (
     <>
       <ToastNotification message={toastNotice} />
-      {currentUser ? (
-        <ProfileView
-          currentUser={currentUser}
-          showChangePasswordModal={showChangePasswordModal}
-          setShowChangePasswordModal={setShowChangePasswordModal}
-          currentPasswordInput={currentPasswordInput}
-          setCurrentPasswordInput={setCurrentPasswordInput}
-          newPasswordInput={newPasswordInput}
-          setNewPasswordInput={setNewPasswordInput}
-          confirmNewPasswordInput={confirmNewPasswordInput}
-          setConfirmNewPasswordInput={setConfirmNewPasswordInput}
-          passwordChangeStatus={passwordChangeStatus}
-          onChangePasswordSubmit={handleChangePasswordSubmit}
-          onResetPasswordInputs={resetPasswordChangeInputs}
-          onLogout={handleLogout}
-          isLoading={isLoading}
-        />
-      ) : (
-        <AuthCard
-          activeTab={activeTab}
-          onSwitchTab={switchTab}
-          authError={authError}
-          isLoading={isLoading}
-          loginEmail={loginEmail}
-          setLoginEmail={setLoginEmail}
-          loginPassword={loginPassword}
-          setLoginPassword={setLoginPassword}
-          rememberMe={rememberMe}
-          setRememberMe={setRememberMe}
-          onLoginSubmit={handleLoginSubmit}
-          registerUsername={registerUsername}
-          setRegisterUsername={setRegisterUsername}
-          registerName={registerName}
-          setRegisterName={setRegisterName}
-          registerEmail={registerEmail}
-          setRegisterEmail={setRegisterEmail}
-          registerPassword={registerPassword}
-          setRegisterPassword={setRegisterPassword}
-          registerConfirmPassword={registerConfirmPassword}
-          setRegisterConfirmPassword={setRegisterConfirmPassword}
-          agreeTerms={agreeTerms}
-          setAgreeTerms={setAgreeTerms}
-          onRegisterSubmit={handleRegisterSubmit}
-        />
-      )}
+      <Routes>
+        <Route element={<MainLayout currentUser={currentUser} onLogout={handleLogout} isLoading={isLoading} />}>
+          <Route
+            index
+            element={<MarcadorRuta titulo="Catálogo" descripcion="Listado de películas, series y anime." />}
+          />
+          <Route
+            path="acceso"
+            element={
+              currentUser ? (
+                <Navigate to="/perfil" replace />
+              ) : (
+                <AuthCard
+                  activeTab={activeTab}
+                  onSwitchTab={switchTab}
+                  authError={authError}
+                  isLoading={isLoading}
+                  loginEmail={loginEmail}
+                  setLoginEmail={setLoginEmail}
+                  loginPassword={loginPassword}
+                  setLoginPassword={setLoginPassword}
+                  rememberMe={rememberMe}
+                  setRememberMe={setRememberMe}
+                  onLoginSubmit={handleLoginSubmit}
+                  registerUsername={registerUsername}
+                  setRegisterUsername={setRegisterUsername}
+                  registerName={registerName}
+                  setRegisterName={setRegisterName}
+                  registerEmail={registerEmail}
+                  setRegisterEmail={setRegisterEmail}
+                  registerPassword={registerPassword}
+                  setRegisterPassword={setRegisterPassword}
+                  registerConfirmPassword={registerConfirmPassword}
+                  setRegisterConfirmPassword={setRegisterConfirmPassword}
+                  agreeTerms={agreeTerms}
+                  setAgreeTerms={setAgreeTerms}
+                  onRegisterSubmit={handleRegisterSubmit}
+                />
+              )
+            }
+          />
+          <Route
+            path="perfil"
+            element={
+              <RutaProtegida currentUser={currentUser}>
+                <ProfileView
+                  currentUser={currentUser}
+                  showChangePasswordModal={showChangePasswordModal}
+                  setShowChangePasswordModal={setShowChangePasswordModal}
+                  currentPasswordInput={currentPasswordInput}
+                  setCurrentPasswordInput={setCurrentPasswordInput}
+                  newPasswordInput={newPasswordInput}
+                  setNewPasswordInput={setNewPasswordInput}
+                  confirmNewPasswordInput={confirmNewPasswordInput}
+                  setConfirmNewPasswordInput={setConfirmNewPasswordInput}
+                  passwordChangeStatus={passwordChangeStatus}
+                  onChangePasswordSubmit={handleChangePasswordSubmit}
+                  onResetPasswordInputs={resetPasswordChangeInputs}
+                />
+              </RutaProtegida>
+            }
+          />
+          <Route
+            path="media/:id"
+            element={<MarcadorRuta titulo="Detalle de título" descripcion="Ficha del título seleccionada." />}
+          />
+          <Route
+            path="cines"
+            element={<MarcadorRuta titulo="Cines" descripcion="Cines y programación." />}
+          />
+          <Route
+            path="usuarios/:username"
+            element={<MarcadorRuta titulo="Perfil público" descripcion="Perfil público del usuario." />}
+          />
+          <Route path="*" element={<Navigate to="/" replace />} />
+        </Route>
+      </Routes>
     </>
   )
 }
