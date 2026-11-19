@@ -94,6 +94,7 @@ export async function refreshAccessToken() {
   }
 
   clearStoredAuth();
+  notifySessionExpired();
   return null;
 }
 
@@ -133,11 +134,16 @@ export async function apiFetch(endpoint, options = {}) {
       } catch {
         throw new Error('No se pudo conectar con el servidor Django.');
       }
+      if (response.status === 401) {
+        clearStoredAuth();
+        notifySessionExpired();
+      }
     } else {
       clearStoredAuth();
     }
   } else if (response.status === 401) {
     clearStoredAuth();
+    notifySessionExpired();
   }
 
   return response;
@@ -476,6 +482,86 @@ export async function getUsuarioListas(username) {
   return await response.json();
 }
 
+/**
+ * Obtiene las sugerencias de edición para un título desde /api/media/<id>/sugerencias/.
+ */
+export async function getSugerenciasMedia(mediaId, params = {}) {
+  return leerJson(
+    `/media/${mediaId}/sugerencias/${buildQueryString(params)}`,
+    'Error al obtener las sugerencias de edición.'
+  );
+}
+
+/**
+ * Crea una nueva sugerencia de edición para un título en /api/media/<id>/sugerencias/.
+ */
+export async function crearSugerenciaEdicion(mediaId, sugerencia) {
+  const response = await apiFetch(`/media/${mediaId}/sugerencias/`, {
+    method: 'POST',
+    body: JSON.stringify(sugerencia),
+  });
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => null);
+    throw new Error(formatApiError(errorData?.error, 'Error al enviar la sugerencia de edición.'));
+  }
+  return await response.json();
+}
+
+/**
+ * Obtiene todas las sugerencias para moderación desde /api/sugerencias/.
+ * Filtros: { estado, media, page }.
+ */
+export async function getSugerenciasModeracion(params = {}) {
+  return leerJson(
+    `/sugerencias/${buildQueryString(params)}`,
+    'Error al obtener las sugerencias.'
+  );
+}
+
+export async function getSugerenciasPendientes(params = {}) {
+  return getSugerenciasModeracion({ ...params, estado: 'pendiente' });
+}
+
+/**
+ * Aprueba una sugerencia en /api/sugerencias/<id>/aprobar/.
+ */
+export async function aprobarSugerencia(sugerenciaId) {
+  const response = await apiFetch(`/sugerencias/${sugerenciaId}/aprobar/`, {
+    method: 'POST',
+  });
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => null);
+    throw new Error(formatApiError(errorData?.error, 'Error al aprobar la sugerencia.'));
+  }
+  return await response.json();
+}
+
+/**
+ * Rechaza una sugerencia en /api/sugerencias/<id>/rechazar/.
+ */
+export async function rechazarSugerencia(sugerenciaId, motivoRechazo = '') {
+  const response = await apiFetch(`/sugerencias/${sugerenciaId}/rechazar/`, {
+    method: 'POST',
+    body: JSON.stringify({ motivo_rechazo: motivoRechazo }),
+  });
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => null);
+    throw new Error(formatApiError(errorData?.error, 'Error al rechazar la sugerencia.'));
+  }
+  return await response.json();
+}
+
+/**
+ * Obtiene tus sugerencias de edición desde /api/usuarios/me/sugerencias/.
+ * Admite filtros: { tipo, estado, page }
+ */
+export async function getMisSugerencias(params = {}) {
+  return leerJson(
+    `/usuarios/me/sugerencias/${buildQueryString(params)}`,
+    'Error al obtener tus sugerencias de edición.'
+  );
+}
+
 async function leerJson(endpoint, mensajeError) {
   const response = await apiFetch(endpoint);
   if (!response.ok) {
@@ -483,4 +569,13 @@ async function leerJson(endpoint, mensajeError) {
     throw new Error(formatApiError(errorData?.error, mensajeError));
   }
   return await response.json();
+}
+
+/**
+ * Notifica que la sesión ha expirado, disparando un evento global.
+ */
+export function notifySessionExpired() {
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('cineroll:session-expired'))
+  }
 }

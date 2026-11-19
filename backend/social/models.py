@@ -217,6 +217,11 @@ class SugerenciaEdicion(models.Model):
     valor_propuesto = models.TextField(
         help_text="Nuevo valor sugerido para el campo indicado."
     )
+    valor_anterior = models.TextField(
+        blank=True,
+        default="",
+        help_text="Valor que tenía el campo antes de aprobar la sugerencia.",
+    )
     motivo = models.TextField(
         blank=True,
         help_text="Explicación o fuente que justifica la corrección.",
@@ -248,6 +253,13 @@ class SugerenciaEdicion(models.Model):
             models.Index(fields=["estado"], name="social_sugerencia_estado_idx"),
             models.Index(
                 fields=["media", "estado"], name="social_sugerencia_med_est_idx"
+            ),
+        ]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["usuario", "media", "campo"],
+                condition=models.Q(estado="pendiente"),
+                name="social_sugerencia_pendiente_unica",
             ),
         ]
 

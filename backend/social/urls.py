@@ -1,17 +1,21 @@
 from django.urls import path
 
 from social.views import (
+    AprobarSugerenciaView,
     ListaDetailView,
     ListaElementoDetailView,
     ListaElementoListCreateView,
     ListaListCreateView,
     MediaResenaListCreateView,
     MediaResenaResumenView,
+    MediaSugerenciaListCreateView,
     MiResenaMediaView,
     MisListasView,
+    RechazarSugerenciaView,
     ResenasListView,
     ResenaDetailView,
     ReportarResenaView,
+    SugerenciasModeracionView,
     UsuarioListasListView,
 )
 
@@ -61,7 +65,7 @@ urlpatterns = [
         ListaElementoDetailView.as_view(),
         name="lista-elemento-detail",
     ),
-        path(
+    path(
         "usuarios/me/listas/",
         MisListasView.as_view(),
         name="usuarios-me-listas",
@@ -75,6 +79,31 @@ urlpatterns = [
         "usuarios/<str:username>/listas/",
         UsuarioListasListView.as_view(),
         name="usuario-listas",
+    ),
+    path(
+        "media/<int:media_id>/sugerencias/",
+        MediaSugerenciaListCreateView.as_view(),
+        name="media-sugerencias",
+    ),
+    path(
+        "sugerencias/",
+        SugerenciasModeracionView.as_view(),
+        name="sugerencias-moderacion",
+    ),
+    path(
+        "sugerencias/pendientes/",
+        SugerenciasModeracionView.as_view(),
+        name="sugerencias-pendientes",
+    ),
+    path(
+        "sugerencias/<int:pk>/aprobar/",
+        AprobarSugerenciaView.as_view(),
+        name="sugerencia-aprobar",
+    ),
+    path(
+        "sugerencias/<int:pk>/rechazar/",
+        RechazarSugerenciaView.as_view(),
+        name="sugerencia-rechazar",
     ),
 ]
 

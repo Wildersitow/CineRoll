@@ -138,3 +138,51 @@ class SocialAdminTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertFalse(Resena.objects.exists())
 
+    def test_accion_aprobar_sugerencia_aplica_cambio_y_registra_resolucion(self):
+        url = reverse("admin:social_sugerenciaedicion_changelist")
+        response = self.client.post(
+            url,
+            {
+                "action": "aprobar_sugerencias",
+                "_selected_action": [self.sugerencia.pk],
+            },
+            follow=True,
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.sugerencia.refresh_from_db()
+        self.media.refresh_from_db()
+        self.assertEqual(self.sugerencia.estado, SugerenciaEdicion.Estado.APROBADA)
+        self.assertEqual(self.sugerencia.revisado_por, self.admin)
+        self.assertIsNotNone(self.sugerencia.fecha_resolucion)
+        self.assertEqual(self.sugerencia.valor_anterior, "")
+        self.assertEqual(self.media.sinopsis, "Sinopsis de prueba")
+
+    def test_accion_rechazar_sugerencia_muestra_confirmacion_y_exige_motivo(self):
+        url = reverse("admin:social_sugerenciaedicion_changelist")
+        response = self.client.post(
+            url,
+            {
+                "action": "rechazar_sugerencias",
+                "_selected_action": [self.sugerencia.pk],
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Motivo del rechazo")
+        self.assertContains(response, "Sinopsis de prueba")
+        self.sugerencia.refresh_from_db()
+        self.assertEqual(self.sugerencia.estado, SugerenciaEdicion.Estado.PENDIENTE)
+
+    def test_campos_resolucion_son_solo_lectura_en_admin(self):
+        model_admin = admin.site._registry[SugerenciaEdicion]
+        for campo in (
+            "estado",
+            "revisado_por",
+            "fecha_resolucion",
+            "motivo_rechazo",
+            "valor_anterior",
+            "valor_actual",
+        ):
+            self.assertIn(campo, model_admin.readonly_fields)
+

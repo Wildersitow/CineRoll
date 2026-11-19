@@ -1,4 +1,6 @@
+from django import forms
 from django.contrib import admin
+from django.template.response import TemplateResponse
 
 from social.models import (
     ElementoLista,
@@ -8,6 +10,7 @@ from social.models import (
     Seguimiento,
     SugerenciaEdicion,
 )
+from social.sugerencias import aprobar_sugerencia, rechazar_sugerencia
 
 
 class ElementoListaInline(admin.TabularInline):
@@ -63,6 +66,8 @@ class SugerenciaEdicionAdmin(admin.ModelAdmin):
         "media",
         "usuario",
         "campo",
+        "valor_actual",
+        "valor_propuesto",
         "estado",
         "revisado_por",
         "fecha_creacion",
@@ -73,11 +78,99 @@ class SugerenciaEdicionAdmin(admin.ModelAdmin):
         "media__titulo",
         "usuario__username",
         "valor_propuesto",
+        "valor_anterior",
         "motivo",
     )
-    autocomplete_fields = ("usuario", "media", "revisado_por")
+    readonly_fields = (
+        "estado",
+        "revisado_por",
+        "fecha_resolucion",
+        "motivo_rechazo",
+        "valor_anterior",
+        "valor_actual",
+        "fecha_creacion",
+    )
+    autocomplete_fields = ("usuario", "media")
     list_select_related = ("usuario", "media", "revisado_por")
     date_hierarchy = "fecha_creacion"
+    actions = ("aprobar_sugerencias", "rechazar_sugerencias")
+
+    @admin.display(description="Valor actual")
+    def valor_actual(self, obj):
+        if obj.pk and obj.media_id:
+            if obj.estado == SugerenciaEdicion.Estado.APROBADA:
+                return obj.valor_anterior
+            valor = getattr(obj.media, obj.campo, None)
+            if hasattr(valor, "isoformat"):
+                return valor.isoformat()
+            return "" if valor is None else str(valor)
+        return "—"
+
+    @admin.action(description="Aprobar sugerencias seleccionadas")
+    def aprobar_sugerencias(self, request, queryset):
+        aprobadas = 0
+        errores = 0
+        for sugerencia in queryset:
+            try:
+                aprobar_sugerencia(sugerencia, request.user)
+                aprobadas += 1
+            except Exception:
+                errores += 1
+        if aprobadas:
+            self.message_user(request, f"{aprobadas} sugerencia(s) aprobada(s).")
+        if errores:
+            self.message_user(request, f"{errores} sugerencia(s) no pudieron aprobarse.")
+
+    @admin.action(description="Rechazar sugerencias seleccionadas")
+    def rechazar_sugerencias(self, request, queryset):
+        seleccionadas = list(queryset.values_list("pk", flat=True))
+        if not seleccionadas:
+            self.message_user(request, "No se seleccionaron sugerencias.")
+            return None
+
+        if request.POST.get("confirmar_rechazo"):
+            form = MotivoRechazoMasivoForm(request.POST)
+            if form.is_valid():
+                motivo = form.cleaned_data["motivo_rechazo"]
+                rechazadas = 0
+                errores = 0
+                for sugerencia in queryset:
+                    try:
+                        rechazar_sugerencia(
+                            sugerencia,
+                            request.user,
+                            motivo_rechazo=motivo,
+                        )
+                        rechazadas += 1
+                    except Exception:
+                        errores += 1
+                if rechazadas:
+                    self.message_user(request, f"{rechazadas} sugerencia(s) rechazada(s).")
+                if errores:
+                    self.message_user(request, f"{errores} sugerencia(s) no pudieron rechazarse.")
+                return None
+        else:
+            form = MotivoRechazoMasivoForm(initial={"_selected_action": seleccionadas})
+
+        return TemplateResponse(
+            request,
+            "admin/social/sugerencia_rechazo_confirmacion.html",
+            {
+                "title": "Rechazar sugerencias seleccionadas",
+                "sugerencias": queryset,
+                "form": form,
+                "action_name": "rechazar_sugerencias",
+                "opts": self.model._meta,
+            },
+        )
+
+
+class MotivoRechazoMasivoForm(forms.Form):
+    _selected_action = forms.CharField(widget=forms.MultipleHiddenInput)
+    motivo_rechazo = forms.CharField(
+        label="Motivo del rechazo",
+        widget=forms.Textarea(attrs={"rows": 4}),
+    )
 
 
 @admin.register(Resena)

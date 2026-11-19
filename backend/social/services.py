@@ -14,6 +14,8 @@ from media.models import Media
 from social.models import PUNTUACION_MAXIMA, PUNTUACION_MINIMA, Resena
 
 
+# # 
+
 def resumen_puntuacion(media_id):
     """Agrega el promedio, total y distribución de notas sin reseñas ocultas.
 
