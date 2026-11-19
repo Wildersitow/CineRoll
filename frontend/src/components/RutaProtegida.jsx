@@ -1,11 +1,14 @@
-import { Navigate, useLocation } from 'react-router-dom'
+import { Navigate, Outlet, useLocation } from 'react-router-dom'
 
-export default function RutaProtegida({ currentUser, children }) {
+// Protege rutas que exigen sesión.
+// Sin usuario: redirige a /acceso y recuerda a qué ruta se quería entrar.
+// Con usuario: muestra children o, si es ruta padre, el Outlet.
+export default function RutaProtegida({ usuario, children, redirigirA = '/acceso' }) {
   const location = useLocation()
 
-  if (!currentUser) {
-    return <Navigate to="/acceso" replace state={{ from: location.pathname }} />
+  if (!usuario) {
+    return <Navigate to={redirigirA} replace state={{ desde: location }} />
   }
 
-  return children
+  return children ?? <Outlet />
 }
