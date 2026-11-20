@@ -26,7 +26,10 @@ def manejador_errores(exc, context):
     if response is None:
         # Error no controlado (500): lo maneja Django como siempre.
         return None
-
+    if isinstance(exc, exceptions.Throttled):
+    # DRF ya puso el encabezado Retry-After; solo se cambia el cuerpo.
+        response.data = {"error": _error_limite_de_uso(exc)}
+        return response
     # DRF convierte estos dos errores de Django en sus propias excepciones.
     if isinstance(exc, Http404):
         exc = exceptions.NotFound()
@@ -62,6 +65,20 @@ def _armar_error(exc):
         }
 
     return {"codigo": _codigo(detalle, codigo_por_defecto), "mensaje": _mensaje(detalle)}
+
+def _error_limite_de_uso(exc):
+    """429: mensaje claro y segundos de espera para que el frontend pueda mostrarlos."""
+    espera = None if exc.wait is None else int(exc.wait)
+    if espera is None:
+        mensaje = "Demasiadas solicitudes. Intenta de nuevo más tarde."
+    else:
+        unidad = "segundo" if espera == 1 else "segundos"
+        mensaje = f"Demasiadas solicitudes. Intenta de nuevo en {espera} {unidad}."
+
+    error = {"codigo": "throttled", "mensaje": mensaje}
+    if espera is not None:
+        error["espera_segundos"] = espera
+    return error
 
 
 def _mensaje(detalle):
