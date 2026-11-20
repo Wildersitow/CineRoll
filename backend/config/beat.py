@@ -27,7 +27,8 @@ def construir_beat_schedule(pares, horas=(6, 18), espaciado_minutos=10):
 
     El cine n-ésimo arranca n * espaciado_minutos después de la hora base,
     para que las solicitudes a los sitios queden espaciadas.
-    Además programa la limpieza de funciones vencidas (solo toca la base de datos).
+    Además programa dos tareas que solo tocan la base de datos: la limpieza de
+    funciones vencidas (cada hora) y la de tokens vencidos (una vez por semana).
     """
     horas = tuple(horas)
     if not 1 <= len(horas) <= MAX_EJECUCIONES_DIARIAS or len(set(horas)) != len(horas):
@@ -53,5 +54,11 @@ def construir_beat_schedule(pares, horas=(6, 18), espaciado_minutos=10):
     schedule["limpiar-cartelera-vencida"] = {
         "task": "cines.tasks.limpiar_cartelera_vencida",
         "schedule": crontab(minute=30),  # cada hora, en el minuto 30
+    }
+    schedule["limpiar-tokens-vencidos"] = {
+        "task": "usuarios.tasks.limpiar_tokens_vencidos",
+        # Domingos a las 3:00 a. m. (hora de Bogotá): hora de poco uso, lejos de los
+        # scrapes de las 6:00 y las 18:00.
+        "schedule": crontab(minute=0, hour=3, day_of_week="sunday"),
     }
     return schedule

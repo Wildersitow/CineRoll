@@ -1,6 +1,11 @@
+import sys
 from datetime import timedelta
 from pathlib import Path
 from decouple import Csv, config
+
+# True cuando se corre `python manage.py test`: las pruebas usan una caché en memoria
+# (no necesitan Redis) y límites altos, salvo las que prueban el throttling a propósito.
+TESTING = len(sys.argv) > 1 and sys.argv[1] == "test"
 
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
 
@@ -75,6 +80,26 @@ AUTH_PASSWORD_VALIDATORS = [
     {"NAME": "django.contrib.auth.password_validation.NumericPasswordValidator"},
 ]
 
+# Caché compartida entre procesos (la usa el throttling). Con la caché en memoria
+# cada worker de gunicorn contaría por separado. Usa la base 1 de Redis; Celery usa la 0.
+if TESTING:
+    CACHES = {
+        "default": {"BACKEND": "django.core.cache.backends.locmem.LocMemCache"}
+    }
+else:
+    CACHES = {
+        "default": {
+            "BACKEND": "django.core.cache.backends.redis.RedisCache",
+            "LOCATION": config("CACHE_URL", default="redis://localhost:6379/1"),
+            "KEY_PREFIX": "cineroll",
+            # Si Redis no responde, que falle rápido en vez de colgar la petición.
+            "OPTIONS": {"socket_connect_timeout": 2, "socket_timeout": 2},
+        }
+    }
+
+# Con TESTING los límites son altísimos para no estorbar a las demás pruebas.
+_ALTO = "100000/min"
+
 REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": [
         "rest_framework_simplejwt.authentication.JWTAuthentication",
@@ -82,6 +107,15 @@ REST_FRAMEWORK = {
     "DEFAULT_PAGINATION_CLASS": "rest_framework.pagination.PageNumberPagination",
     "PAGE_SIZE": 20,
     "EXCEPTION_HANDLER": "config.exceptions.manejador_errores",
+    "DEFAULT_THROTTLE_CLASSES": ["config.throttling.LimitePorAmbito"],
+    "DEFAULT_THROTTLE_RATES": {
+        "acceso": _ALTO if TESTING else config("THROTTLE_ACCESO", default="10/min"),
+        "escritura_social": _ALTO if TESTING else config("THROTTLE_ESCRITURA_SOCIAL", default="30/min"),
+        "general": _ALTO if TESTING else config("THROTTLE_GENERAL", default="120/min"),
+    },
+    # Cuántos proxies hay delante de Django. En producción es 1 (Caddy): sin esto,
+    # todos los visitantes parecerían tener la IP de Caddy y compartirían el límite.
+    "NUM_PROXIES": config("NUM_PROXIES", default=0, cast=int),
 }
 
 SIMPLE_JWT = {
@@ -147,3 +181,42 @@ CELERY_BROKER_CONNECTION_RETRY_ON_STARTUP = True
 # Solo para pruebas/CI; en producción debe quedar en False.
 CELERY_TASK_ALWAYS_EAGER = config("CELERY_TASK_ALWAYS_EAGER", default=False, cast=bool)
 CELERY_TASK_EAGER_PROPAGATES = CELERY_TASK_ALWAYS_EAGER  # que los errores no se escondan
+
+# --- Registros (logging) ---
+# Todo sale por consola (stdout/stderr) con fecha, nivel y nombre del logger, que es
+# lo que Docker captura: `docker compose logs web worker beat`.
+# El nivel se puede subir o bajar desde el .env sin tocar el código (LOG_LEVEL=DEBUG).
+LOG_LEVEL = config("LOG_LEVEL", default="INFO").upper()
+
+LOGGING = {
+    "version": 1,
+    "disable_existing_loggers": False,
+    "formatters": {
+        "estandar": {
+            "format": "{asctime} {levelname} {name} {message}",
+            "style": "{",
+            "datefmt": "%Y-%m-%d %H:%M:%S",
+        },
+    },
+    "handlers": {
+        "console": {
+            "class": "logging.StreamHandler",
+            "formatter": "estandar",
+        },
+    },
+    # Cualquier logger del proyecto (cines.services, cines.locks, usuarios...)
+    # propaga al root y sale por la consola sin configurarlo uno por uno.
+    "root": {
+        "handlers": ["console"],
+        "level": LOG_LEVEL,
+    },
+    "loggers": {
+        # Django trae su propio handler de consola; se vacía para que sus mensajes
+        # salgan una sola vez, por el root y con nuestro formato.
+        "django": {
+            "handlers": [],
+            "level": "INFO",
+            "propagate": True,
+        },
+    },
+}
