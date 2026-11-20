@@ -103,9 +103,11 @@ class ListasAPITests(APITestCase):
         url = reverse("usuario-listas", args=["lucia"])
         response = self.client.get(url)
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        nombres = [item["nombre"] for item in response.data]
+        items = response.data.get("results", response.data)
+        nombres = [item["nombre"] for item in items]
         self.assertIn("Ciencia Ficción", nombres)
         self.assertNotIn("Secretos", nombres)
+
 
     def test_detalle_lista_publica_visible_para_todos(self):
         url = reverse("lista-detail", args=[self.lista_publica_user1.pk])
@@ -204,10 +206,36 @@ class ListasAPITests(APITestCase):
         response = self.client.get(reverse("usuarios-me-listas"))
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
+        items = response.data.get("results", response.data)
         self.assertEqual(
-            {item["nombre"] for item in response.data},
+            {item["nombre"] for item in items},
             {"Ciencia Ficción", "Secretos"},
         )
+
+    def test_media_mis_listas_devuelve_estado_del_titulo(self):
+        # Crear lista de favoritas para user1 y agregar media1
+        fav = Lista.objects.create(
+            usuario=self.user1, nombre="Favoritas", tipo=Lista.Tipo.FAVORITAS
+        )
+        ElementoLista.objects.create(lista=fav, media=self.media1)
+
+        self.client.force_authenticate(self.user1)
+        url = reverse("media-mis-listas", args=[self.media1.pk])
+        res = self.client.get(url)
+
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        self.assertEqual(res.data["media_id"], self.media1.pk)
+        self.assertTrue(res.data["en_favoritas"])
+        self.assertFalse(res.data["en_por_ver"])
+        nombres = [l["nombre"] for l in res.data["listas"]]
+        self.assertIn("Favoritas", nombres)
+        self.assertIn("Ciencia Ficción", nombres)
+
+    def test_media_mis_listas_sin_sesion_da_401(self):
+        url = reverse("media-mis-listas", args=[self.media1.pk])
+        res = self.client.get(url)
+        self.assertEqual(res.status_code, status.HTTP_401_UNAUTHORIZED)
+
 
     def test_mis_listas_exige_sesion(self):
         response = self.client.get(reverse("usuarios-me-listas"))

@@ -1,4 +1,5 @@
 from django.contrib.auth import authenticate, get_user_model
+from django.db import models
 from django.shortcuts import get_object_or_404
 from rest_framework import status
 from rest_framework.exceptions import ValidationError
@@ -159,15 +160,31 @@ class PerfilPublicoView(RetrieveAPIView):
     serializer_class = PerfilPublicoSerializer
     permission_classes = [AllowAny]
 
+    def get_queryset(self):
+        from social.models import Seguimiento
+
+        qs = Usuario.objects.annotate(
+            total_seguidores=models.Count("seguidores", distinct=True),
+            total_siguiendo=models.Count("siguiendo", distinct=True),
+        )
+        user = getattr(self.request, "user", None)
+        if user and user.is_authenticated:
+            lo_sigo_subquery = Seguimiento.objects.filter(
+                seguidor=user, seguido=models.OuterRef("pk")
+            )
+            qs = qs.annotate(lo_sigo_anotado=models.Exists(lo_sigo_subquery))
+        return qs
+
     def get_object(self):
         identificador = (
             self.kwargs.get("identificador")
             or self.kwargs.get("pk")
             or self.kwargs.get("username")
         )
+        qs = self.get_queryset()
         if str(identificador).isdigit():
-            return get_object_or_404(Usuario, pk=int(identificador))
-        return get_object_or_404(Usuario, username__iexact=str(identificador))
+            return get_object_or_404(qs, pk=int(identificador))
+        return get_object_or_404(qs, username=str(identificador))
 
 
 class UsuarioResenasPublicasView(ListAPIView):
@@ -187,13 +204,14 @@ class UsuarioResenasPublicasView(ListAPIView):
         if str(identificador).isdigit():
             usuario = get_object_or_404(Usuario, pk=int(identificador))
         else:
-            usuario = get_object_or_404(Usuario, username__iexact=str(identificador))
+            usuario = get_object_or_404(Usuario, username=str(identificador))
         return (
             Resena.objects.visibles()
             .filter(usuario=usuario)
             .select_related("media", "usuario")
             .order_by("-fecha_creacion", "-id")
         )
+
 
 
 class MisResenasView(ListAPIView):
