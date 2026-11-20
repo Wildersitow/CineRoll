@@ -1,14 +1,32 @@
 from django.contrib.auth import get_user_model
 from django.contrib.auth.password_validation import validate_password
 from django.core.exceptions import ValidationError as DjangoValidationError
-from django.db import models
+from django.db import models, transaction
 from rest_framework import serializers
 from rest_framework.validators import UniqueValidator
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 
+from social.models import Lista, Seguimiento
+
 Usuario = get_user_model()
 
 MENSAJE_EMAIL_REPETIDO = "Ya existe una cuenta con este correo."
+NOMBRES_RESERVADOS = {
+    "me",
+    "admin",
+    "api",
+    "root",
+    "soporte",
+    "staff",
+    "superuser",
+    "cineroll",
+    "ayuda",
+    "null",
+    "undefined",
+    "perfil",
+    "usuarios",
+}
+
 
 
 def _email_unico():
@@ -61,6 +79,9 @@ class PerfilPublicoSerializer(serializers.ModelSerializer):
     nombre = serializers.SerializerMethodField()
     total_resenas = serializers.SerializerMethodField()
     promedio_puntuacion_dada = serializers.SerializerMethodField()
+    total_seguidores = serializers.SerializerMethodField()
+    total_siguiendo = serializers.SerializerMethodField()
+    lo_sigo = serializers.SerializerMethodField()
 
     class Meta:
         model = Usuario
@@ -74,6 +95,9 @@ class PerfilPublicoSerializer(serializers.ModelSerializer):
             "date_joined",
             "total_resenas",
             "promedio_puntuacion_dada",
+            "total_seguidores",
+            "total_siguiendo",
+            "lo_sigo",
         ]
         read_only_fields = fields
 
@@ -86,6 +110,27 @@ class PerfilPublicoSerializer(serializers.ModelSerializer):
     def get_promedio_puntuacion_dada(self, obj):
         avg = obj.resenas.visibles().aggregate(models.Avg("puntuacion"))["puntuacion__avg"]
         return None if avg is None else round(float(avg), 2)
+
+    def get_total_seguidores(self, obj):
+        if hasattr(obj, "total_seguidores"):
+            return obj.total_seguidores
+        return obj.seguidores.count()
+
+    def get_total_siguiendo(self, obj):
+        if hasattr(obj, "total_siguiendo"):
+            return obj.total_siguiendo
+        return obj.siguiendo.count()
+
+    def get_lo_sigo(self, obj):
+        request = self.context.get("request")
+        if not request or not getattr(request, "user", None) or not request.user.is_authenticated:
+            return None
+        if request.user.pk == obj.pk:
+            return False
+        if hasattr(obj, "lo_sigo_anotado"):
+            return bool(obj.lo_sigo_anotado)
+        return Seguimiento.objects.filter(seguidor=request.user, seguido=obj).exists()
+
 
 
 class CambioPasswordSerializer(serializers.Serializer):
@@ -159,6 +204,18 @@ class RegistroSerializer(serializers.ModelSerializer):
             "escala_calificacion": {"required": False},
         }
 
+    def validate_username(self, value):
+        nombre_limpio = value.strip()
+        if nombre_limpio.lower() in NOMBRES_RESERVADOS:
+            raise serializers.ValidationError(
+                "Este nombre de usuario no está disponible."
+            )
+        if Usuario.objects.filter(username__iexact=nombre_limpio).exists():
+            raise serializers.ValidationError(
+                "Ya existe una cuenta con este nombre de usuario."
+            )
+        return nombre_limpio
+
     def validate_email(self, value):
         return value.strip().lower()
 
@@ -173,7 +230,20 @@ class RegistroSerializer(serializers.ModelSerializer):
         return attrs
 
     def create(self, validated_data):
-        return Usuario.objects.create_user(**validated_data)
+        with transaction.atomic():
+            usuario = Usuario.objects.create_user(**validated_data)
+            Lista.objects.get_or_create(
+                usuario=usuario,
+                tipo=Lista.Tipo.FAVORITAS,
+                defaults={"nombre": "Favoritas", "publica": True},
+            )
+            Lista.objects.get_or_create(
+                usuario=usuario,
+                tipo=Lista.Tipo.POR_VER,
+                defaults={"nombre": "Por ver", "publica": True},
+            )
+            return usuario
+
 
 
 class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):

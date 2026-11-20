@@ -2,7 +2,12 @@
 
 Vive aparte de settings/base.py para poder probarse sin Django ni Redis.
 """
-from celery.schedules import crontab
+try:
+    from celery.schedules import crontab
+except ImportError:
+    def crontab(**kwargs):
+        return kwargs
+
 
 # Regla de la fase: nunca más de dos ejecuciones al día por cine.
 MAX_EJECUCIONES_DIARIAS = 2

@@ -1,11 +1,18 @@
 from django.urls import path
 
+from social.seguimiento import (
+    FeedActividadView,
+    SeguidoresListView,
+    SeguirUsuarioView,
+    SiguiendoListView,
+)
 from social.views import (
     AprobarSugerenciaView,
     ListaDetailView,
     ListaElementoDetailView,
     ListaElementoListCreateView,
     ListaListCreateView,
+    MediaMisListasView,
     MediaResenaListCreateView,
     MediaResenaResumenView,
     MediaSugerenciaListCreateView,
@@ -52,6 +59,14 @@ urlpatterns = [
         name="resena-reportar",
     ),
     path("resenas/<int:pk>/", ResenaDetailView.as_view(), name="resena-detail"),
+
+    # Estado del título en las listas del usuario autenticado
+    path(
+        "media/<int:media_id>/mis-listas/",
+        MediaMisListasView.as_view(),
+        name="media-mis-listas",
+    ),
+
     # Endpoints de listas
     path("listas/", ListaListCreateView.as_view(), name="lista-list-create"),
     path("listas/<int:pk>/", ListaDetailView.as_view(), name="lista-detail"),
@@ -65,15 +80,34 @@ urlpatterns = [
         ListaElementoDetailView.as_view(),
         name="lista-elemento-detail",
     ),
+
+    # Rutas para el usuario actual (/me/) - DEBEN ir antes de <str:username>
+    path(
+        "usuarios/me/feed/",
+        FeedActividadView.as_view(),
+        name="usuario-feed",
+    ),
     path(
         "usuarios/me/listas/",
         MisListasView.as_view(),
         name="usuarios-me-listas",
     ),
+
+    # Rutas por username de otros usuarios
     path(
-        "usuarios/<str:username>/listas/",
-        UsuarioListasListView.as_view(),
-        name="usuario-listas",
+        "usuarios/<str:username>/seguir/",
+        SeguirUsuarioView.as_view(),
+        name="usuario-seguir",
+    ),
+    path(
+        "usuarios/<str:username>/seguidores/",
+        SeguidoresListView.as_view(),
+        name="usuario-seguidores",
+    ),
+    path(
+        "usuarios/<str:username>/siguiendo/",
+        SiguiendoListView.as_view(),
+        name="usuario-siguiendo",
     ),
     path(
         "usuarios/<str:username>/listas/",

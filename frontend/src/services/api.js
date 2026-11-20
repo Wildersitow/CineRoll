@@ -140,6 +140,9 @@ export async function apiFetch(endpoint, options = {}) {
       }
     } else {
       clearStoredAuth();
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('cineroll:sesion-vencida'));
+      }
     }
   } else if (response.status === 401) {
     clearStoredAuth();
@@ -148,6 +151,7 @@ export async function apiFetch(endpoint, options = {}) {
 
   return response;
 }
+
 
 /**
  * Inicia sesión contra /api/auth/login/
@@ -243,27 +247,58 @@ export async function getCurrentUser() {
  * Cambia la contraseña del usuario autenticado en /api/usuarios/me/clave/
  */
 export async function changePassword(claveActual, claveNueva) {
-  const response = await apiFetch('/usuarios/me/clave/', {
+  return leerJson('/usuarios/me/clave/', {
     method: 'POST',
     body: JSON.stringify({
       clave_actual: claveActual,
       clave_nueva: claveNueva,
     }),
-  });
-
-  if (!response.ok) {
-    const errorData = await response.json().catch(() => null);
-    throw new Error(formatApiError(errorData?.error, 'Error al cambiar la contraseña.'));
-  }
-
-  return await response.json();
+  }, 'Error al cambiar la contraseña.');
 }
 
+/**
+ * Actualiza los datos del perfil propio (nombre, apellido, biografía, avatar, escala)
+ * mediante PATCH a /api/usuarios/me/.
+ */
+export async function updateProfile(datos) {
+  const data = await leerJson('/usuarios/me/', {
+    method: 'PATCH',
+    body: JSON.stringify(datos),
+  }, 'Error al actualizar el perfil.');
+
+  const auth = getStoredAuth();
+  if (auth) {
+    const isPersistent = Boolean(localStorage.getItem('cineroll_auth'));
+    setStoredAuth({ ...auth, ...data }, isPersistent);
+  }
+  return data;
+}
+
+/**
+ * Helper centralizado para consultar endpoints con manejo uniforme de errores y JSON.
+ */
+export async function leerJson(endpoint, options = {}, mensajeFallback = 'Error en la solicitud.') {
+  let opts = options;
+  let fallback = mensajeFallback;
+  if (typeof options === 'string') {
+    fallback = options;
+    opts = {};
+  }
+  const response = await apiFetch(endpoint, opts);
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => null);
+    throw new Error(formatApiError(errorData?.error, fallback));
+  }
+  if (response.status === 204) {
+    return true;
+  }
+  return await response.json();
+}
 
 /**
  * Convierte un objeto de parámetros en una query string URL válida.
  */
-function buildQueryString(params = {}) {
+export function buildQueryString(params = {}) {
   const entries = Object.entries(params).filter(
     ([, val]) => val !== undefined && val !== null && val !== ''
   );
@@ -275,211 +310,201 @@ function buildQueryString(params = {}) {
   return `?${searchParams.toString()}`;
 }
 
+/* ==========================================================================
+   Catálogo y Personas
+   ========================================================================== */
+
 /**
- * Obtiene el listado de películas, series y anime desde /api/media/.
- * Admite filtros: { buscar, tipo, genero, anio, estado, cine, ordenar, page }
- */
-/**
- * Obtiene el listado de películas, series y anime desde /api/media/.
- * Filtros: { search, tipo, genero, anio, estado, cine, ordering, page }
- * ordering acepta fecha_estreno, titulo y promedio_puntuacion, con "-" delante para orden descendente.
- * Responde paginado: { count, next, previous, results }.
+ * Obtiene el listado de títulos desde /api/media/.
+ * Filtros: { buscar, tipo, genero, anio, estado, cine, ordenar, page }
  */
 export async function getMedia(params = {}) {
-  return leerJson(
-    `/media/${buildQueryString(params)}`,
-    'Error al obtener el catálogo de media.'
-  );
+  return leerJson(`/media/${buildQueryString(params)}`, 'Error al obtener el catálogo de media.');
 }
 
 /**
  * Obtiene la ficha completa de un título desde /api/media/<id>/.
  */
 export async function getMediaDetalle(id) {
-  const response = await apiFetch(`/media/${id}/`);
-  if (!response.ok) {
-    const errorData = await response.json().catch(() => null);
-    throw new Error(formatApiError(errorData?.error, 'Error al obtener el detalle del título.'));
-  }
-  return await response.json();
+  return leerJson(`/media/${id}/`, 'Error al obtener el detalle del título.');
 }
 
 /**
- * Obtiene las funciones de cartelera desde /api/funciones/.
- * Admite filtros: { ciudad, cine, fecha, formato, page }
+ * Obtiene la ficha de una persona con su filmografía desde /api/personas/<id>/.
  */
+export async function getPersona(id) {
+  return leerJson(`/personas/${id}/`, 'Error al obtener los datos de la persona.');
+}
+
+/* ==========================================================================
+   Cartelera y Cines
+   ========================================================================== */
+
 /**
- * Obtiene las funciones de todos los cines desde /api/funciones/.
- * Filtros: { ciudad, fecha } con fecha AAAA-MM-DD o "hoy" (por defecto, hoy).
- * Responde sin paginar: { ultima_actualizacion, resultados }.
+ * Obtiene las funciones en cartelera desde /api/funciones/.
+ * Filtros: { ciudad, fecha, cine }
  */
 export async function getFunciones(params = {}) {
-  return leerJson(
-    `/funciones/${buildQueryString(params)}`,
-    'Error al obtener las funciones en cartelera.'
-  );
+  return leerJson(`/funciones/${buildQueryString(params)}`, 'Error al obtener las funciones en cartelera.');
 }
 
-/**
- * Obtiene las funciones de un cine desde /api/cines/<id>/funciones/.
- * Filtros: { fecha } con fecha AAAA-MM-DD o "hoy" (por defecto, hoy).
- * Responde sin paginar: { ultima_actualizacion, resultados }.
- */
 export async function getFuncionesDeCine(cineId, params = {}) {
-  return leerJson(
-    `/cines/${cineId}/funciones/${buildQueryString(params)}`,
-    'Error al obtener las funciones del cine.'
-  );
+  return leerJson(`/cines/${cineId}/funciones/${buildQueryString(params)}`, 'Error al obtener las funciones del cine.');
 }
 
-/**
- * Obtiene las funciones de un título desde /api/media/<id>/funciones/.
- * Filtros: { cine, fecha }. Sin fecha devuelve todas las fechas.
- * Responde sin paginar: { ultima_actualizacion, resultados }.
- */
 export async function getFuncionesDeMedia(mediaId, params = {}) {
-  return leerJson(
-    `/media/${mediaId}/funciones/${buildQueryString(params)}`,
-    'Error al obtener las funciones del título.'
-  );
+  return leerJson(`/media/${mediaId}/funciones/${buildQueryString(params)}`, 'Error al obtener las funciones del título.');
 }
 
 /**
  * Obtiene el listado de cines registrados desde /api/cines/.
- * Filtros: { ciudad } (se compara sin tildes ni mayúsculas, por ejemplo "valledupar").
- * Responde paginado: { count, next, previous, results }.
+ * Filtros: { ciudad }
  */
 export async function getCines(params = {}) {
-  const qs = buildQueryString(params);
-  const response = await apiFetch(`/cines/${qs}`);
-  if (!response.ok) {
-    const errorData = await response.json().catch(() => null);
-    throw new Error(formatApiError(errorData?.error, 'Error al obtener los cines.'));
-  }
-  return await response.json();
+  return leerJson(`/cines/${buildQueryString(params)}`, 'Error al obtener los cines.');
 }
 
 /**
- * Obtiene la ficha de una persona (actor, director) con su filmografía desde /api/personas/<id>/.
+ * Consulta el estado de frescura de la cartelera por cine desde /api/cartelera/estado/.
  */
-export async function getPersona(id) {
-  const response = await apiFetch(`/personas/${id}/`);
-  if (!response.ok) {
-    const errorData = await response.json().catch(() => null);
-    throw new Error(formatApiError(errorData?.error, 'Error al obtener los datos de la persona.'));
-  }
-  return await response.json();
+export async function getEstadoCartelera() {
+  return leerJson('/cartelera/estado/', 'Error al consultar el estado de la cartelera.');
 }
 
-/**
- * Obtiene las listas de usuarios desde /api/listas/.
- * Admite filtros: { usuario, usuario_id, tipo }
- */
+/* ==========================================================================
+   Reseñas y Puntuaciones
+   ========================================================================== */
+
+export async function getResenasDeMedia(mediaId, params = {}) {
+  return leerJson(`/media/${mediaId}/resenas/${buildQueryString(params)}`, 'Error al obtener las reseñas del título.');
+}
+
+export async function getMiResena(mediaId) {
+  return leerJson(`/media/${mediaId}/resenas/propia/`, 'Error al obtener tu reseña.');
+}
+
+export async function crearResena(mediaId, { puntuacion, texto = '' }) {
+  return leerJson(`/media/${mediaId}/resenas/`, {
+    method: 'POST',
+    body: JSON.stringify({ puntuacion, texto }),
+  }, 'Error al publicar la reseña.');
+}
+
+export async function editarResena(resenaId, { puntuacion, texto }) {
+  return leerJson(`/resenas/${resenaId}/`, {
+    method: 'PATCH',
+    body: JSON.stringify({ puntuacion, texto }),
+  }, 'Error al actualizar la reseña.');
+}
+
+export async function borrarResena(resenaId) {
+  return leerJson(`/resenas/${resenaId}/`, {
+    method: 'DELETE',
+  }, 'Error al eliminar la reseña.');
+}
+
+export async function getResumenResenas(mediaId) {
+  return leerJson(`/media/${mediaId}/resenas/resumen/`, 'Error al obtener el resumen de puntuación.');
+}
+
+export async function getResenasDeUsuario(username, params = {}) {
+  return leerJson(`/usuarios/${username}/resenas/${buildQueryString(params)}`, `Error al obtener las reseñas de @${username}.`);
+}
+
+/* ==========================================================================
+   Perfil Público y Seguimiento
+   ========================================================================== */
+
+export async function getPerfilPublico(username) {
+  return leerJson(`/usuarios/${username}/`, `Error al obtener el perfil de @${username}.`);
+}
+
+export async function seguirUsuario(username) {
+  return leerJson(`/usuarios/${username}/seguir/`, {
+    method: 'POST',
+  }, `Error al seguir a @${username}.`);
+}
+
+export async function dejarDeSeguir(username) {
+  return leerJson(`/usuarios/${username}/seguir/`, {
+    method: 'DELETE',
+  }, `Error al dejar de seguir a @${username}.`);
+}
+
+export async function getSeguidores(username, params = {}) {
+  return leerJson(`/usuarios/${username}/seguidores/${buildQueryString(params)}`, `Error al obtener seguidores de @${username}.`);
+}
+
+export async function getSiguiendo(username, params = {}) {
+  return leerJson(`/usuarios/${username}/siguiendo/${buildQueryString(params)}`, `Error al obtener seguidos de @${username}.`);
+}
+
+export async function getFeed(params = {}) {
+  return leerJson(`/usuarios/me/feed/${buildQueryString(params)}`, 'Error al obtener el feed de actividad.');
+}
+
+/* ==========================================================================
+   Sugerencias de Edición
+   ========================================================================== */
+
+export async function crearSugerencia(mediaId, { campo, valor_propuesto, motivo = '' }) {
+  return leerJson(`/media/${mediaId}/sugerencias/`, {
+    method: 'POST',
+    body: JSON.stringify({ campo, valor_propuesto, motivo }),
+  }, 'Error al enviar la sugerencia de edición.');
+}
+
+export async function getMisSugerencias(params = {}) {
+  return leerJson(`/usuarios/me/sugerencias/${buildQueryString(params)}`, 'Error al obtener tus sugerencias.');
+}
+
+/* ==========================================================================
+   Listas de Usuario
+   ========================================================================== */
+
 export async function getListas(params = {}) {
-  const qs = buildQueryString(params);
-  const response = await apiFetch(`/listas/${qs}`);
-  if (!response.ok) {
-    const errorData = await response.json().catch(() => null);
-    throw new Error(formatApiError(errorData?.error, 'Error al obtener las listas.'));
-  }
-  return await response.json();
+  return leerJson(`/listas/${buildQueryString(params)}`, 'Error al obtener las listas.');
 }
 
-/**
- * Obtiene el detalle de una lista con sus elementos desde /api/listas/<id>/.
- */
 export async function getListaDetalle(id) {
-  const response = await apiFetch(`/listas/${id}/`);
-  if (!response.ok) {
-    const errorData = await response.json().catch(() => null);
-    throw new Error(formatApiError(errorData?.error, 'Error al obtener la lista.'));
-  }
-  return await response.json();
+  return leerJson(`/listas/${id}/`, 'Error al obtener la lista.');
 }
 
-/**
- * Crea una nueva lista para el usuario autenticado en /api/listas/.
- */
 export async function createLista(listaData) {
-  const response = await apiFetch('/listas/', {
+  return leerJson('/listas/', {
     method: 'POST',
     body: JSON.stringify(listaData),
-  });
-  if (!response.ok) {
-    const errorData = await response.json().catch(() => null);
-    throw new Error(formatApiError(errorData?.error, 'Error al crear la lista.'));
-  }
-  return await response.json();
+  }, 'Error al crear la lista.');
 }
 
-/**
- * Modifica una lista propia en /api/listas/<id>/.
- */
 export async function updateLista(id, listaData) {
-  const response = await apiFetch(`/listas/${id}/`, {
+  return leerJson(`/listas/${id}/`, {
     method: 'PATCH',
     body: JSON.stringify(listaData),
-  });
-  if (!response.ok) {
-    const errorData = await response.json().catch(() => null);
-    throw new Error(formatApiError(errorData?.error, 'Error al actualizar la lista.'));
-  }
-  return await response.json();
+  }, 'Error al actualizar la lista.');
 }
 
-/**
- * Elimina una lista propia en /api/listas/<id>/.
- */
 export async function deleteLista(id) {
-  const response = await apiFetch(`/listas/${id}/`, {
+  return leerJson(`/listas/${id}/`, {
     method: 'DELETE',
-  });
-  if (!response.ok) {
-    const errorData = await response.json().catch(() => null);
-    throw new Error(formatApiError(errorData?.error, 'Error al eliminar la lista.'));
-  }
-  return true;
+  }, 'Error al eliminar la lista.');
 }
 
-/**
- * Agrega un título de Media a una lista en /api/listas/<listaId>/elementos/.
- */
 export async function addTituloToLista(listaId, mediaId, orden = 0) {
-  const response = await apiFetch(`/listas/${listaId}/elementos/`, {
+  return leerJson(`/listas/${listaId}/elementos/`, {
     method: 'POST',
     body: JSON.stringify({ media_id: mediaId, orden }),
-  });
-  if (!response.ok) {
-    const errorData = await response.json().catch(() => null);
-    throw new Error(formatApiError(errorData?.error, 'Error al agregar el título a la lista.'));
-  }
-  return await response.json();
+  }, 'Error al agregar el título a la lista.');
 }
 
-/**
- * Quita un título de Media de una lista en /api/listas/<listaId>/elementos/<mediaId>/.
- */
 export async function removeTituloFromLista(listaId, mediaId) {
-  const response = await apiFetch(`/listas/${listaId}/elementos/${mediaId}/`, {
+  return leerJson(`/listas/${listaId}/elementos/${mediaId}/`, {
     method: 'DELETE',
-  });
-  if (!response.ok) {
-    const errorData = await response.json().catch(() => null);
-    throw new Error(formatApiError(errorData?.error, 'Error al quitar el título de la lista.'));
-  }
-  return true;
+  }, 'Error al quitar el título de la lista.');
 }
 
-/**
- * Obtiene las listas públicas de un usuario específico desde /api/usuarios/<username>/listas/.
- */
-export async function getUsuarioListas(username) {
-  const response = await apiFetch(`/usuarios/${username}/listas/`);
-  if (!response.ok) {
-    const errorData = await response.json().catch(() => null);
-    throw new Error(formatApiError(errorData?.error, `Error al obtener las listas de @${username}.`));
-  }
-  return await response.json();
+export async function getUsuarioListas(username, params = {}) {
+  return leerJson(`/usuarios/${username}/listas/${buildQueryString(params)}`, `Error al obtener las listas de @${username}.`);
 }
 
 /**
@@ -552,30 +577,14 @@ export async function rechazarSugerencia(sugerenciaId, motivoRechazo = '') {
 }
 
 /**
- * Obtiene tus sugerencias de edición desde /api/usuarios/me/sugerencias/.
- * Admite filtros: { tipo, estado, page }
- */
-export async function getMisSugerencias(params = {}) {
-  return leerJson(
-    `/usuarios/me/sugerencias/${buildQueryString(params)}`,
-    'Error al obtener tus sugerencias de edición.'
-  );
-}
-
-async function leerJson(endpoint, mensajeError) {
-  const response = await apiFetch(endpoint);
-  if (!response.ok) {
-    const errorData = await response.json().catch(() => null);
-    throw new Error(formatApiError(errorData?.error, mensajeError));
-  }
-  return await response.json();
-}
-
-/**
  * Notifica que la sesión ha expirado, disparando un evento global.
  */
 export function notifySessionExpired() {
   if (typeof window !== 'undefined') {
     window.dispatchEvent(new CustomEvent('cineroll:session-expired'))
   }
+}
+
+export async function getMisListasDeMedia(mediaId) {
+  return leerJson(`/media/${mediaId}/mis-listas/`, 'Error al consultar las listas para este título.');
 }

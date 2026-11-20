@@ -47,8 +47,10 @@ MENSAJE_REPORTE_RESENA_REPETIDO = "Ya reportaste esta reseña."
 
 
 def listas_con_total():
-    return Lista.objects.select_related("usuario").annotate(
-        total_elementos_anotado=models.Count("elementos_lista")
+    return (
+        Lista.objects.select_related("usuario")
+        .annotate(total_elementos_anotado=models.Count("elementos_lista"))
+        .order_by("-fecha_creacion", "-id")
     )
 
 
@@ -358,34 +360,61 @@ class ListaElementoDetailView(APIView):
         return Response(status=status.HTTP_204_NO_CONTENT)
 
 
-class UsuarioListasListView(APIView):
+class UsuarioListasListView(ListAPIView):
     """
-    GET: obtener las listas de un usuario.
-    Si quien consulta es el mismo usuario, devuelve todas sus listas.
-    Si es otro usuario o visitante, solo devuelve las listas públicas.
+    GET /api/usuarios/<username>/listas/
+    Listado paginado de listas públicas de un usuario (o todas si quien consulta es el dueño).
     """
 
-    def get(self, request, username):
-        target_user = get_object_or_404(Usuario, username=username)
-        listas = listas_con_total().filter(usuario=target_user)
-        if not (request.user.is_authenticated and request.user == target_user):
-            listas = listas.filter(publica=True)
+    serializer_class = ListaSerializer
 
-        serializer = ListaSerializer(listas, many=True)
-        return Response(serializer.data, status=status.HTTP_200_OK)
+    def get_queryset(self):
+        target_user = get_object_or_404(Usuario, username=self.kwargs["username"])
+        qs = listas_con_total().filter(usuario=target_user)
+        if not (self.request.user.is_authenticated and self.request.user == target_user):
+            qs = qs.filter(publica=True)
+        return qs
 
 
-class MisListasView(APIView):
+class MisListasView(ListAPIView):
     """
-    GET: todas las listas del usuario autenticado (/api/usuarios/me/listas/).
+    GET /api/usuarios/me/listas/
+    Listado paginado de todas las listas del usuario autenticado.
+    """
+
+    serializer_class = ListaSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        return listas_con_total().filter(usuario=self.request.user)
+
+
+class MediaMisListasView(APIView):
+    """
+    GET /api/media/<media_id>/mis-listas/
+    Indica en cuáles listas del usuario autenticado está el título indicado
+    (ej. favoritas, por ver o listas personalizadas).
     """
 
     permission_classes = [IsAuthenticated]
 
-    def get(self, request):
-        listas = listas_con_total().filter(usuario=request.user)
-        serializer = ListaSerializer(listas, many=True)
-        return Response(serializer.data, status=status.HTTP_200_OK)
+    def get(self, request, media_id):
+        media = get_object_or_404(Media, pk=media_id)
+        listas_con_titulo = (
+            Lista.objects.filter(usuario=request.user, elementos=media)
+            .values("id", "nombre", "tipo")
+        )
+        tipos_presentes = {lista["tipo"] for lista in listas_con_titulo}
+
+        return Response(
+            {
+                "media_id": media.id,
+                "en_favoritas": Lista.Tipo.FAVORITAS in tipos_presentes,
+                "en_por_ver": Lista.Tipo.POR_VER in tipos_presentes,
+                "listas": list(listas_con_titulo),
+            },
+            status=status.HTTP_200_OK,
+        )
 
 
 class MediaSugerenciaListCreateView(ListCreateAPIView):
