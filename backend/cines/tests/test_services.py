@@ -10,11 +10,9 @@ from cines.services import (
     ROOM_MAX_LENGTH,
     TITLE_MAX_LENGTH,
     format_display_title,
-    format_display_title,
     normalize_showtime,
     normalize_showtimes,
 )
-
 
 class ShowtimeNormalizationTests(TestCase):
     def test_valledupar_uses_the_city_key_for_each_provider(self):

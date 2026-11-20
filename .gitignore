@@ -1,13 +1,14 @@
 venv/
 .venv/
 .env
+.env.prod
 __pycache__/
 *.pyc
 db.sqlite3
 .idea/
 .vscode/
+node_modules/
 CineRoll Responsabilidades.pdf
 CineRoll_Responsabilidades_Fase2.pdf
-node_modules/
-.gitatributes
 CineRoll_Responsabilidades_Fase3.pdf
+CineRoll_Responsabilidades_Fase4.pdf
