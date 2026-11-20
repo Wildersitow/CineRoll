@@ -85,10 +85,21 @@ class ConstruirBeatScheduleTests(SimpleTestCase):
             "cines.tasks.limpiar_cartelera_vencida",
         )
 
-    def test_sin_cines_solo_queda_la_limpieza(self):
+    def test_sin_cines_solo_quedan_las_limpiezas(self):
         schedule = construir_beat_schedule([])
 
-        self.assertEqual(list(schedule), ["limpiar-cartelera-vencida"])
+        self.assertEqual(
+        set(schedule),
+        {"limpiar-cartelera-vencida", "limpiar-tokens-vencidos"},
+        )
+
+    def test_incluye_la_limpieza_semanal_de_tokens(self):
+        entrada = construir_beat_schedule(PARES)["limpiar-tokens-vencidos"]
+
+        self.assertEqual(entrada["task"], "usuarios.tasks.limpiar_tokens_vencidos")
+        self.assertEqual(entrada["schedule"].day_of_week, {0})  # domingo
+        self.assertEqual(entrada["schedule"].hour, {3})
+        self.assertEqual(entrada["schedule"].minute, {0})
 
 
 class ConfiguracionActivaTests(SimpleTestCase):
