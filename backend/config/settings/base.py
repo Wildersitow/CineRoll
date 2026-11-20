@@ -147,3 +147,42 @@ CELERY_BROKER_CONNECTION_RETRY_ON_STARTUP = True
 # Solo para pruebas/CI; en producción debe quedar en False.
 CELERY_TASK_ALWAYS_EAGER = config("CELERY_TASK_ALWAYS_EAGER", default=False, cast=bool)
 CELERY_TASK_EAGER_PROPAGATES = CELERY_TASK_ALWAYS_EAGER  # que los errores no se escondan
+
+# --- Registros (logging) ---
+# Todo sale por consola (stdout/stderr) con fecha, nivel y nombre del logger, que es
+# lo que Docker captura: `docker compose logs web worker beat`.
+# El nivel se puede subir o bajar desde el .env sin tocar el código (LOG_LEVEL=DEBUG).
+LOG_LEVEL = config("LOG_LEVEL", default="INFO").upper()
+
+LOGGING = {
+    "version": 1,
+    "disable_existing_loggers": False,
+    "formatters": {
+        "estandar": {
+            "format": "{asctime} {levelname} {name} {message}",
+            "style": "{",
+            "datefmt": "%Y-%m-%d %H:%M:%S",
+        },
+    },
+    "handlers": {
+        "console": {
+            "class": "logging.StreamHandler",
+            "formatter": "estandar",
+        },
+    },
+    # Cualquier logger del proyecto (cines.services, cines.locks, usuarios...)
+    # propaga al root y sale por la consola sin configurarlo uno por uno.
+    "root": {
+        "handlers": ["console"],
+        "level": LOG_LEVEL,
+    },
+    "loggers": {
+        # Django trae su propio handler de consola; se vacía para que sus mensajes
+        # salgan una sola vez, por el root y con nuestro formato.
+        "django": {
+            "handlers": [],
+            "level": "INFO",
+            "propagate": True,
+        },
+    },
+}
