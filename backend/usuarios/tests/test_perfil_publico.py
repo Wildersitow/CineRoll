@@ -100,3 +100,12 @@ class PerfilPublicoTests(APITestCase):
         res_mateo = self.client.get(url)
         self.assertEqual(res_mateo.status_code, status.HTTP_200_OK)
         self.assertEqual(res_mateo.data["count"], 1)
+
+    def test_perfil_y_resenas_de_username_unicode_anterior(self):
+        self.usuario.username = "²"
+        self.usuario.save(update_fields=["username"])
+
+        for ruta in ("usuarios_perfil_publico", "usuarios_resenas_publicas"):
+            with self.subTest(ruta=ruta):
+                response = self.client.get(reverse(ruta, kwargs={"username": "²"}))
+                self.assertEqual(response.status_code, status.HTTP_200_OK)

@@ -67,6 +67,8 @@ class ResenaSerializer(serializers.ModelSerializer):
 
 
 class ReporteResenaSerializer(serializers.ModelSerializer):
+    motivo = serializers.CharField(max_length=1000)
+
     class Meta:
         model = ReporteResena
         fields = ("id", "resena", "usuario", "motivo", "fecha")
@@ -125,6 +127,10 @@ class ListaSerializer(serializers.ModelSerializer):
 
     def validate(self, attrs):
         tipo = attrs.get("tipo", getattr(self.instance, "tipo", None))
+        if self.instance is not None and tipo != self.instance.tipo:
+            raise serializers.ValidationError(
+                {"tipo": "No se puede cambiar el tipo de una lista ya creada."}
+            )
         request = self.context.get("request")
         if request and request.user.is_authenticated and tipo in [Lista.Tipo.FAVORITAS, Lista.Tipo.POR_VER]:
             qs = Lista.objects.filter(usuario=request.user, tipo=tipo)
@@ -152,6 +158,8 @@ class AgregarElementoSerializer(serializers.Serializer):
 
 
 class SugerenciaEdicionSerializer(serializers.ModelSerializer):
+    valor_propuesto = serializers.CharField(max_length=5000)
+    motivo = serializers.CharField(max_length=1000, required=False, allow_blank=True)
     usuario = serializers.CharField(source="usuario.username", read_only=True)
     usuario_id = serializers.IntegerField(read_only=True)
     media_id = serializers.IntegerField(read_only=True)

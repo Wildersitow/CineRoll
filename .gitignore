@@ -8,6 +8,7 @@ db.sqlite3
 .idea/
 .vscode/
 node_modules/
+/frontend/dist/
 CineRoll Responsabilidades.pdf
 CineRoll_Responsabilidades_Fase2.pdf
 CineRoll_Responsabilidades_Fase3.pdf

@@ -95,7 +95,7 @@ class CinesAdminTests(TestCase):
 
         self.assertEqual(response.status_code, 302)
         self.assertEqual(Media.objects.count(), 2)
-        ficha = Media.objects.get(titulo="pelicula de prueba")
+        ficha = Media.objects.get(titulo="Película de prueba")
         self.assertEqual(ficha.tipo, Media.Tipo.PELICULA)
         self.assertEqual(ficha.estado, Media.Estado.EN_CARTELERA)
         self.assertEqual(ficha.titulo_original, "")

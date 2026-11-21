@@ -6,7 +6,7 @@ from django.urls import reverse
 
 from cines.models import EjecucionScraping
 from cines.services import CarteleraScrapeResult, ScraperError
-from cines.tasks import scrape_cartelera_task
+from backend.usuarios.tasks import scrape_cartelera_task
 from usuarios.models import Usuario
 
 

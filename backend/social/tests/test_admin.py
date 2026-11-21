@@ -1,4 +1,5 @@
 from django.contrib import admin
+from django.contrib.auth.models import Permission
 from django.test import TestCase
 from django.urls import reverse
 
@@ -186,3 +187,22 @@ class SocialAdminTests(TestCase):
         ):
             self.assertIn(campo, model_admin.readonly_fields)
 
+
+    def test_staff_con_permiso_de_lectura_no_puede_aprobar_sugerencias(self):
+        self.lector.is_staff = True
+        self.lector.save(update_fields=["is_staff"])
+        self.lector.user_permissions.add(
+            Permission.objects.get(
+                content_type__app_label="social", codename="view_sugerenciaedicion"
+            )
+        )
+        self.client.force_login(self.lector)
+
+        response = self.client.post(
+            reverse("admin:social_sugerenciaedicion_changelist"),
+            {"action": "aprobar_sugerencias", "_selected_action": [self.sugerencia.pk]},
+        )
+        self.assertEqual(response.status_code, 200)
+        self.sugerencia.refresh_from_db()
+        self.assertEqual(self.sugerencia.estado, SugerenciaEdicion.Estado.PENDIENTE)
+        self.assertIsNone(response.context["action_form"])

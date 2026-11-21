@@ -161,14 +161,16 @@ export default function App() {
       return
     }
 
+    const emailUsername = registerEmail.split('@')[0].replace(/[^a-zA-Z0-9_]/g, '')
     const derivedUsername = (
       registerUsername.trim() ||
-      registerEmail.split('@')[0].replace(/[^a-zA-Z0-9_]/g, '') ||
+      (/^\d+$/.test(emailUsername) ? `usuario_${emailUsername}` : emailUsername) ||
       'usuario'
     )
     const nameParts = registerName.trim().split(/\s+/)
 
     try {
+      const escala = new FormData(event.currentTarget).get('escala_calificacion')
       const data = await registerUser(
         {
           username: derivedUsername,
@@ -176,6 +178,7 @@ export default function App() {
           password: registerPassword,
           first_name: nameParts[0] || '',
           last_name: nameParts.slice(1).join(' '),
+          ...(escala && { escala_calificacion: Number(escala) }),
         },
         rememberMe
       )
@@ -280,9 +283,13 @@ export default function App() {
           <Route
             path="perfil"
             element={
-              <RutaProtegida currentUser={currentUser}>
+              <RutaProtegida usuario={currentUser}>
                 <ProfileView
                   currentUser={currentUser}
+                  onProfileSaved={(data) => {
+                    setCurrentUser((previous) => previous ? { ...previous, ...data } : previous)
+                    showToast('Perfil actualizado.')
+                  }}
                   showChangePasswordModal={showChangePasswordModal}
                   setShowChangePasswordModal={setShowChangePasswordModal}
                   currentPasswordInput={currentPasswordInput}

@@ -1,7 +1,7 @@
 from django.contrib.auth import get_user_model
 from django.db import IntegrityError, models, transaction
 from django.shortcuts import get_object_or_404
-from rest_framework import status
+from rest_framework import serializers, status
 from rest_framework.exceptions import (
     NotAuthenticated,
     NotFound,
@@ -9,6 +9,7 @@ from rest_framework.exceptions import (
     ValidationError,
 )
 from rest_framework.generics import (
+    GenericAPIView,
     ListAPIView,
     ListCreateAPIView,
     RetrieveUpdateDestroyAPIView,
@@ -262,6 +263,13 @@ class ListaDetailView(RetrieveUpdateDestroyAPIView):
             return ListaDetalleSerializer
         return ListaSerializer
 
+    def perform_destroy(self, instance):
+        if instance.tipo in (Lista.Tipo.FAVORITAS, Lista.Tipo.POR_VER):
+            raise ValidationError(
+                {"detail": "Las listas Favoritas y Por ver no se pueden eliminar."}
+            )
+        super().perform_destroy(instance)
+
     def get_queryset(self):
         qs = Lista.objects.select_related("usuario").prefetch_related(
             "elementos_lista__media"
@@ -273,18 +281,18 @@ class ListaDetailView(RetrieveUpdateDestroyAPIView):
         return qs.filter(publica=True)
 
 
-class ListaElementoListCreateView(APIView):
+class ListaElementoListCreateView(GenericAPIView):
     """
     GET: listar elementos de una lista.
     POST: agregar un título a una lista (solo su autor).
     DELETE: quitar un título de la lista pasando media_id en el cuerpo o query param.
     """
 
+    serializer_class = AgregarElementoSerializer
+
     def get_lista(self, lista_id):
         lista = get_object_or_404(
-            Lista.objects.select_related("usuario").prefetch_related(
-                "elementos_lista__media"
-            ),
+            Lista.objects.select_related("usuario"),
             pk=lista_id,
         )
         autenticado = self.request.user.is_authenticated
@@ -301,12 +309,13 @@ class ListaElementoListCreateView(APIView):
     def get(self, request, lista_id):
         lista = self.get_lista(lista_id)
         elementos = lista.elementos_lista.select_related("media").all()
-        serializer = ElementoListaSerializer(elementos, many=True)
-        return Response(serializer.data, status=status.HTTP_200_OK)
+        pagina = self.paginate_queryset(elementos)
+        serializer = ElementoListaSerializer(pagina, many=True)
+        return self.get_paginated_response(serializer.data)
 
     def post(self, request, lista_id):
         lista = self.get_lista(lista_id)
-        serializer = AgregarElementoSerializer(data=request.data)
+        serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
 
         media_id = serializer.validated_data["media_id"]
@@ -335,6 +344,17 @@ class ListaElementoListCreateView(APIView):
         media_id = request.data.get("media_id") or request.query_params.get("media_id")
         if not media_id:
             raise ValidationError({"detail": "Se requiere media_id para eliminar el elemento."})
+
+        valor = str(media_id)
+        if not valor.isascii() or not valor.isdecimal():
+            raise ValidationError(
+                {"media_id": "Debe ser un identificador de título válido."}
+            )
+        campo_id = serializers.IntegerField(min_value=1, max_value=2**63 - 1)
+        try:
+            media_id = campo_id.run_validation(valor)
+        except ValidationError as exc:
+            raise ValidationError({"media_id": exc.detail}) from exc
 
         elemento = get_object_or_404(ElementoLista, lista=lista, media_id=media_id)
         elemento.delete()
