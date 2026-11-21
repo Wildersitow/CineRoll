@@ -284,3 +284,37 @@ class ListasAPITests(APITestCase):
             ElementoLista.objects.filter(pk=self.elemento1.pk).exists()
         )
 
+
+    def test_elementos_de_lista_publica_se_paginan(self):
+        url = reverse("lista-elementos", args=[self.lista_publica_user1.pk])
+        response = self.client.get(url)
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["count"], 1)
+        self.assertEqual(response.data["results"][0]["media_id"], self.media1.pk)
+
+    def test_quitar_titulo_con_identificador_invalido_devuelve_400(self):
+        self.client.force_authenticate(self.user1)
+        url = reverse("lista-elementos", args=[self.lista_publica_user1.pk])
+
+        for valor in ("abc", "²", "0", "99999999999999999999"):
+            with self.subTest(media_id=valor):
+                response = self.client.delete(f"{url}?media_id={valor}")
+                self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+                self.assertIn("media_id", response.data["error"]["campos"])
+
+        self.assertTrue(ElementoLista.objects.filter(pk=self.elemento1.pk).exists())
+
+    def test_listas_del_sistema_conservan_tipo_y_no_se_eliminan(self):
+        self.client.force_authenticate(self.user1)
+
+        for tipo in (Lista.Tipo.FAVORITAS, Lista.Tipo.POR_VER):
+            with self.subTest(tipo=tipo):
+                lista = Lista.objects.create(usuario=self.user1, tipo=tipo, nombre=tipo.label)
+                url = reverse("lista-detail", args=[lista.pk])
+
+                response = self.client.patch(url, {"tipo": Lista.Tipo.PERSONALIZADA})
+                self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+                self.assertEqual(self.client.delete(url).status_code, status.HTTP_400_BAD_REQUEST)
+                lista.refresh_from_db()
+                self.assertEqual(lista.tipo, tipo)

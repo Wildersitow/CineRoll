@@ -206,6 +206,10 @@ class RegistroSerializer(serializers.ModelSerializer):
 
     def validate_username(self, value):
         nombre_limpio = value.strip()
+        if nombre_limpio.isdigit():
+            raise serializers.ValidationError(
+                "El nombre de usuario no puede estar formado solo por números."
+            )
         if nombre_limpio.lower() in NOMBRES_RESERVADOS:
             raise serializers.ValidationError(
                 "Este nombre de usuario no está disponible."

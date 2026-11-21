@@ -105,7 +105,7 @@ export async function refreshAccessToken() {
  */
 export async function apiFetch(endpoint, options = {}) {
   const url = endpoint.startsWith('http') ? endpoint : `${API_BASE_URL}${endpoint}`;
-  let auth = getStoredAuth();
+  const auth = getStoredAuth();
 
   const headers = {
     'Content-Type': 'application/json',
@@ -137,11 +137,6 @@ export async function apiFetch(endpoint, options = {}) {
       if (response.status === 401) {
         clearStoredAuth();
         notifySessionExpired();
-      }
-    } else {
-      clearStoredAuth();
-      if (typeof window !== 'undefined') {
-        window.dispatchEvent(new CustomEvent('cineroll:sesion-vencida'));
       }
     }
   } else if (response.status === 401) {
@@ -182,7 +177,7 @@ export async function loginUser(usuario, clave, rememberMe = false) {
 /**
  * Registra un nuevo usuario contra /api/auth/registro/
  */
-export async function registerUser({ username, email, password, first_name = '', last_name = '' }, rememberMe = false) {
+export async function registerUser({ username, email, password, first_name = '', last_name = '', escala_calificacion }, rememberMe = false) {
   let response;
   try {
     response = await fetch(`${API_BASE_URL}/auth/registro/`, {
@@ -194,6 +189,7 @@ export async function registerUser({ username, email, password, first_name = '',
         password,
         first_name,
         last_name,
+        escala_calificacion,
       }),
     });
   } catch {
@@ -521,15 +517,7 @@ export async function getSugerenciasMedia(mediaId, params = {}) {
  * Crea una nueva sugerencia de edición para un título en /api/media/<id>/sugerencias/.
  */
 export async function crearSugerenciaEdicion(mediaId, sugerencia) {
-  const response = await apiFetch(`/media/${mediaId}/sugerencias/`, {
-    method: 'POST',
-    body: JSON.stringify(sugerencia),
-  });
-  if (!response.ok) {
-    const errorData = await response.json().catch(() => null);
-    throw new Error(formatApiError(errorData?.error, 'Error al enviar la sugerencia de edición.'));
-  }
-  return await response.json();
+  return crearSugerencia(mediaId, sugerencia);
 }
 
 /**
@@ -551,29 +539,19 @@ export async function getSugerenciasPendientes(params = {}) {
  * Aprueba una sugerencia en /api/sugerencias/<id>/aprobar/.
  */
 export async function aprobarSugerencia(sugerenciaId) {
-  const response = await apiFetch(`/sugerencias/${sugerenciaId}/aprobar/`, {
+  return leerJson(`/sugerencias/${sugerenciaId}/aprobar/`, {
     method: 'POST',
-  });
-  if (!response.ok) {
-    const errorData = await response.json().catch(() => null);
-    throw new Error(formatApiError(errorData?.error, 'Error al aprobar la sugerencia.'));
-  }
-  return await response.json();
+  }, 'Error al aprobar la sugerencia.');
 }
 
 /**
  * Rechaza una sugerencia en /api/sugerencias/<id>/rechazar/.
  */
 export async function rechazarSugerencia(sugerenciaId, motivoRechazo = '') {
-  const response = await apiFetch(`/sugerencias/${sugerenciaId}/rechazar/`, {
+  return leerJson(`/sugerencias/${sugerenciaId}/rechazar/`, {
     method: 'POST',
     body: JSON.stringify({ motivo_rechazo: motivoRechazo }),
-  });
-  if (!response.ok) {
-    const errorData = await response.json().catch(() => null);
-    throw new Error(formatApiError(errorData?.error, 'Error al rechazar la sugerencia.'));
-  }
-  return await response.json();
+  }, 'Error al rechazar la sugerencia.');
 }
 
 /**

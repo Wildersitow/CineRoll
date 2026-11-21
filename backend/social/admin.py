@@ -1,6 +1,7 @@
 from django import forms
 from django.contrib import admin
 from django.template.response import TemplateResponse
+from rest_framework.exceptions import ValidationError
 
 from social.models import (
     ElementoLista,
@@ -95,6 +96,26 @@ class SugerenciaEdicionAdmin(admin.ModelAdmin):
     date_hierarchy = "fecha_creacion"
     actions = ("aprobar_sugerencias", "rechazar_sugerencias")
 
+    def has_add_permission(self, request):
+        return False
+
+    def get_readonly_fields(self, request, obj=None):
+        if obj is not None and obj.estado != SugerenciaEdicion.Estado.PENDIENTE:
+            return self.readonly_fields + (
+                "usuario", "media", "campo", "valor_propuesto", "motivo"
+            )
+        return self.readonly_fields
+
+    def _avisar_error(self, request, sugerencia, error):
+        detalle = error.detail
+        if isinstance(detalle, dict):
+            detalle = [mensaje for valor in detalle.values()
+                       for mensaje in (valor if isinstance(valor, list) else [valor])]
+        texto = " ".join(str(mensaje) for mensaje in detalle)
+        self.message_user(
+            request, f"«{sugerencia.media} — {sugerencia.campo}»: {texto}", level="warning"
+        )
+
     @admin.display(description="Valor actual")
     def valor_actual(self, obj):
         if obj.pk and obj.media_id:
@@ -106,22 +127,19 @@ class SugerenciaEdicionAdmin(admin.ModelAdmin):
             return "" if valor is None else str(valor)
         return "—"
 
-    @admin.action(description="Aprobar sugerencias seleccionadas")
+    @admin.action(description="Aprobar sugerencias seleccionadas", permissions=["change"])
     def aprobar_sugerencias(self, request, queryset):
         aprobadas = 0
-        errores = 0
         for sugerencia in queryset:
             try:
                 aprobar_sugerencia(sugerencia, request.user)
                 aprobadas += 1
-            except Exception:
-                errores += 1
+            except ValidationError as exc:
+                self._avisar_error(request, sugerencia, exc)
         if aprobadas:
             self.message_user(request, f"{aprobadas} sugerencia(s) aprobada(s).")
-        if errores:
-            self.message_user(request, f"{errores} sugerencia(s) no pudieron aprobarse.")
 
-    @admin.action(description="Rechazar sugerencias seleccionadas")
+    @admin.action(description="Rechazar sugerencias seleccionadas", permissions=["change"])
     def rechazar_sugerencias(self, request, queryset):
         seleccionadas = list(queryset.values_list("pk", flat=True))
         if not seleccionadas:
@@ -133,7 +151,6 @@ class SugerenciaEdicionAdmin(admin.ModelAdmin):
             if form.is_valid():
                 motivo = form.cleaned_data["motivo_rechazo"]
                 rechazadas = 0
-                errores = 0
                 for sugerencia in queryset:
                     try:
                         rechazar_sugerencia(
@@ -142,12 +159,10 @@ class SugerenciaEdicionAdmin(admin.ModelAdmin):
                             motivo_rechazo=motivo,
                         )
                         rechazadas += 1
-                    except Exception:
-                        errores += 1
+                    except ValidationError as exc:
+                        self._avisar_error(request, sugerencia, exc)
                 if rechazadas:
                     self.message_user(request, f"{rechazadas} sugerencia(s) rechazada(s).")
-                if errores:
-                    self.message_user(request, f"{errores} sugerencia(s) no pudieron rechazarse.")
                 return None
         else:
             form = MotivoRechazoMasivoForm(initial={"_selected_action": seleccionadas})

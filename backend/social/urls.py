@@ -125,11 +125,6 @@ urlpatterns = [
         name="sugerencias-moderacion",
     ),
     path(
-        "sugerencias/pendientes/",
-        SugerenciasModeracionView.as_view(),
-        name="sugerencias-pendientes",
-    ),
-    path(
         "sugerencias/<int:pk>/aprobar/",
         AprobarSugerenciaView.as_view(),
         name="sugerencia-aprobar",

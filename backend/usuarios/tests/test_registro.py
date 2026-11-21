@@ -96,6 +96,13 @@ class RegistroTests(APITestCase):
         response = self.client.post(self.url, {**self.datos, "email": "no-es-correo"})
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
 
+    def test_no_permite_nombres_de_usuario_numericos(self):
+        for username in ("123", "²"):
+            with self.subTest(username=username):
+                response = self.client.post(self.url, {**self.datos, "username": username})
+                self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+                self.assertIn("username", response.data["error"]["campos"])
+
 
 class RutasDeAutenticacionTests(APITestCase):
     """Las rutas del reparto (/auth/...) y las que ya usa el frontend responden igual."""

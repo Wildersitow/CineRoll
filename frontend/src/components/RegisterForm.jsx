@@ -175,6 +175,15 @@ export default function RegisterForm({
         </div>
       </div>
 
+      <label className="input-group">
+        Escala de calificación (opcional)
+        <select name="escala_calificacion" className="rating-select" defaultValue="">
+          <option value="">Predeterminada (1 a 10 puntos)</option>
+          <option value="10">1 a 10 puntos</option>
+          <option value="5">5 estrellas (con medias)</option>
+        </select>
+      </label>
+
       <div className="terms-row">
         <label className="checkbox-label">
           <input

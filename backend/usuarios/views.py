@@ -26,6 +26,11 @@ from .services import generar_payload_autenticacion
 Usuario = get_user_model()
 
 
+def _es_id(identificador):
+    valor = str(identificador)
+    return valor.isascii() and valor.isdecimal()
+
+
 class CustomTokenObtainPairView(TokenObtainPairView):
     """Endpoint estándar DRF SimpleJWT con claims personalizados (/api/token/)"""
     serializer_class = CustomTokenObtainPairSerializer
@@ -182,7 +187,7 @@ class PerfilPublicoView(RetrieveAPIView):
             or self.kwargs.get("username")
         )
         qs = self.get_queryset()
-        if str(identificador).isdigit():
+        if _es_id(identificador):
             return get_object_or_404(qs, pk=int(identificador))
         return get_object_or_404(qs, username=str(identificador))
 
@@ -201,7 +206,7 @@ class UsuarioResenasPublicasView(ListAPIView):
             or self.kwargs.get("pk")
             or self.kwargs.get("username")
         )
-        if str(identificador).isdigit():
+        if _es_id(identificador):
             usuario = get_object_or_404(Usuario, pk=int(identificador))
         else:
             usuario = get_object_or_404(Usuario, username=str(identificador))
@@ -229,32 +234,6 @@ class MisResenasView(ListAPIView):
             .select_related("media", "usuario")
             .order_by("-fecha_creacion", "-id")
         )
-
-
-class SugerenciaEdicionView(APIView):
-    """
-    Endpoint para crear y listar sugerencias de edición de perfil.
-    POST /api/usuarios/me/sugerencias/ para crear una sugerencia.
-    GET /api/usuarios/me/sugerencias/ para listar las sugerencias del usuario.
-    """
-    permission_classes = [IsAuthenticated]
-
-    def post(self, request):
-        serializer = SugerenciaEdicionSerializer(data=request.data)
-        serializer.is_valid(raise_exception=True)
-        sugerencia = serializer.save(usuario=request.user)
-        return Response(
-            {
-                "mensaje": "Sugerencia de edición enviada exitosamente.",
-                "sugerencia": SugerenciaEdicionSerializer(sugerencia).data,
-            },
-            status=status.HTTP_201_CREATED,
-        )
-
-    def get(self, request):
-        sugerencias = SugerenciaEdicion.objects.filter(usuario=request.user)
-        serializer = SugerenciaEdicionSerializer(sugerencias, many=True)
-        return Response(serializer.data, status=status.HTTP_200_OK)
 
 
 class MisSugerenciasView(ListAPIView):

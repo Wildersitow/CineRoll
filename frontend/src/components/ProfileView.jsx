@@ -1,7 +1,10 @@
+import { useState } from 'react'
+import ProfileEditForm from './ProfileEditForm'
 import ChangePasswordModal from './ChangePasswordModal'
 
 export default function ProfileView({
   currentUser,
+  onProfileSaved,
   showChangePasswordModal,
   setShowChangePasswordModal,
   currentPasswordInput,
@@ -14,6 +17,9 @@ export default function ProfileView({
   onChangePasswordSubmit,
   onResetPasswordInputs,
 }) {
+  const [editing, setEditing] = useState(false)
+  const [failedAvatar, setFailedAvatar] = useState(null)
+
   return (
     <main
       className="blank-scene-content"
@@ -63,7 +69,9 @@ export default function ProfileView({
               boxShadow: '0 4px 14px rgba(229, 9, 20, 0.3)',
             }}
           >
-            {(currentUser.nombre || currentUser.username || 'U').charAt(0).toUpperCase()}
+            {currentUser.avatar && currentUser.avatar !== failedAvatar ? (
+              <img className="profile-avatar" src={currentUser.avatar} alt="" onError={() => setFailedAvatar(currentUser.avatar)} />
+            ) : (currentUser.nombre || currentUser.username || 'U').charAt(0).toUpperCase()}
           </div>
           <div>
             <h2 style={{ color: '#ffffff', margin: 0, fontSize: '1.4rem' }}>
@@ -75,10 +83,11 @@ export default function ProfileView({
           </div>
         </div>
 
+        {currentUser.biografia && <p className="profile-bio">{currentUser.biografia}</p>}
         <div
           style={{
             display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(min(200px, 100%), 1fr))',
             gap: '1rem',
             marginTop: '1rem',
           }}
@@ -145,6 +154,24 @@ export default function ProfileView({
             </p>
           </div>
         </div>
+        <div className="profile-actions">
+          <button className="submit-btn" type="button" onClick={() => setEditing(!editing)}>
+            {editing ? 'Cancelar edición' : 'Editar perfil'}
+          </button>
+          <button
+            className="submit-btn"
+            type="button"
+            onClick={() => setShowChangePasswordModal(true)}
+          >
+            Cambiar contraseña
+          </button>
+        </div>
+        {editing && (
+          <ProfileEditForm currentUser={currentUser} onSaved={(data) => {
+            setEditing(false)
+            onProfileSaved(data)
+          }} />
+        )}
       </div>
     </main>
   )

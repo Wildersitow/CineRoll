@@ -1,6 +1,6 @@
 from django.test import SimpleTestCase
 
-from cines.tasks import ping
+from backend.usuarios.tasks import ping
 from config import celery_app
 
 

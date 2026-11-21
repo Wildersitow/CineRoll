@@ -1,6 +1,7 @@
 from datetime import datetime, time, timedelta, timezone
 from unittest.mock import patch
 
+from django.test import override_settings
 from django.contrib.auth import get_user_model
 from django.urls import reverse
 from django.utils import timezone as django_timezone
@@ -74,6 +75,7 @@ class CarteleraApiTests(APITestCase):
                     expected_ids,
                 )
 
+    @override_settings(CARTELERA_ACTIVA=(("cinepolis", "valledupar"), ("royal_films", "valledupar")))
     @patch("cines.views.timezone.now")
     def test_billboard_status_reports_latest_attempt_success_and_freshness(self, now):
         current_time = datetime(2026, 11, 17, 18, 0, tzinfo=timezone.utc)
@@ -135,7 +137,7 @@ class CarteleraApiTests(APITestCase):
         )
         self.assertFalse(estados[("royal_films", "valledupar")]["ultima_fallo"])
         self.assertTrue(estados[("royal_films", "valledupar")]["desactualizada"])
-        self.assertFalse(estados[("cinemark", "bogota")]["desactualizada"])
+        self.assertNotIn(("cinemark", "bogota"), estados)
         self.assertNotIn("mensaje_error", response.data)
         self.assertNotIn(
             "no debe mostrarse",

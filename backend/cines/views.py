@@ -1,5 +1,6 @@
 from datetime import timedelta
 
+from django.conf import settings
 from django.db.models import Max, OuterRef, Q, Subquery
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
@@ -15,7 +16,7 @@ from rest_framework.views import APIView
 
 from cines.models import Cine, EjecucionScraping, Funcion
 from cines.serializers import CineSerializer, FuncionSerializer
-from cines.services import CITY_PROVIDER_KEYS, normalize_city
+from cines.services import normalize_city
 from media.models import Media
 from usuarios.permissions import EsAdministradorOLecturaPublica
 
@@ -66,28 +67,27 @@ class CarteleraEstadoView(APIView):
         ahora = timezone.now()
         limite_desactualizacion = ahora - timedelta(hours=24)
         resultados = []
-        for ciudad, proveedores in CITY_PROVIDER_KEYS.items():
-            for cine in proveedores:
-                estado = estados_guardados.get((cine, ciudad), {})
-                ultima_exitosa = estado.get("ultima_ejecucion_exitosa")
-                resultados.append(
-                    {
-                        "cine": cine,
-                        "ciudad": ciudad,
-                        "ultima_ejecucion_exitosa": ultima_exitosa,
-                        "ultima_tuvo_advertencia": bool(
-                            estado.get("ultima_advertencia")
-                        ),
-                        "ultima_fallo": (
-                            estado.get("ultimo_estado")
-                            == EjecucionScraping.Estado.FALLIDA
-                        ),
-                        "desactualizada": (
-                            ultima_exitosa is None
-                            or ultima_exitosa < limite_desactualizacion
-                        ),
-                    }
-                )
+        for cine, ciudad in settings.CARTELERA_ACTIVA:
+            estado = estados_guardados.get((cine, ciudad), {})
+            ultima_exitosa = estado.get("ultima_ejecucion_exitosa")
+            resultados.append(
+                {
+                    "cine": cine,
+                    "ciudad": ciudad,
+                    "ultima_ejecucion_exitosa": ultima_exitosa,
+                    "ultima_tuvo_advertencia": bool(
+                        estado.get("ultima_advertencia")
+                    ),
+                    "ultima_fallo": (
+                        estado.get("ultimo_estado")
+                        == EjecucionScraping.Estado.FALLIDA
+                    ),
+                    "desactualizada": (
+                        ultima_exitosa is None
+                        or ultima_exitosa < limite_desactualizacion
+                    ),
+                }
+            )
 
         return Response({"resultados": resultados})
 
