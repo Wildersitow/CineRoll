@@ -35,15 +35,15 @@ export default function RegisterForm({
   return (
     <form className="auth-form" onSubmit={onSubmit}>
       <div className="input-group">
-        <label htmlFor="register-username">Nombre de usuario</label>
+        <label htmlFor="register-username">Nombre de usuario (opcional)</label>
         <div className="input-field-wrapper">
-          <span className="input-icon">
-            <span style={{ fontWeight: 'bold', fontSize: '1rem', color: '#94a3b8' }}>@</span>
-          </span>
           <input
             id="register-username"
+            name="username"
+            autoComplete="username"
+            autoCapitalize="none"
             type="text"
-            placeholder="ej. valeria_cine"
+            placeholder="valeria_cine"
             value={registerUsername}
             onChange={(e) => setRegisterUsername(e.target.value)}
           />
@@ -53,16 +53,12 @@ export default function RegisterForm({
       <div className="input-group">
         <label htmlFor="register-name">Nombre completo</label>
         <div className="input-field-wrapper">
-          <span className="input-icon">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
-              <circle cx="12" cy="7" r="4"></circle>
-            </svg>
-          </span>
           <input
             id="register-name"
+            name="name"
+            autoComplete="name"
             type="text"
-            placeholder="Tu nombre y apellido"
+            placeholder="Valeria Torres"
             value={registerName}
             onChange={(e) => setRegisterName(e.target.value)}
           />
@@ -72,17 +68,14 @@ export default function RegisterForm({
       <div className="input-group">
         <label htmlFor="register-email">Correo electrónico</label>
         <div className="input-field-wrapper">
-          <span className="input-icon">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path>
-              <polyline points="22,6 12,13 2,6"></polyline>
-            </svg>
-          </span>
           <input
             id="register-email"
+            name="email"
+            autoComplete="email"
+            autoCapitalize="none"
             type="email"
             required
-            placeholder="ejemplo@cineroll.com"
+            placeholder="valeria@ejemplo.com"
             value={registerEmail}
             onChange={(e) => setRegisterEmail(e.target.value)}
           />
@@ -90,19 +83,16 @@ export default function RegisterForm({
       </div>
 
       <div className="input-group">
-        <label htmlFor="register-password">Contraseña (mínimo 8 caracteres)</label>
+        <label htmlFor="register-password">Contraseña</label>
         <div className="input-field-wrapper">
-          <span className="input-icon">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
-              <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
-            </svg>
-          </span>
           <input
             id="register-password"
+            name="password"
+            autoComplete="new-password"
+            aria-describedby="register-password-hint"
             type={showPassword ? 'text' : 'password'}
             required
-            placeholder="Mínimo 8 caracteres"
+            placeholder="Crea una clave"
             value={registerPassword}
             onChange={(e) => setRegisterPassword(e.target.value)}
           />
@@ -126,6 +116,7 @@ export default function RegisterForm({
           </button>
         </div>
 
+        <p id="register-password-hint" className="field-hint">Mínimo 8 caracteres.</p>
         {registerPassword && (
           <div className="strength-meter">
             <div className="strength-bars">
@@ -141,16 +132,13 @@ export default function RegisterForm({
       <div className="input-group">
         <label htmlFor="register-confirm">Confirmar contraseña</label>
         <div className="input-field-wrapper">
-          <span className="input-icon">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path>
-            </svg>
-          </span>
           <input
             id="register-confirm"
+            name="password_confirmation"
+            autoComplete="new-password"
             type={showConfirmPassword ? 'text' : 'password'}
             required
-            placeholder="Repite tu contraseña"
+            placeholder="Escribe la misma clave"
             value={registerConfirmPassword}
             onChange={(e) => setRegisterConfirmPassword(e.target.value)}
           />
@@ -175,14 +163,14 @@ export default function RegisterForm({
         </div>
       </div>
 
-      <label className="input-group">
-        Escala de calificación (opcional)
-        <select name="escala_calificacion" className="rating-select" defaultValue="">
+      <div className="input-group">
+        <label htmlFor="register-scale">Escala de calificación (opcional)</label>
+        <select id="register-scale" name="escala_calificacion" className="rating-select" defaultValue="">
           <option value="">Predeterminada (1 a 10 puntos)</option>
           <option value="10">1 a 10 puntos</option>
           <option value="5">5 estrellas (con medias)</option>
         </select>
-      </label>
+      </div>
 
       <div className="terms-row">
         <label className="checkbox-label">
@@ -200,7 +188,7 @@ export default function RegisterForm({
       </div>
 
       <button type="submit" className="submit-btn" disabled={isLoading}>
-        {isLoading ? 'Creando cuenta...' : 'Crear Cuenta'}
+        {isLoading ? 'Creando cuenta...' : 'Crear cuenta'}
       </button>
 
       <p className="switch-text">
@@ -210,7 +198,7 @@ export default function RegisterForm({
           className="link-btn"
           onClick={onSwitchToLogin}
         >
-          Inicia sesión aquí
+          Inicia sesión
         </button>
       </p>
     </form>

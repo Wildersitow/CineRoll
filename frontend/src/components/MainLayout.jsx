@@ -1,48 +1,95 @@
-import { NavLink, Outlet } from 'react-router-dom'
+import { useLayoutEffect } from 'react'
+import { motion, useReducedMotion } from 'motion/react'
+import { Link, useLocation, useNavigate, useOutlet } from 'react-router-dom'
+import CinemaIcon from './CinemaIcon'
+import './Cinema.css'
+
+const cinemaLinks = [
+  { path: '/', label: 'Inicio', icon: 'home' },
+  { path: '/?tipo=pelicula', label: 'Películas', icon: 'film' },
+  { path: '/?tipo=serie', label: 'Series', icon: 'screen' },
+  { path: '/?tipo=anime', label: 'Anime', icon: 'spark' },
+]
+
+const billboardLinks = [
+  { path: '/?estado=proximo_estreno', label: 'Estrenos', icon: 'clock' },
+  { path: '/cines', label: 'Cines', icon: 'pin' },
+]
+
+function NavGroup({ label, links, pathname, search }) {
+  return (
+    <div className="cinema-nav-group" role="group" aria-label={label}>
+      <span className="cinema-nav-label" aria-hidden="true">{label}</span>
+      {links.map(({ path, label, icon }) => {
+        const active = path === pathname + search || (pathname !== '/' && path === pathname)
+        return (
+          <Link key={path} to={path} aria-current={active ? 'page' : undefined}>
+            <CinemaIcon name={icon} weight={active ? 'fill' : 'regular'} />
+            {label}
+          </Link>
+        )
+      })}
+    </div>
+  )
+}
 
 export default function MainLayout({ currentUser, onLogout, isLoading }) {
+  const { pathname, search } = useLocation()
+  const navigate = useNavigate()
+  const outlet = useOutlet()
+  const reduceMotion = useReducedMotion()
+  const query = new URLSearchParams(search).get('q') || ''
+  const searchFieldKey = pathname + search
+  useLayoutEffect(() => {
+    window.scrollTo(0, 0)
+  }, [pathname])
+
+  const account = currentUser ? { path: '/perfil', label: 'Mi perfil' } : { path: '/acceso', label: 'Ingresar' }
+
+  function submitSearch(event) {
+    event.preventDefault()
+    const term = new FormData(event.currentTarget).get('q').trim()
+    navigate(term ? `/?${new URLSearchParams({ q: term })}` : '/')
+  }
+
   return (
-    <div className="authenticated-scene">
-      <header className="scene-navbar">
-        <NavLink to="/" className="scene-brand" aria-label="Ir al inicio">
-          <div className="logo-badge-small" aria-hidden="true">
-            <svg className="film-icon-small" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <rect x="2" y="2" width="20" height="20" rx="2.18" ry="2.18" />
-              <line x1="7" y1="2" x2="7" y2="22" />
-              <line x1="17" y1="2" x2="17" y2="22" />
-              <line x1="2" y1="12" x2="22" y2="12" />
-            </svg>
-          </div>
-          <span className="scene-title">Cine<span>Roll</span></span>
-        </NavLink>
-
-        <nav className="scene-main-nav" aria-label="Navegación principal">
-          <NavLink to="/">Inicio</NavLink>
-          <NavLink to="/cines">Cines</NavLink>
-          {currentUser && <NavLink to="/perfil">Perfil</NavLink>}
-          {!currentUser && <NavLink to="/acceso">Acceso</NavLink>}
-        </nav>
-
-        {currentUser && (
-          <div className="scene-user-actions">
-            <span className="scene-user-greeting">
-              Hola, <strong>{currentUser.nombre || currentUser.username}</strong>
-            </span>
-            <button
-              id="btn-logout"
-              type="button"
-              className="action-btn-logout"
-              onClick={onLogout}
-              disabled={isLoading}
-            >
-              {isLoading ? 'Cerrando...' : 'Cerrar Sesión'}
+    <div className="cinema-shell">
+      <a className="cinema-skip" href="#contenido">Saltar al contenido</a>
+      <header className="cinema-header">
+        <Link to="/" className="cinema-brand" aria-label="CineRoll">
+          <span className="cinema-brand-symbol" aria-hidden="true" />
+          <span className="cinema-brand-wordmark" aria-hidden="true" />
+        </Link>
+        <form key={searchFieldKey} onSubmit={submitSearch} role="search" className="cinema-search">
+          <input type="search" name="q" defaultValue={query} placeholder="Buscar en el catálogo" aria-label="Buscar en el catálogo" />
+          <button type="submit" aria-label="Buscar"><CinemaIcon name="search" /></button>
+        </form>
+        <div className="cinema-account">
+          <Link to={account.path} aria-current={pathname === account.path ? 'page' : undefined}>
+            <CinemaIcon name="user" weight={pathname === account.path ? 'fill' : 'regular'} /><span>{account.label}</span>
+          </Link>
+          {currentUser && (
+            <button type="button" onClick={onLogout} disabled={isLoading}>
+              {isLoading ? 'Cerrando…' : 'Cerrar sesión'}
             </button>
-          </div>
-        )}
+          )}
+        </div>
       </header>
-
-      <div className="blank-scene-content">
-        <Outlet />
+      <aside className="cinema-sidebar">
+        <nav aria-label="Navegación principal">
+          <NavGroup label="Explorar" links={cinemaLinks} pathname={pathname} search={search} />
+          <NavGroup label="Cartelera" links={billboardLinks} pathname={pathname} search={search} />
+        </nav>
+      </aside>
+      <div className="cinema-content" id="contenido" tabIndex={-1}>
+        <motion.div
+          key={pathname}
+          initial={reduceMotion ? false : { opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ duration: reduceMotion ? 0 : 0.18, ease: 'easeOut' }}
+        >
+          {outlet}
+        </motion.div>
       </div>
     </div>
   )

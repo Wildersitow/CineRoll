@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { lazy, Suspense, useEffect, useState } from 'react'
 import './App.css'
 import {
   changePassword,
@@ -9,13 +9,18 @@ import {
   logoutUser,
   registerUser,
 } from './services/api'
+import CatalogView from './components/CatalogView'
 import AuthCard from './components/AuthCard'
-import ProfileView from './components/ProfileView'
 import ToastNotification from './components/ToastNotification'
 import { Navigate, Route, Routes, useNavigate } from 'react-router-dom'
 import MainLayout from './components/MainLayout'
-import MarcadorRuta from './components/MarcadorRuta'
+import CinemaState from './components/CinemaState'
 import RutaProtegida from './components/RutaProtegida'
+
+const MediaDetailView = lazy(() => import('./components/MediaDetailView'))
+const CinemaDirectory = lazy(() => import('./components/CinemaDirectory'))
+const ProfileView = lazy(() => import('./components/ProfileView'))
+const PublicProfileView = lazy(() => import('./components/PublicProfileView'))
 
 const MIN_PASSWORD_LENGTH = 8
 
@@ -243,7 +248,7 @@ export default function App() {
         <Route element={<MainLayout currentUser={currentUser} onLogout={handleLogout} isLoading={isLoading} />}>
           <Route
             index
-            element={<MarcadorRuta titulo="Catálogo" descripcion="Listado de películas, series y anime." />}
+            element={<CatalogView />}
           />
           <Route
             path="acceso"
@@ -284,40 +289,42 @@ export default function App() {
             path="perfil"
             element={
               <RutaProtegida usuario={currentUser}>
-                <ProfileView
-                  currentUser={currentUser}
-                  onProfileSaved={(data) => {
-                    setCurrentUser((previous) => previous ? { ...previous, ...data } : previous)
-                    showToast('Perfil actualizado.')
-                  }}
-                  showChangePasswordModal={showChangePasswordModal}
-                  setShowChangePasswordModal={setShowChangePasswordModal}
-                  currentPasswordInput={currentPasswordInput}
-                  setCurrentPasswordInput={setCurrentPasswordInput}
-                  newPasswordInput={newPasswordInput}
-                  setNewPasswordInput={setNewPasswordInput}
-                  confirmNewPasswordInput={confirmNewPasswordInput}
-                  setConfirmNewPasswordInput={setConfirmNewPasswordInput}
-                  passwordChangeStatus={passwordChangeStatus}
-                  onChangePasswordSubmit={handleChangePasswordSubmit}
-                  onResetPasswordInputs={resetPasswordChangeInputs}
-                />
+                <Suspense fallback={<p className="cinema-page" role="status">Cargando perfil…</p>}>
+                  <ProfileView
+                    currentUser={currentUser}
+                    onProfileSaved={(data) => {
+                      setCurrentUser((previous) => previous ? { ...previous, ...data } : previous)
+                      showToast('Perfil actualizado.')
+                    }}
+                    showChangePasswordModal={showChangePasswordModal}
+                    setShowChangePasswordModal={setShowChangePasswordModal}
+                    currentPasswordInput={currentPasswordInput}
+                    setCurrentPasswordInput={setCurrentPasswordInput}
+                    newPasswordInput={newPasswordInput}
+                    setNewPasswordInput={setNewPasswordInput}
+                    confirmNewPasswordInput={confirmNewPasswordInput}
+                    setConfirmNewPasswordInput={setConfirmNewPasswordInput}
+                    passwordChangeStatus={passwordChangeStatus}
+                    onChangePasswordSubmit={handleChangePasswordSubmit}
+                    onResetPasswordInputs={resetPasswordChangeInputs}
+                  />
+                </Suspense>
               </RutaProtegida>
             }
           />
           <Route
             path="media/:id"
-            element={<MarcadorRuta titulo="Detalle de título" descripcion="Ficha del título seleccionada." />}
+            element={<Suspense fallback={<p className="cinema-page" role="status">Cargando ficha…</p>}><MediaDetailView /></Suspense>}
           />
           <Route
             path="cines"
-            element={<MarcadorRuta titulo="Cines" descripcion="Cines y programación." />}
+            element={<Suspense fallback={<p className="cinema-page" role="status">Cargando Cines…</p>}><CinemaDirectory /></Suspense>}
           />
           <Route
             path="usuarios/:username"
-            element={<MarcadorRuta titulo="Perfil público" descripcion="Perfil público del usuario." />}
+            element={<Suspense fallback={<p className="cinema-page" role="status">Cargando perfil…</p>}><PublicProfileView currentUser={currentUser} /></Suspense>}
           />
-          <Route path="*" element={<Navigate to="/" replace />} />
+          <Route path="*" element={<CinemaState error={{ status: 404 }} page />} />
         </Route>
       </Routes>
     </>
