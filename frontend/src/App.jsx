@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { lazy, Suspense, useEffect, useState } from 'react'
 import './App.css'
 import {
   changePassword,
@@ -9,18 +9,35 @@ import {
   logoutUser,
   registerUser,
 } from './services/api'
+import CatalogView from './components/CatalogView'
 import AuthCard from './components/AuthCard'
-import ProfileView from './components/ProfileView'
 import ToastNotification from './components/ToastNotification'
-import { Navigate, Route, Routes, useNavigate } from 'react-router-dom'
+import { Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom'
 import MainLayout from './components/MainLayout'
-import MarcadorRuta from './components/MarcadorRuta'
+import CinemaState from './components/CinemaState'
 import RutaProtegida from './components/RutaProtegida'
+
+const MediaDetailView = lazy(() => import('./components/MediaDetailView'))
+const CinemaDirectory = lazy(() => import('./components/CinemaDirectory'))
+const ProfileView = lazy(() => import('./components/ProfileView'))
+const PublicProfileView = lazy(() => import('./components/PublicProfileView'))
 
 const MIN_PASSWORD_LENGTH = 8
 
+const ChatView = lazy(() => import('./components/ChatView'))
+
+function Home() {
+  const { search } = useLocation()
+  const query = new URLSearchParams(search)
+  if (['q', 'tipo', 'estado'].some(key => query.has(key))) return <Navigate replace to={'/catalogo' + search} />
+  return <Suspense fallback={<p role="status">Cargando cartelera…</p>}><CinemaDirectory home /></Suspense>
+}
+
 export default function App() {
   const navigate = useNavigate()
+  const location = useLocation()
+  const requested = location.state?.volver
+  const returnTo = typeof requested === 'string' && /^[/](?![/\\])/.test(requested) ? requested : '/perfil'
   const [currentUser, setCurrentUser] = useState(() => getStoredAuth())
   const [activeTab, setActiveTab] = useState('login')
   const [toastNotice, setToastNotice] = useState('')
@@ -114,7 +131,7 @@ export default function App() {
       resetFormInputs()
       setCurrentUser(data)
       showToast(`¡Bienvenido de vuelta, ${data.nombre || data.username}!`)
-      navigate('/perfil', { replace: true })
+      navigate(returnTo, { replace: true })
     } catch (error) {
       setAuthError(error.message || 'Error en las credenciales.')
     } finally {
@@ -185,7 +202,7 @@ export default function App() {
       resetFormInputs()
       setCurrentUser(data)
       showToast(`¡Cuenta creada con éxito! Bienvenido a CineRoll, ${data.nombre || data.username}.`)
-      navigate('/perfil', { replace: true })
+      navigate(returnTo, { replace: true })
     } catch (error) {
       setAuthError(error.message || 'Error al crear la cuenta.')
     } finally {
@@ -243,13 +260,18 @@ export default function App() {
         <Route element={<MainLayout currentUser={currentUser} onLogout={handleLogout} isLoading={isLoading} />}>
           <Route
             index
-            element={<MarcadorRuta titulo="Catálogo" descripcion="Listado de películas, series y anime." />}
+            element={<Home />}
           />
+          <Route path="catalogo" element={<CatalogView />} />
+          {['mensajes', 'mensajes/:username', 'salas/:id'].map(path => <Route key={path} path={path} element={
+            !currentUser && path.startsWith('mensajes') ? <Navigate replace to="/acceso" state={{ volver: location.pathname }} /> :
+              <Suspense fallback={<p role="status">Cargando conversación…</p>}><ChatView user={currentUser} /></Suspense>
+          } />)}
           <Route
             path="acceso"
             element={
               currentUser ? (
-                <Navigate to="/perfil" replace />
+                <Navigate to={returnTo} replace />
               ) : (
                 <AuthCard
                   activeTab={activeTab}
@@ -284,40 +306,42 @@ export default function App() {
             path="perfil"
             element={
               <RutaProtegida usuario={currentUser}>
-                <ProfileView
-                  currentUser={currentUser}
-                  onProfileSaved={(data) => {
-                    setCurrentUser((previous) => previous ? { ...previous, ...data } : previous)
-                    showToast('Perfil actualizado.')
-                  }}
-                  showChangePasswordModal={showChangePasswordModal}
-                  setShowChangePasswordModal={setShowChangePasswordModal}
-                  currentPasswordInput={currentPasswordInput}
-                  setCurrentPasswordInput={setCurrentPasswordInput}
-                  newPasswordInput={newPasswordInput}
-                  setNewPasswordInput={setNewPasswordInput}
-                  confirmNewPasswordInput={confirmNewPasswordInput}
-                  setConfirmNewPasswordInput={setConfirmNewPasswordInput}
-                  passwordChangeStatus={passwordChangeStatus}
-                  onChangePasswordSubmit={handleChangePasswordSubmit}
-                  onResetPasswordInputs={resetPasswordChangeInputs}
-                />
+                <Suspense fallback={<p className="cinema-page" role="status">Cargando perfil…</p>}>
+                  <ProfileView
+                    currentUser={currentUser}
+                    onProfileSaved={(data) => {
+                      setCurrentUser((previous) => previous ? { ...previous, ...data } : previous)
+                      showToast('Perfil actualizado.')
+                    }}
+                    showChangePasswordModal={showChangePasswordModal}
+                    setShowChangePasswordModal={setShowChangePasswordModal}
+                    currentPasswordInput={currentPasswordInput}
+                    setCurrentPasswordInput={setCurrentPasswordInput}
+                    newPasswordInput={newPasswordInput}
+                    setNewPasswordInput={setNewPasswordInput}
+                    confirmNewPasswordInput={confirmNewPasswordInput}
+                    setConfirmNewPasswordInput={setConfirmNewPasswordInput}
+                    passwordChangeStatus={passwordChangeStatus}
+                    onChangePasswordSubmit={handleChangePasswordSubmit}
+                    onResetPasswordInputs={resetPasswordChangeInputs}
+                  />
+                </Suspense>
               </RutaProtegida>
             }
           />
           <Route
             path="media/:id"
-            element={<MarcadorRuta titulo="Detalle de título" descripcion="Ficha del título seleccionada." />}
+            element={<Suspense fallback={<p className="cinema-page" role="status">Cargando ficha…</p>}><MediaDetailView user={currentUser} /></Suspense>}
           />
           <Route
             path="cines"
-            element={<MarcadorRuta titulo="Cines" descripcion="Cines y programación." />}
+            element={<Suspense fallback={<p className="cinema-page" role="status">Cargando Cines…</p>}><CinemaDirectory /></Suspense>}
           />
           <Route
             path="usuarios/:username"
-            element={<MarcadorRuta titulo="Perfil público" descripcion="Perfil público del usuario." />}
+            element={<Suspense fallback={<p className="cinema-page" role="status">Cargando perfil…</p>}><PublicProfileView currentUser={currentUser} /></Suspense>}
           />
-          <Route path="*" element={<Navigate to="/" replace />} />
+          <Route path="*" element={<CinemaState error={{ status: 404 }} page />} />
         </Route>
       </Routes>
     </>

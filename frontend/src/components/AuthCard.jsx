@@ -29,109 +29,102 @@ export default function AuthCard({
   setAgreeTerms,
   onRegisterSubmit,
 }) {
-  return (
-    <div className="auth-wrapper">
-      <div className="auth-card">
-        {/* Encabezado con Logo CineRoll */}
-        <div className="brand-header">
-          <div className="logo-badge">
-            <svg
-              className="film-icon"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            >
-              <rect x="2" y="2" width="20" height="20" rx="2.18" ry="2.18"></rect>
-              <line x1="7" y1="2" x2="7" y2="22"></line>
-              <line x1="17" y1="2" x2="17" y2="22"></line>
-              <line x1="2" y1="12" x2="22" y2="12"></line>
-              <line x1="2" y1="7" x2="7" y2="7"></line>
-              <line x1="2" y1="17" x2="7" y2="17"></line>
-              <line x1="17" y1="17" x2="22" y2="17"></line>
-              <line x1="17" y1="7" x2="22" y2="7"></line>
-            </svg>
-          </div>
-          <h1 className="brand-title">
-            Cine<span>Roll</span>
-          </h1>
-          <p className="brand-subtitle">
-            {activeTab === 'login'
-              ? 'Bienvenido de vuelta a tu cine en casa'
-              : 'Únete para disfrutar de tus películas favoritas'}
-          </p>
-        </div>
+  function handleTabKey(event) {
+    const first = event.key === 'Home'
+    const last = event.key === 'End'
+    const arrow = event.key === 'ArrowLeft' || event.key === 'ArrowRight'
+    if (!first && !last && !arrow) return
 
-        {/* Selector de pestañas: Iniciar sesión / Registro */}
-        <div className="tab-control" role="tablist">
+    event.preventDefault()
+    const next = first || (arrow && activeTab === 'register') ? 'login' : 'register'
+    if (next === activeTab) return
+    event.currentTarget.querySelector(`#auth-${next}-tab`).focus()
+    onSwitchTab(next)
+  }
+
+  return (
+    <main className="auth-wrapper">
+      <div className="auth-card">
+        <header className="brand-header">
+          <span className="cinema-brand-symbol" aria-hidden="true" />
+          <h1 className="brand-title">{activeTab === 'login' ? 'Inicia sesión' : 'Crea tu cuenta'}</h1>
+        </header>
+
+        <div className="tab-control" role="tablist" aria-label="Acceso a CineRoll" onKeyDown={handleTabKey}>
           <button
+            id="auth-login-tab"
             type="button"
             role="tab"
+            aria-controls="auth-panel"
             aria-selected={activeTab === 'login'}
-            className={`tab-btn ${activeTab === 'login' ? 'active' : ''}`}
+            tabIndex={activeTab === 'login' ? 0 : -1}
+            className="tab-btn"
             onClick={() => onSwitchTab('login')}
           >
-            Iniciar Sesión
+            Iniciar sesión
           </button>
           <button
+            id="auth-register-tab"
             type="button"
             role="tab"
+            aria-controls="auth-panel"
             aria-selected={activeTab === 'register'}
-            className={`tab-btn ${activeTab === 'register' ? 'active' : ''}`}
+            tabIndex={activeTab === 'register' ? 0 : -1}
+            className="tab-btn"
             onClick={() => onSwitchTab('register')}
           >
             Registrarse
           </button>
         </div>
 
-        {authError && (
-          <div className="auth-alert-error" role="alert">
-            <svg viewBox="0 0 20 20" fill="currentColor">
-              <path
-                fillRule="evenodd"
-                d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z"
-                clipRule="evenodd"
-              />
-            </svg>
-            <span>{authError}</span>
-          </div>
-        )}
+        <div id="auth-panel" role="tabpanel" aria-labelledby={`auth-${activeTab}-tab`}>
+          {authError && (
+            <div className="auth-alert-error" role="alert">
+              <svg viewBox="0 0 20 20" fill="currentColor">
+                <path
+                  fillRule="evenodd"
+                  d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z"
+                  clipRule="evenodd"
+                />
+              </svg>
+              <span>{authError}</span>
+            </div>
+          )}
 
-        {activeTab === 'login' ? (
-          <LoginForm
-            loginEmail={loginEmail}
-            setLoginEmail={setLoginEmail}
-            loginPassword={loginPassword}
-            setLoginPassword={setLoginPassword}
-            rememberMe={rememberMe}
-            setRememberMe={setRememberMe}
-            isLoading={isLoading}
-            onSubmit={onLoginSubmit}
-            onSwitchToRegister={() => onSwitchTab('register')}
-          />
-        ) : (
-          <RegisterForm
-            registerUsername={registerUsername}
-            setRegisterUsername={setRegisterUsername}
-            registerName={registerName}
-            setRegisterName={setRegisterName}
-            registerEmail={registerEmail}
-            setRegisterEmail={setRegisterEmail}
-            registerPassword={registerPassword}
-            setRegisterPassword={setRegisterPassword}
-            registerConfirmPassword={registerConfirmPassword}
-            setRegisterConfirmPassword={setRegisterConfirmPassword}
-            agreeTerms={agreeTerms}
-            setAgreeTerms={setAgreeTerms}
-            isLoading={isLoading}
-            onSubmit={onRegisterSubmit}
-            onSwitchToLogin={() => onSwitchTab('login')}
-          />
-        )}
+          {activeTab === 'login' ? (
+            <LoginForm
+              loginEmail={loginEmail}
+              setLoginEmail={setLoginEmail}
+              loginPassword={loginPassword}
+              setLoginPassword={setLoginPassword}
+              rememberMe={rememberMe}
+              setRememberMe={setRememberMe}
+              isLoading={isLoading}
+              onSubmit={onLoginSubmit}
+              onSwitchToRegister={() => onSwitchTab('register')}
+            />
+          ) : (
+            <RegisterForm
+              registerUsername={registerUsername}
+              setRegisterUsername={setRegisterUsername}
+              registerName={registerName}
+              setRegisterName={setRegisterName}
+              registerEmail={registerEmail}
+              setRegisterEmail={setRegisterEmail}
+              registerPassword={registerPassword}
+              setRegisterPassword={setRegisterPassword}
+              registerConfirmPassword={registerConfirmPassword}
+              setRegisterConfirmPassword={setRegisterConfirmPassword}
+              agreeTerms={agreeTerms}
+              setAgreeTerms={setAgreeTerms}
+              isLoading={isLoading}
+              onSubmit={onRegisterSubmit}
+              onSwitchToLogin={() => onSwitchTab('login')}
+            />
+          )}
+        </div>
       </div>
-    </div>
+    </main>
   )
 }
 

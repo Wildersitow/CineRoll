@@ -103,9 +103,9 @@ export async function refreshAccessToken() {
  * Inyecta automáticamente el header `Authorization: Bearer <token>` si existe sesión.
  * Si recibe 401 y hay un refresh token, intenta refrescar automáticamente y reintentar la petición.
  */
-export async function apiFetch(endpoint, options = {}) {
+export async function apiFetch(endpoint, { publicRequest = false, ...options } = {}) {
   const url = endpoint.startsWith('http') ? endpoint : `${API_BASE_URL}${endpoint}`;
-  const auth = getStoredAuth();
+  const auth = publicRequest ? null : getStoredAuth();
 
   const headers = {
     'Content-Type': 'application/json',
@@ -116,8 +116,9 @@ export async function apiFetch(endpoint, options = {}) {
   let response;
   try {
     response = await fetch(url, { ...options, headers });
-  } catch {
-    throw new Error('No se pudo conectar con el servidor Django (puerto 8000). Asegúrate de tener levantado el backend con: python manage.py runserver');
+  } catch (error) {
+    if (error.name === 'AbortError') throw error;
+    throw new Error('No se pudo conectar con el servidor Django (puerto 8000). Asegúrate de tener levantado el backend con: python manage.py runserver', { cause: error });
   }
 
   // Si el token expiró (401), intentamos refrescarlo y reintentar una vez
@@ -139,7 +140,7 @@ export async function apiFetch(endpoint, options = {}) {
         notifySessionExpired();
       }
     }
-  } else if (response.status === 401) {
+  } else if (response.status === 401 && !publicRequest) {
     clearStoredAuth();
     notifySessionExpired();
   }
@@ -283,7 +284,9 @@ export async function leerJson(endpoint, options = {}, mensajeFallback = 'Error 
   const response = await apiFetch(endpoint, opts);
   if (!response.ok) {
     const errorData = await response.json().catch(() => null);
-    throw new Error(formatApiError(errorData?.error, fallback));
+    const error = new Error(formatApiError(errorData?.error, fallback));
+    error.status = response.status;
+    throw error;
   }
   if (response.status === 204) {
     return true;
@@ -314,15 +317,15 @@ export function buildQueryString(params = {}) {
  * Obtiene el listado de títulos desde /api/media/.
  * Filtros: { buscar, tipo, genero, anio, estado, cine, ordenar, page }
  */
-export async function getMedia(params = {}) {
-  return leerJson(`/media/${buildQueryString(params)}`, 'Error al obtener el catálogo de media.');
+export async function getMedia(params = {}, options = {}) {
+  return leerJson(`/media/${buildQueryString(params)}`, { ...options, publicRequest: true }, 'Error al obtener el catálogo de media.');
 }
 
 /**
  * Obtiene la ficha completa de un título desde /api/media/<id>/.
  */
-export async function getMediaDetalle(id) {
-  return leerJson(`/media/${id}/`, 'Error al obtener el detalle del título.');
+export async function getMediaDetalle(id, options = {}) {
+  return leerJson(`/media/${id}/`, { ...options, publicRequest: true }, 'Error al obtener el detalle del título.');
 }
 
 /**
@@ -340,39 +343,39 @@ export async function getPersona(id) {
  * Obtiene las funciones en cartelera desde /api/funciones/.
  * Filtros: { ciudad, fecha, cine }
  */
-export async function getFunciones(params = {}) {
-  return leerJson(`/funciones/${buildQueryString(params)}`, 'Error al obtener las funciones en cartelera.');
+export async function getFunciones(params = {}, options = {}) {
+  return leerJson(`/funciones/${buildQueryString(params)}`, { ...options, publicRequest: true }, 'Error al obtener las funciones en cartelera.');
 }
 
 export async function getFuncionesDeCine(cineId, params = {}) {
   return leerJson(`/cines/${cineId}/funciones/${buildQueryString(params)}`, 'Error al obtener las funciones del cine.');
 }
 
-export async function getFuncionesDeMedia(mediaId, params = {}) {
-  return leerJson(`/media/${mediaId}/funciones/${buildQueryString(params)}`, 'Error al obtener las funciones del título.');
+export async function getFuncionesDeMedia(mediaId, params = {}, options = {}) {
+  return leerJson(`/media/${mediaId}/funciones/${buildQueryString(params)}`, { ...options, publicRequest: true }, 'Error al obtener las funciones del título.');
 }
 
 /**
  * Obtiene el listado de cines registrados desde /api/cines/.
  * Filtros: { ciudad }
  */
-export async function getCines(params = {}) {
-  return leerJson(`/cines/${buildQueryString(params)}`, 'Error al obtener los cines.');
+export async function getCines(params = {}, options = {}) {
+  return leerJson(`/cines/${buildQueryString(params)}`, { ...options, publicRequest: true }, 'Error al obtener los cines.');
 }
 
 /**
  * Consulta el estado de frescura de la cartelera por cine desde /api/cartelera/estado/.
  */
-export async function getEstadoCartelera() {
-  return leerJson('/cartelera/estado/', 'Error al consultar el estado de la cartelera.');
+export async function getEstadoCartelera(options = {}) {
+  return leerJson('/cartelera/estado/', { ...options, publicRequest: true }, 'Error al consultar el estado de la cartelera.');
 }
 
 /* ==========================================================================
    Reseñas y Puntuaciones
    ========================================================================== */
 
-export async function getResenasDeMedia(mediaId, params = {}) {
-  return leerJson(`/media/${mediaId}/resenas/${buildQueryString(params)}`, 'Error al obtener las reseñas del título.');
+export async function getResenasDeMedia(mediaId, params = {}, options = {}) {
+  return leerJson(`/media/${mediaId}/resenas/${buildQueryString(params)}`, { ...options, publicRequest: !getStoredAuth() }, 'Error al obtener las reseñas del título.');
 }
 
 export async function getMiResena(mediaId) {
@@ -403,16 +406,16 @@ export async function getResumenResenas(mediaId) {
   return leerJson(`/media/${mediaId}/resenas/resumen/`, 'Error al obtener el resumen de puntuación.');
 }
 
-export async function getResenasDeUsuario(username, params = {}) {
-  return leerJson(`/usuarios/${username}/resenas/${buildQueryString(params)}`, `Error al obtener las reseñas de @${username}.`);
+export async function getResenasDeUsuario(username, params = {}, options = {}) {
+  return leerJson(`/usuarios/${username}/resenas/${buildQueryString(params)}`, { ...options, publicRequest: !getStoredAuth() }, `Error al obtener las reseñas de @${username}.`);
 }
 
 /* ==========================================================================
    Perfil Público y Seguimiento
    ========================================================================== */
 
-export async function getPerfilPublico(username) {
-  return leerJson(`/usuarios/${username}/`, `Error al obtener el perfil de @${username}.`);
+export async function getPerfilPublico(username, options = {}) {
+  return leerJson(`/usuarios/${username}/`, options, `Error al obtener el perfil de @${username}.`);
 }
 
 export async function seguirUsuario(username) {
@@ -499,8 +502,8 @@ export async function removeTituloFromLista(listaId, mediaId) {
   }, 'Error al quitar el título de la lista.');
 }
 
-export async function getUsuarioListas(username, params = {}) {
-  return leerJson(`/usuarios/${username}/listas/${buildQueryString(params)}`, `Error al obtener las listas de @${username}.`);
+export async function getUsuarioListas(username, params = {}, options = {}) {
+  return leerJson(`/usuarios/${username}/listas/${buildQueryString(params)}`, { ...options, publicRequest: !getStoredAuth() }, `Error al obtener las listas de @${username}.`);
 }
 
 /**
@@ -565,4 +568,9 @@ export function notifySessionExpired() {
 
 export async function getMisListasDeMedia(mediaId) {
   return leerJson(`/media/${mediaId}/mis-listas/`, 'Error al consultar las listas para este título.');
+}
+
+export async function getElementosDeLista(id, params = {}, options = {}) {
+  const data = await leerJson(`/listas/${id}/elementos/${buildQueryString(params)}`, { ...options, publicRequest: !getStoredAuth() }, 'Error al obtener los títulos de la lista.');
+  return Array.isArray(data) ? { results: data } : data;
 }
