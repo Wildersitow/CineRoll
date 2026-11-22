@@ -6,13 +6,14 @@ import './Cinema.css'
 
 const cinemaLinks = [
   { path: '/', label: 'Inicio', icon: 'home' },
-  { path: '/?tipo=pelicula', label: 'Películas', icon: 'film' },
-  { path: '/?tipo=serie', label: 'Series', icon: 'screen' },
-  { path: '/?tipo=anime', label: 'Anime', icon: 'spark' },
+  { path: '/catalogo', label: 'Catálogo', icon: 'film' },
+  { path: '/catalogo?tipo=pelicula', label: 'Películas', icon: 'film' },
+  { path: '/catalogo?tipo=serie', label: 'Series', icon: 'screen' },
+  { path: '/catalogo?tipo=anime', label: 'Anime', icon: 'spark' },
 ]
 
 const billboardLinks = [
-  { path: '/?estado=proximo_estreno', label: 'Estrenos', icon: 'clock' },
+  { path: '/catalogo?estado=proximo_estreno', label: 'Estrenos', icon: 'clock' },
   { path: '/cines', label: 'Cines', icon: 'pin' },
 ]
 
@@ -49,7 +50,7 @@ export default function MainLayout({ currentUser, onLogout, isLoading }) {
   function submitSearch(event) {
     event.preventDefault()
     const term = new FormData(event.currentTarget).get('q').trim()
-    navigate(term ? `/?${new URLSearchParams({ q: term })}` : '/')
+    navigate(term ? `/catalogo?${new URLSearchParams({ q: term })}` : '/')
   }
 
   return (
@@ -68,6 +69,7 @@ export default function MainLayout({ currentUser, onLogout, isLoading }) {
           <Link to={account.path} aria-current={pathname === account.path ? 'page' : undefined}>
             <CinemaIcon name="user" weight={pathname === account.path ? 'fill' : 'regular'} /><span>{account.label}</span>
           </Link>
+          {currentUser && <Link to="/mensajes">Mensajes</Link>}
           {currentUser && (
             <button type="button" onClick={onLogout} disabled={isLoading}>
               {isLoading ? 'Cerrando…' : 'Cerrar sesión'}
@@ -90,6 +92,7 @@ export default function MainLayout({ currentUser, onLogout, isLoading }) {
         >
           {outlet}
         </motion.div>
+        <footer className="film-footer"><strong>CineRoll</strong><nav aria-label="Pie de página"><Link to="/">Cartelera</Link><Link to="/catalogo">Catálogo</Link><Link to="/cines">Cines</Link></nav></footer>
       </div>
     </div>
   )

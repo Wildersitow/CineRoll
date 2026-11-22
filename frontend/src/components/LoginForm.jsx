@@ -1,3 +1,4 @@
+import SmoothInput from './SmoothInput'
 import { useState } from 'react'
 
 export default function LoginForm({
@@ -18,7 +19,7 @@ export default function LoginForm({
       <div className="input-group">
         <label htmlFor="login-email">Correo electrónico o usuario</label>
         <div className="input-field-wrapper">
-          <input
+          <SmoothInput
             id="login-email"
             name="username"
             autoCapitalize="none"
@@ -35,7 +36,7 @@ export default function LoginForm({
       <div className="input-group">
         <label htmlFor="login-password">Contraseña</label>
         <div className="input-field-wrapper">
-          <input
+          <SmoothInput
             id="login-password"
             name="password"
             autoComplete="current-password"

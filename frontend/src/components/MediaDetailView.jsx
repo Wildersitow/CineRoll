@@ -1,7 +1,9 @@
 import { useEffect, useState } from 'react'
-import { Link, useParams, useSearchParams } from 'react-router-dom'
+import { Link, useLocation, useParams, useSearchParams } from 'react-router-dom'
 import { getFuncionesDeMedia, getMediaDetalle, getResenasDeMedia } from '../services/api'
 import CinemaState from './CinemaState'
+import FilmActions, { Heart } from './FilmActions'
+import Pagination from './Pagination'
 import Poster from './Poster'
 
 const fechaFuncion = new Intl.DateTimeFormat('es-CO', {
@@ -10,14 +12,25 @@ const fechaFuncion = new Intl.DateTimeFormat('es-CO', {
   timeZone: 'America/Bogota',
 })
 
-export default function MediaDetailView() {
+function Prices({ show }) {
+  if (!show.tarifas?.length) return <p>Precio no publicado. {show.cine.sitio_web && <a href={show.cine.sitio_web}>Consultar al cine</a>}</p>
+  return <p>{show.tarifas.map(tarifa => {
+    const price = new Intl.NumberFormat('es-CO', { style: 'currency', currency: tarifa.moneda }).format(tarifa.importe)
+    return [tarifa.nombre, price].filter(Boolean).join(' ')
+  }).join(' · ')}</p>
+}
+
+export default function MediaDetailView({ user }) {
   const { id } = useParams()
-  const [query] = useSearchParams()
+  const location = useLocation()
+  const [query, setQuery] = useSearchParams()
   const date = query.get('fecha')
   const city = query.get('ciudad')
   const [result, setResult] = useState(null)
   const [attempt, setAttempt] = useState(0)
-  const key = JSON.stringify([id, date, attempt])
+  const cine = query.get('cine')
+  const page = Math.max(1, Number(query.get('resenas')) || 1)
+  const key = JSON.stringify([id, date, cine, page, attempt, user?.username])
 
   useEffect(() => {
     const controller = new AbortController()
@@ -33,8 +46,8 @@ export default function MediaDetailView() {
     }
     const requests = {
       media: getMediaDetalle(id, options),
-      funciones: getFuncionesDeMedia(id, { fecha: date || undefined }, options),
-      resenas: getResenasDeMedia(id, {}, options),
+      funciones: getFuncionesDeMedia(id, { fecha: date || undefined, cine }, options),
+      resenas: getResenasDeMedia(id, {page}, options),
     }
     for (const [name, request] of Object.entries(requests)) {
       request.then(
@@ -43,7 +56,7 @@ export default function MediaDetailView() {
       )
     }
     return () => controller.abort()
-  }, [id, date, key])
+  }, [id, date, cine, page, key])
 
   const current = result?.key === key ? result : null
   const retry = () => setAttempt((value) => value + 1)
@@ -80,26 +93,37 @@ export default function MediaDetailView() {
         {media.directores?.length > 0 && <p>Dirección: {media.directores.map(({ nombre }) => nombre).join(', ')}</p>}
         {media.reparto?.length > 0 && <p>Reparto: {media.reparto.map(({ nombre }) => nombre).join(', ')}</p>}
         {media.trailer_url && <p><a href={media.trailer_url}>Ver tráiler</a></p>}
+        <FilmActions key={media.id + (user?.username || '')} media={media} user={user} refresh={retry} />
         <section className="cinema-section">
-          <h2>Funciones</h2>
+          <h2>{query.get('accion') === 'precios' ? 'Precios por función' : 'Funciones'}</h2>
           {!current.funciones && <p role="status">Cargando horarios…</p>}
           {current.funciones?.status === 'rejected' && <CinemaState error={current.funciones.value} title="No pudimos consultar los horarios." retry={retry} />}
           {current.funciones?.status === 'fulfilled' && !funciones.length && <p>{fromCinemas ? 'No hay funciones para esta selección.' : 'No hay funciones próximas para este título.'}</p>}
           {fromCinemas && <p><Link to={`/media/${id}`}>Ver todas las funciones próximas</Link></p>}
-          <ul>{funciones.map(({ id, cine, fecha_hora, formato }) => (
-            <li key={id}><strong>{cine.nombre}</strong><small>{cine.ciudad} · {fechaFuncion.format(new Date(fecha_hora))}{formato && ` · ${formato}`}</small></li>
-          ))}</ul>
+          {[...Map.groupBy(funciones, show => show.cine.id)].map(([cinemaId, shows]) => (
+            <div key={cinemaId}>
+              <h3>{shows[0].cine.nombre}</h3>
+              <ul>{shows.map(show => (
+                <li key={show.id}>
+                  <time dateTime={show.fecha_hora}>{fechaFuncion.format(new Date(show.fecha_hora))}</time>
+                  <small>{[show.formato, show.sala].filter(Boolean).join(' · ')}</small>
+                  {query.get('accion') === 'precios' && <Prices show={show} />}
+                </li>
+              ))}</ul>
+            </div>
+          ))}
         </section>
         <section className="cinema-section">
           <h2>Reseñas de la comunidad</h2>
           {!current.resenas && <p role="status">Cargando reseñas…</p>}
           {current.resenas?.status === 'rejected' && <CinemaState error={current.resenas.value} title="No pudimos consultar las reseñas." retry={retry} />}
           {current.resenas?.status === 'fulfilled' && !resenas.length && <p>Aún no hay reseñas publicadas.</p>}
-          <ul>{resenas.map(({ id, usuario, puntuacion, texto }) => (
-            <li key={id}><strong>{usuario} · {puntuacion}/10</strong>{texto && <p>{texto}</p>}</li>
+          <ul>{resenas.map(review => (
+            <li key={review.id}><Link to={`/usuarios/${encodeURIComponent(review.usuario)}`}>{review.usuario}</Link> · {review.puntuacion}/10{review.texto && <p>{review.texto}</p>}<Heart review={review} user={user} /></li>
           ))}</ul>
+          <Pagination count={current.resenas?.value?.count || 0} page={page} change={n => { const next = new URLSearchParams(query); next.set('resenas', n); setQuery(next, {state:location.state}) }} />
         </section>
-        <p><Link to={fromCinemas ? { pathname: '/cines', search: query.toString() } : '/#en-cartelera'}>Volver a la cartelera</Link></p>
+        <p><Link to={location.state?.origen || (fromCinemas ? { pathname: '/cines', search: query.toString() } : '/')} state={{ poster: location.state?.poster }}>Volver a la cartelera</Link></p>
       </div>
     </main>
   )

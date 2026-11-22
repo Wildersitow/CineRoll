@@ -1,3 +1,4 @@
+import SmoothInput from './SmoothInput'
 import { useState } from 'react'
 
 const MIN_PASSWORD_LENGTH = 8
@@ -37,7 +38,7 @@ export default function RegisterForm({
       <div className="input-group">
         <label htmlFor="register-username">Nombre de usuario (opcional)</label>
         <div className="input-field-wrapper">
-          <input
+          <SmoothInput
             id="register-username"
             name="username"
             autoComplete="username"
@@ -53,7 +54,7 @@ export default function RegisterForm({
       <div className="input-group">
         <label htmlFor="register-name">Nombre completo</label>
         <div className="input-field-wrapper">
-          <input
+          <SmoothInput
             id="register-name"
             name="name"
             autoComplete="name"
@@ -68,7 +69,7 @@ export default function RegisterForm({
       <div className="input-group">
         <label htmlFor="register-email">Correo electrónico</label>
         <div className="input-field-wrapper">
-          <input
+          <SmoothInput
             id="register-email"
             name="email"
             autoComplete="email"
@@ -85,7 +86,7 @@ export default function RegisterForm({
       <div className="input-group">
         <label htmlFor="register-password">Contraseña</label>
         <div className="input-field-wrapper">
-          <input
+          <SmoothInput
             id="register-password"
             name="password"
             autoComplete="new-password"
@@ -132,7 +133,7 @@ export default function RegisterForm({
       <div className="input-group">
         <label htmlFor="register-confirm">Confirmar contraseña</label>
         <div className="input-field-wrapper">
-          <input
+          <SmoothInput
             id="register-confirm"
             name="password_confirmation"
             autoComplete="new-password"

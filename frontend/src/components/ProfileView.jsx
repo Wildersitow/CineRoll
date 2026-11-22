@@ -1,5 +1,7 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
+import { ProfileCollection } from './PublicProfileView'
+import { getListas } from '../services/api'
 import CinemaIcon from './CinemaIcon'
 import ProfileEditForm from './ProfileEditForm'
 import ChangePasswordModal from './ChangePasswordModal'
@@ -19,6 +21,16 @@ export default function ProfileView({
   onChangePasswordSubmit,
   onResetPasswordInputs,
 }) {
+  const [watchlist, setWatchlist] = useState()
+  const [listError, setListError] = useState('')
+  const [attempt, setAttempt] = useState(0)
+  useEffect(() => {
+    let active = true
+    getListas({ tipo:'por_ver', usuario:currentUser.username }).then(data => {
+      if (active) { setWatchlist(data.results[0] || null); setListError('') }
+    }).catch(error => { if (active) setListError(error.message) })
+    return () => { active = false }
+  }, [currentUser.username, attempt])
   const [editing, setEditing] = useState(false)
   const [failedAvatar, setFailedAvatar] = useState(null)
 
@@ -70,6 +82,8 @@ export default function ProfileView({
           <button type="button" onClick={() => setShowChangePasswordModal(true)}>Cambiar contraseña</button>
         </div>
       </section>
+      {listError ? <p role="alert">{listError} <button onClick={() => setAttempt(attempt + 1)}>Reintentar</button></p> :
+        watchlist === undefined ? <p role="status">Cargando Por ver…</p> : <ProfileCollection list={watchlist} title="Por ver" />}
       <div id="editar-perfil">
         {editing && (
           <ProfileEditForm currentUser={currentUser} onSaved={(data) => {

@@ -12,7 +12,7 @@ import {
 import CatalogView from './components/CatalogView'
 import AuthCard from './components/AuthCard'
 import ToastNotification from './components/ToastNotification'
-import { Navigate, Route, Routes, useNavigate } from 'react-router-dom'
+import { Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom'
 import MainLayout from './components/MainLayout'
 import CinemaState from './components/CinemaState'
 import RutaProtegida from './components/RutaProtegida'
@@ -24,8 +24,20 @@ const PublicProfileView = lazy(() => import('./components/PublicProfileView'))
 
 const MIN_PASSWORD_LENGTH = 8
 
+const ChatView = lazy(() => import('./components/ChatView'))
+
+function Home() {
+  const { search } = useLocation()
+  const query = new URLSearchParams(search)
+  if (['q', 'tipo', 'estado'].some(key => query.has(key))) return <Navigate replace to={'/catalogo' + search} />
+  return <Suspense fallback={<p role="status">Cargando cartelera…</p>}><CinemaDirectory home /></Suspense>
+}
+
 export default function App() {
   const navigate = useNavigate()
+  const location = useLocation()
+  const requested = location.state?.volver
+  const returnTo = typeof requested === 'string' && /^[/](?![/\\])/.test(requested) ? requested : '/perfil'
   const [currentUser, setCurrentUser] = useState(() => getStoredAuth())
   const [activeTab, setActiveTab] = useState('login')
   const [toastNotice, setToastNotice] = useState('')
@@ -119,7 +131,7 @@ export default function App() {
       resetFormInputs()
       setCurrentUser(data)
       showToast(`¡Bienvenido de vuelta, ${data.nombre || data.username}!`)
-      navigate('/perfil', { replace: true })
+      navigate(returnTo, { replace: true })
     } catch (error) {
       setAuthError(error.message || 'Error en las credenciales.')
     } finally {
@@ -190,7 +202,7 @@ export default function App() {
       resetFormInputs()
       setCurrentUser(data)
       showToast(`¡Cuenta creada con éxito! Bienvenido a CineRoll, ${data.nombre || data.username}.`)
-      navigate('/perfil', { replace: true })
+      navigate(returnTo, { replace: true })
     } catch (error) {
       setAuthError(error.message || 'Error al crear la cuenta.')
     } finally {
@@ -248,13 +260,18 @@ export default function App() {
         <Route element={<MainLayout currentUser={currentUser} onLogout={handleLogout} isLoading={isLoading} />}>
           <Route
             index
-            element={<CatalogView />}
+            element={<Home />}
           />
+          <Route path="catalogo" element={<CatalogView />} />
+          {['mensajes', 'mensajes/:username', 'salas/:id'].map(path => <Route key={path} path={path} element={
+            !currentUser && path.startsWith('mensajes') ? <Navigate replace to="/acceso" state={{ volver: location.pathname }} /> :
+              <Suspense fallback={<p role="status">Cargando conversación…</p>}><ChatView user={currentUser} /></Suspense>
+          } />)}
           <Route
             path="acceso"
             element={
               currentUser ? (
-                <Navigate to="/perfil" replace />
+                <Navigate to={returnTo} replace />
               ) : (
                 <AuthCard
                   activeTab={activeTab}
@@ -314,7 +331,7 @@ export default function App() {
           />
           <Route
             path="media/:id"
-            element={<Suspense fallback={<p className="cinema-page" role="status">Cargando ficha…</p>}><MediaDetailView /></Suspense>}
+            element={<Suspense fallback={<p className="cinema-page" role="status">Cargando ficha…</p>}><MediaDetailView user={currentUser} /></Suspense>}
           />
           <Route
             path="cines"

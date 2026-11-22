@@ -3,6 +3,8 @@ import { motion, useReducedMotion } from 'motion/react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { getCines, getEstadoCartelera, getFunciones } from '../services/api'
 import CinemaIcon from './CinemaIcon'
+import { MediaSection } from './CatalogView'
+import CurtainOpening from './CurtainOpening'
 import CinemaState from './CinemaState'
 
 const horaFuncion = new Intl.DateTimeFormat('es-CO', {
@@ -16,6 +18,18 @@ const fechaActualizacion = new Intl.DateTimeFormat('es-CO', {
 })
 const isoDate = new Intl.DateTimeFormat('sv-SE', { dateStyle: 'short', timeZone: 'America/Bogota' })
 const proveedores = { cinepolis: 'Cinépolis', royal_films: 'Royal Films', cineland: 'Cineland', cinemark: 'Cinemark' }
+
+async function loadCinemas(options) {
+  const cines = []
+  let page = 1
+  let data
+  do {
+    data = await getCines({page}, options)
+    cines.push(...data.results)
+    page++
+  } while (data.next)
+  return cines
+}
 
 function cityLabel(value) {
   return value === 'bogota' ? 'Bogotá' : value.charAt(0).toLocaleUpperCase('es-CO') + value.slice(1)
@@ -46,17 +60,19 @@ function Actualizacion({ providers, failed }) {
   )
 }
 
-export default function CinemaDirectory() {
+export default function CinemaDirectory({ home = false }) {
   const reduceMotion = useReducedMotion()
   const [query, setQuery] = useSearchParams()
   const [result, setResult] = useState(null)
   const [directory, setDirectory] = useState({})
   const [attempt, setAttempt] = useState(0)
-  const city = query.get('ciudad')?.trim() || ''
+  const city = query.get('ciudad')?.trim() || (home ? 'valledupar' : '')
+  const cinema = query.get('cine') || ''
   const date = query.get('fecha') || 'hoy'
   const key = `${city}/${date}`
 
   useEffect(() => {
+    if (home) return
     const controller = new AbortController()
     getFunciones({ fecha: date, ciudad: city || undefined }, { signal: controller.signal })
       .then((data) => {
@@ -66,17 +82,18 @@ export default function CinemaDirectory() {
         if (!controller.signal.aborted) setResult({ key, attempt, error })
       })
     return () => controller.abort()
-  }, [date, city, key, attempt])
+  }, [date, city, key, attempt, home])
 
   useEffect(() => {
     const controller = new AbortController()
     const options = { signal: controller.signal }
-    Promise.allSettled([getCines({}, options), getEstadoCartelera(options)])
+    Promise.allSettled([loadCinemas(options), getEstadoCartelera(options)])
       .then(([cines, estado]) => {
         if (controller.signal.aborted) return
         setDirectory({
-          cines: cines.value?.results || [],
+          cines: cines.value || [],
           estado: estado.value?.resultados || [],
+          cinemaError: cines.status === 'rejected' ? cines.reason : null,
           failed: estado.status === 'rejected',
         })
       })
@@ -87,10 +104,12 @@ export default function CinemaDirectory() {
     const next = new URLSearchParams(query)
     if (value) next.set(name, value)
     else next.delete(name)
+    next.delete('page')
+    if (name === 'ciudad') next.delete('cine')
     setQuery(next)
   }
 
-  const loading = result?.key !== key || result.attempt !== attempt
+  const loading = !home && (result?.key !== key || result.attempt !== attempt)
   const funciones = loading ? [] : result?.data?.resultados || []
   const cities = [...new Set([
     ...(directory.cines || []).map((cine) => cine.ciudad),
@@ -103,25 +122,31 @@ export default function CinemaDirectory() {
 
   return (
     <main className="cinema-page cinema-directory">
+      {home && <CurtainOpening />}
       <header className="cinema-directory-heading">
         <CinemaIcon name="ticket" weight="duotone" />
         <div>
-          <h1>{date === 'hoy' ? 'Funciones de hoy' : 'Funciones por fecha'}</h1>
+          <h1>{home ? 'Cartelera de cine' : date === 'hoy' ? 'Funciones de hoy' : 'Funciones por fecha'}</h1>
           <p>Consulta los horarios publicados por ciudad y cine.</p>
         </div>
       </header>
       <div className="cinema-filters">
         <label><span>Ciudad</span>
           <select value={city} onChange={(event) => select('ciudad', event.target.value)}>
-            <option value="">Todas las ciudades</option>
+            {!home && <option value="">Todas las ciudades</option>}
             {cities.map((name) => <option key={name} value={name}>{cityLabel(name)}</option>)}
           </select>
         </label>
+        {home && <label><span>Cine</span><select value={cinema} onChange={event => select('cine', event.target.value)}>
+          <option value="">Todos los cines</option>
+          {(directory.cines || []).filter(c => c.ciudad.toLowerCase().startsWith(city.toLowerCase())).map(c => <option key={c.id} value={c.id}>{c.nombre}</option>)}
+        </select></label>}
         <label><span>Fecha</span>
           <input type="date" value={date === 'hoy' ? isoDate.format() : date} onChange={(event) => select('fecha', event.target.value)} />
         </label>
         {date !== 'hoy' && <button type="button" onClick={() => select('fecha', '')}>Volver a hoy</button>}
       </div>
+      {directory.cinemaError && <CinemaState error={directory.cinemaError} title="No pudimos cargar el directorio de cines." retry={() => setAttempt(attempt + 1)} />}
       <Actualizacion providers={providers} failed={directory.failed} />
       {loading && <>
         <span role="status" className="cinema-visually-hidden">Cargando funciones…</span>
@@ -129,9 +154,10 @@ export default function CinemaDirectory() {
           {[0, 1, 2].map((index) => <div key={index} className="cinema-show-skeleton cinema-skeleton" style={{ '--skeleton-delay': `${index * 75}ms` }}><span /><span /></div>)}
         </div>
       </>}
-      {!loading && result.error && <CinemaState error={result.error} title="No pudimos cargar las funciones." message={result.error.status === 400 ? 'Selecciona una fecha válida.' : 'Comprueba la conexión y vuelve a intentarlo.'} retry={() => setAttempt(attempt + 1)} />}
-      {!loading && !result.error && !funciones.length && <p className="cinema-state" role="status">No hay funciones publicadas para esta selección.</p>}
-      {!loading && [...byCinema].map(([id, shows]) => (
+      {!home && !loading && result.error && <CinemaState error={result.error} title="No pudimos cargar las funciones." message={result.error.status === 400 ? 'Selecciona una fecha válida.' : 'Comprueba la conexión y vuelve a intentarlo.'} retry={() => setAttempt(attempt + 1)} />}
+      {home && <MediaSection id="en-cartelera" title="Películas en cartelera" empty="Sin funciones para esta selección." params={{ ciudad:city, fecha:date, cine:cinema, ordering:"titulo" }} detailSearch={new URLSearchParams({ ciudad:city, fecha:date, ...(cinema && {cine:cinema}) }).toString()} />}
+      {!home && !loading && !result.error && !funciones.length && <p className="cinema-state" role="status">No hay funciones publicadas para esta selección.</p>}
+      {!home && !loading && [...byCinema].map(([id, shows]) => (
         <motion.section className="cinema-section cinema-show-list" key={id}
           initial={reduceMotion ? false : { opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.16 }}>
           <header>

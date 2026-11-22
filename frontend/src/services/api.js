@@ -375,7 +375,7 @@ export async function getEstadoCartelera(options = {}) {
    ========================================================================== */
 
 export async function getResenasDeMedia(mediaId, params = {}, options = {}) {
-  return leerJson(`/media/${mediaId}/resenas/${buildQueryString(params)}`, { ...options, publicRequest: true }, 'Error al obtener las reseñas del título.');
+  return leerJson(`/media/${mediaId}/resenas/${buildQueryString(params)}`, { ...options, publicRequest: !getStoredAuth() }, 'Error al obtener las reseñas del título.');
 }
 
 export async function getMiResena(mediaId) {
@@ -407,7 +407,7 @@ export async function getResumenResenas(mediaId) {
 }
 
 export async function getResenasDeUsuario(username, params = {}, options = {}) {
-  return leerJson(`/usuarios/${username}/resenas/${buildQueryString(params)}`, { ...options, publicRequest: true }, `Error al obtener las reseñas de @${username}.`);
+  return leerJson(`/usuarios/${username}/resenas/${buildQueryString(params)}`, { ...options, publicRequest: !getStoredAuth() }, `Error al obtener las reseñas de @${username}.`);
 }
 
 /* ==========================================================================
@@ -503,7 +503,7 @@ export async function removeTituloFromLista(listaId, mediaId) {
 }
 
 export async function getUsuarioListas(username, params = {}, options = {}) {
-  return leerJson(`/usuarios/${username}/listas/${buildQueryString(params)}`, { ...options, publicRequest: true }, `Error al obtener las listas de @${username}.`);
+  return leerJson(`/usuarios/${username}/listas/${buildQueryString(params)}`, { ...options, publicRequest: !getStoredAuth() }, `Error al obtener las listas de @${username}.`);
 }
 
 /**
@@ -571,6 +571,6 @@ export async function getMisListasDeMedia(mediaId) {
 }
 
 export async function getElementosDeLista(id, params = {}, options = {}) {
-  const data = await leerJson(`/listas/${id}/elementos/${buildQueryString(params)}`, { ...options, publicRequest: true }, 'Error al obtener los títulos de la lista.');
+  const data = await leerJson(`/listas/${id}/elementos/${buildQueryString(params)}`, { ...options, publicRequest: !getStoredAuth() }, 'Error al obtener los títulos de la lista.');
   return Array.isArray(data) ? { results: data } : data;
 }

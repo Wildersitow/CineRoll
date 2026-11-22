@@ -314,3 +314,66 @@
 .cinema-settings-details { display: flex; flex-wrap: wrap; gap: 1rem 2rem; margin-bottom: 1rem; }
 .cinema-settings-details dt { color: var(--cinema-muted); font-size: .85rem; }
 .cinema-settings-details dd { overflow-wrap: anywhere; }
+
+/* Cartelera, reverso de los pósteres y acciones de ficha. */
+.film-card { height:auto }
+.film-card a, .film-footer a, .conversation a { color:inherit }
+.film-depth { perspective:900px }
+.film-turn { position:relative; aspect-ratio:2/3; transform-style:preserve-3d; transition:transform .32s ease }
+.film-turn.flipped { transform:rotateY(180deg) }
+.film-front, .film-back { position:absolute; inset:0; width:100%; height:100%; backface-visibility:hidden; border-radius:var(--radius-sm); overflow:hidden }
+.film-front { border:0; padding:0; background:var(--cinema-surface); cursor:pointer }
+.film-front .cinema-poster { height:100% }
+.film-front > span { position:absolute; bottom:.6rem; left:.5rem; padding:.3rem .6rem; border-radius:1rem; background:#20151bed; color:white }
+.film-back { transform:rotateY(180deg); background:var(--cinema-surface); padding:.65rem; display:flex; flex-direction:column; align-items:start; gap:.4rem; border:1px solid var(--cinema-line); overflow:auto }
+.film-back p { margin:0; display:-webkit-box; -webkit-line-clamp:3; -webkit-box-orient:vertical; overflow:hidden; flex-shrink:0 }
+.film-times { margin-top:.65rem; font-size:.85rem }
+.film-times p { margin:.2rem 0; color:var(--cinema-muted) }
+.page-compact { display:none }
+.cinema-pagination [aria-current="page"] { border-color:var(--cinema-gold); color:var(--cinema-gold) }
+.film-actions { display:grid; justify-items:start; gap:.75rem; margin-block:1rem }
+.action-grid { display:flex; flex-wrap:wrap; gap:.5rem; animation:action-open .18s ease-out; transform-origin:top left }
+@keyframes action-open { from { opacity:0; transform:translateY(-.4rem) scale(.97) } }
+.film-actions button, .conversation button, .film-back button, .review-heart { cursor:pointer; color:var(--cinema-ink); border:1px solid var(--cinema-line); background:var(--cinema-surface); border-radius:var(--radius-sm); padding:.5rem .75rem; font:inherit }
+.film-actions button:disabled { opacity:.65 }
+.film-actions fieldset { display:grid; gap:.5rem; border:0; padding:0 }
+.film-actions textarea, .conversation textarea { display:block; width:100%; min-height:5rem; margin-block:.5rem; color:inherit; background:var(--cinema-surface); border:1px solid var(--cinema-line); padding:.7rem; font:inherit }
+.rating { display:flex; flex-wrap:wrap }
+.rating label { position:relative; cursor:pointer; font-size:1.8rem; line-height:1.4 }
+.rating input { position:absolute; opacity:0; width:100%; height:100%; margin:0 }
+.rating label:focus-within { outline:2px solid var(--cinema-gold) }
+.rating span { display:block; color:var(--cinema-muted); pointer-events:none; transition:transform .14s }
+.rating .lit { color:var(--cinema-gold); transform:translateY(-2px) }
+.rating .half-star { overflow:hidden; width:.5em }
+.rating .half-star span { width:1em; text-align:center }
+.rating .half-star:nth-child(even) span { margin-left:-.5em }
+.review-heart { display:inline-flex; gap:.4em; align-items:center }
+.review-heart[aria-pressed="true"] span { color:#ff7990; animation:heart-pulse .24s ease-out }
+@keyframes heart-pulse { 50% {transform:scale(1.28)} }
+.conversation { max-width:50rem }
+.conversation ol { list-style:none; display:grid; gap:.6rem; padding:0 }
+.conversation li { max-width:85%; justify-self:start; padding:.75rem 1rem; background:var(--cinema-surface); border-radius:1rem; overflow-wrap:anywhere }
+.conversation li.mine { justify-self:end; border:1px solid var(--cinema-line) }
+.conversation li p { margin:.4rem 0; white-space:pre-wrap }
+.conversation time { font-size:.75rem; color:var(--cinema-muted) }
+.film-footer { display:flex; align-items:center; justify-content:space-between; gap:1rem; flex-wrap:wrap; padding:2rem clamp(1rem,4vw,4rem); background:var(--cinema-surface) }
+.film-footer nav { display:flex; gap:1rem }
+.cinema-content { isolation:isolate }
+.cinema-content > div { position:relative; z-index:1; background:var(--cinema-bg,#100c0d); min-height:75vh }
+.smooth-caret { pointer-events:none; position:absolute; top:30%; bottom:30%; left:1px; width:2px; background:var(--cinema-gold); transition:transform .09s ease-out }
+.custom-caret { caret-color:transparent }
+@media (hover:hover) and (pointer:fine) and (prefers-reduced-motion:no-preference) {
+  .film-depth:hover .film-turn:not(.flipped) { transform:rotateY(-4deg) rotateX(2deg) }
+}
+@media (min-height:36rem) and (prefers-reduced-motion:no-preference) {
+  .film-footer { position:sticky; bottom:0 }
+  .film-footer:focus-within { z-index:2 }
+}
+@media (max-width:600px) {
+  .page-number { display:none }
+  .page-compact { display:inline }
+}
+@media (prefers-reduced-motion:reduce) {
+  .film-turn, .rating span { transition:none }
+  .review-heart span, .action-grid { animation:none!important }
+}

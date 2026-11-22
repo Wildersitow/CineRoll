@@ -1,11 +1,12 @@
 import { useEffect, useState } from 'react'
+import { Heart } from './FilmActions'
 import { Link, useParams } from 'react-router-dom'
 import { dejarDeSeguir, getElementosDeLista, getPerfilPublico, getResenasDeUsuario, getUsuarioListas, seguirUsuario } from '../services/api'
 import CinemaIcon from './CinemaIcon'
 import CinemaState from './CinemaState'
 import Poster from './Poster'
 
-function ProfileCollection({ list, title, featured }) {
+export function ProfileCollection({ list, title, featured }) {
   const [result, setResult] = useState(null)
   const [attempt, setAttempt] = useState(0)
 
@@ -118,6 +119,7 @@ function ProfileContent({ username, currentUser }) {
         </div>
         <div className="cinema-profile-actions">
           <button type="button" onClick={share}><CinemaIcon name="share" /> Compartir</button>
+          {!mine && <Link to={`/mensajes/${encodeURIComponent(username)}`}>Enviar mensaje</Link>}
           {mine && <Link to="/perfil"><CinemaIcon name="edit" /> Editar perfil</Link>}
           {currentUser && !mine && <button type="button" onClick={toggleFollow} disabled={pending}>
             <CinemaIcon name="user" weight={isFollowing ? 'fill' : 'regular'} /> {pending ? 'Actualizando…' : isFollowing ? 'Dejar de seguir' : 'Seguir'}
@@ -146,8 +148,8 @@ function ProfileContent({ username, currentUser }) {
           {!reviews && <p role="status">Cargando reseñas…</p>}
           {reviews?.error && <CinemaState error={reviews.error} title="No pudimos cargar las reseñas." retry={retry} />}
           {reviews?.value?.results?.length === 0 && <p>Aún no hay reseñas publicadas.</p>}
-          <ul>{reviews?.value?.results?.slice(0, 6).map(({ id, media_id, media_titulo, puntuacion, texto }) => (
-            <li key={id}><Link to={`/media/${media_id}`}>{media_titulo}</Link><strong>{puntuacion}/10</strong>{texto && <p>{texto}</p>}</li>
+          <ul>{reviews?.value?.results?.slice(0, 6).map(({ id, media_id, media_titulo, puntuacion, texto, total_likes, me_gusta }) => (
+            <li key={id}><Link to={`/media/${media_id}`}>{media_titulo}</Link><strong>{puntuacion}/10</strong>{texto && <p>{texto}</p>}<Heart review={{id, total_likes, me_gusta}} user={currentUser} /></li>
           ))}</ul>
         </section>
       </div>

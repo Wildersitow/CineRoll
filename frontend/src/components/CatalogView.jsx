@@ -3,10 +3,10 @@ import { Link, useSearchParams } from 'react-router-dom'
 import { getMedia } from '../services/api'
 import CinemaState from './CinemaState'
 import CinemaIcon from './CinemaIcon'
-import Poster from './Poster'
+import FilmCard from './FilmCard'
+import Pagination from './Pagination'
 import CurtainOpening from './CurtainOpening'
 
-const tipoLabels = { pelicula: 'Película', serie: 'Serie', anime: 'Anime' }
 const filters = { pelicula: 'Películas', serie: 'Series', anime: 'Anime' }
 
 function useMedia(params, page) {
@@ -30,18 +30,26 @@ function useMedia(params, page) {
   return { ...current, retry: () => setAttempt((value) => value + 1), loading: !current }
 }
 
-function MediaCard({ media }) {
-  return (
-    <Link className="cinema-card" to={`/media/${media.id}`}>
-      <Poster url={media.poster_url} />
-      <strong>{media.titulo}</strong>
-      <span>{[tipoLabels[media.tipo], media.fecha_estreno?.slice(0, 4)].filter(Boolean).join(' · ')}</span>
-    </Link>
-  )
+const hora = new Intl.DateTimeFormat('es-CO', { timeZone: 'America/Bogota', timeStyle: 'short' })
+
+function Showtimes({ shows }) {
+  const byCinema = Map.groupBy(shows, show => show.cine.id)
+  return [...byCinema].map(([id, items]) => (
+    <div className="film-times" key={id}>
+      <strong>{items[0].cine.nombre}</strong>
+      <p>{[...new Set(items.map(show => hora.format(new Date(show.fecha_hora))))].join(' · ')}</p>
+    </div>
+  ))
 }
 
-function MediaSection({ id, title, params, carousel = false, empty }) {
-  const [page, setPage] = useState(1)
+export function MediaSection({ id, title, params, carousel = false, empty, detailSearch }) {
+  const [query, setQuery] = useSearchParams()
+  const page = carousel ? 1 : Math.max(1, Number(query.get('page')) || 1)
+  function setPage(value) {
+    const next = new URLSearchParams(query)
+    next.set('page', value)
+    setQuery(next)
+  }
   const { data, error, retry, loading } = useMedia(params, page)
   const rail = useRef(null)
   const [edges, setEdges] = useState({ start: true, end: true })
@@ -106,16 +114,15 @@ function MediaSection({ id, title, params, carousel = false, empty }) {
         <ul className={carousel ? 'cinema-rail' : 'cinema-grid'} ref={rail} id={`${id}-row`} aria-hidden={loading || undefined}>
           {loading
             ? Array.from({ length: 6 }, (_, index) => <li className="cinema-skeleton" key={index} style={{ '--skeleton-delay': `${index * 90}ms` }}><div className="cinema-poster" /><span /><span /></li>)
-            : titles.map((media) => <li key={media.id}><MediaCard media={media} /></li>)}
+            : titles.map(media => (
+              <li key={media.id}>
+                <FilmCard media={media} search={detailSearch} />
+                {media.funciones && <Showtimes shows={media.funciones} />}
+              </li>
+            ))}
         </ul>
       )}
-      {!carousel && (data?.previous || data?.next || (page > 1 && loading)) && (
-        <div className="cinema-pagination" aria-label="Paginación">
-          <button type="button" disabled={loading || !data?.previous} onClick={() => setPage(page - 1)}>Anterior</button>
-          <span>Página {page}</span>
-          <button type="button" disabled={loading || !data?.next} onClick={() => setPage(page + 1)}>Siguiente</button>
-        </div>
-      )}
+      {!carousel && <Pagination page={page} count={data?.count || 0} change={setPage} />}
     </section>
   )
 }
