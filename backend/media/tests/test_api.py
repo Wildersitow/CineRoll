@@ -410,6 +410,70 @@ class CatalogApiTests(APITestCase):
         self.assertEqual(response.data["count"], 1)
         self.assertEqual(response.data["results"][0]["id"], self.media.pk)
 
+    def test_city_and_date_filters_return_only_titles_with_matching_showtimes(self):
+        valledupar = Cine.objects.create(nombre="Cine Valledupar", ciudad="Valledupar")
+        bogota = Cine.objects.create(nombre="Cine Bogotá", ciudad="Bogotá")
+        bogota_media = Media.objects.create(titulo="Solo en Bogotá", tipo=Media.Tipo.PELICULA)
+        later_media = Media.objects.create(titulo="Otro día", tipo=Media.Tipo.PELICULA)
+        Media.objects.create(titulo="Serie sin funciones", tipo=Media.Tipo.SERIE)
+        Funcion.objects.create(
+            media=self.media,
+            cine=valledupar,
+            fecha_hora=datetime(2026, 11, 10, 19, 30, tzinfo=timezone.utc),
+        )
+        Funcion.objects.create(
+            media=self.media,
+            cine=valledupar,
+            fecha_hora=datetime(2026, 11, 10, 22, 30, tzinfo=timezone.utc),
+        )
+        Funcion.objects.create(
+            media=bogota_media,
+            cine=bogota,
+            fecha_hora=datetime(2026, 11, 10, 19, 30, tzinfo=timezone.utc),
+        )
+        Funcion.objects.create(
+            media=later_media,
+            cine=valledupar,
+            fecha_hora=datetime(2026, 11, 11, 19, 30, tzinfo=timezone.utc),
+        )
+
+        response = self.client.get(
+            reverse("media-list"),
+            {"ciudad": "valledupar", "fecha": "2026-11-10"},
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(
+            [item["id"] for item in response.data["results"]], [self.media.pk]
+        )
+
+    def test_cinema_and_date_filters_apply_to_the_same_showtime(self):
+        cine = Cine.objects.create(nombre="Cine Valledupar", ciudad="Valledupar")
+        otro = Cine.objects.create(nombre="Otro cine", ciudad="Valledupar")
+        Funcion.objects.create(
+            media=self.media,
+            cine=cine,
+            fecha_hora=datetime(2026, 11, 11, 19, 30, tzinfo=timezone.utc),
+        )
+        Funcion.objects.create(
+            media=self.media,
+            cine=otro,
+            fecha_hora=datetime(2026, 11, 10, 19, 30, tzinfo=timezone.utc),
+        )
+
+        response = self.client.get(
+            reverse("media-list"),
+            {"cine": str(cine.pk), "fecha": "2026-11-10"},
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["count"], 0)
+
+    def test_invalid_date_filter(self):
+        response = self.client.get(reverse("media-list"), {"fecha": "mañana"})
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
     def test_invalid_or_unknown_cinema_filter(self):
         invalid = self.client.get(reverse("media-list"), {"cine": "valledupar"})
         unknown = self.client.get(reverse("media-list"), {"cine": "999999"})
