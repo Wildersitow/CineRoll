@@ -1,6 +1,6 @@
 import {
   ArrowDownIcon, ArrowLeftIcon, ArrowSquareOutIcon, CalendarBlankIcon,
-  CaretLeftIcon, CaretRightIcon, ClockIcon, FilmStripIcon, HouseIcon,
+  CaretDownIcon, CaretLeftIcon, ChatCircleDotsIcon, GearSixIcon, SignOutIcon, CaretRightIcon, ClockIcon, FilmStripIcon, HouseIcon,
   MagnifyingGlassIcon, MapPinIcon, PencilSimpleIcon, ShareNetworkIcon,
   SparkleIcon, TelevisionIcon, TicketIcon, UserIcon, WarningCircleIcon,
 } from '@phosphor-icons/react'
@@ -24,6 +24,10 @@ const icons = {
   warning: WarningCircleIcon,
   edit: PencilSimpleIcon,
   share: ShareNetworkIcon,
+  caretDown: CaretDownIcon,
+  chat: ChatCircleDotsIcon,
+  settings: GearSixIcon,
+  signOut: SignOutIcon,
 }
 
 export default function CinemaIcon({ name, weight = 'regular' }) {

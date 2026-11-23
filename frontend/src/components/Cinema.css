@@ -305,7 +305,7 @@
 .cinema-profile-reviews li { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: .4rem; border-top: 1px solid var(--cinema-line); padding: .75rem 0; }
 .cinema-profile-reviews li a { color: var(--cinema-ink); overflow-wrap: anywhere; }
 .cinema-profile-reviews li strong { color: var(--cinema-gold); font-size: .85rem; }
-.cinema-profile-reviews li p { grid-column: 1 / -1; overflow-wrap: anywhere; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; overflow: hidden; }
+.cinema-profile-reviews li p { grid-column: 1 / -1; overflow-wrap: anywhere; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; line-clamp: 3; overflow: hidden; }
 
 @media (max-width: 760px) {
   .cinema-profile-layout { grid-template-columns: minmax(0, 1fr); }
@@ -326,7 +326,7 @@
 .film-front .cinema-poster { height:100% }
 .film-front > span { position:absolute; bottom:.6rem; left:.5rem; padding:.3rem .6rem; border-radius:1rem; background:#20151bed; color:white }
 .film-back { transform:rotateY(180deg); background:var(--cinema-surface); padding:.65rem; display:flex; flex-direction:column; align-items:start; gap:.4rem; border:1px solid var(--cinema-line); overflow:auto }
-.film-back p { margin:0; display:-webkit-box; -webkit-line-clamp:3; -webkit-box-orient:vertical; overflow:hidden; flex-shrink:0 }
+.film-back p { margin:0; display:-webkit-box; -webkit-line-clamp:3; line-clamp:3; -webkit-box-orient:vertical; overflow:hidden; flex-shrink:0 }
 .film-times { margin-top:.65rem; font-size:.85rem }
 .film-times p { margin:.2rem 0; color:var(--cinema-muted) }
 .page-compact { display:none }
@@ -377,3 +377,23 @@
   .film-turn, .rating span { transition:none }
   .review-heart span, .action-grid { animation:none!important }
 }
+
+/* Menú de usuario (avatar en la barra superior) */
+.cinema-user-menu { position: relative; }
+.cinema-account .cinema-user-trigger { display: flex; align-items: center; gap: .4rem; padding: .2rem .45rem .2rem .2rem; border-radius: 999px; color: var(--cinema-muted); }
+.cinema-account .cinema-user-trigger:hover, .cinema-account .cinema-user-trigger[aria-expanded="true"] { color: var(--cinema-ink); border-color: var(--cinema-gold); background: var(--cinema-surface); }
+.cinema-user-trigger svg { width: .9rem; height: .9rem; transition: rotate var(--transition-fast); }
+.cinema-user-trigger[aria-expanded="true"] svg { rotate: 180deg; }
+.cinema-user-avatar { display: grid; place-items: center; width: 2.1rem; aspect-ratio: 1; overflow: hidden; border-radius: 50%; background: var(--cinema-red); color: var(--cinema-ink); font-weight: 700; font-size: .95rem; box-shadow: 0 0 0 2px var(--cinema-bg), 0 0 0 3px color-mix(in srgb, var(--cinema-gold) 55%, transparent); }
+.cinema-user-avatar img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.cinema-user-dropdown { position: absolute; right: 0; top: calc(100% + .55rem); z-index: 50; display: grid; gap: .15rem; min-width: 15rem; padding: .45rem; background: color-mix(in srgb, var(--cinema-surface) 94%, transparent); backdrop-filter: blur(12px); border: 1px solid var(--cinema-line); border-radius: var(--radius-sm); box-shadow: 0 18px 40px #0009; transform-origin: top right; }
+.cinema-user-summary { display: flex; align-items: center; gap: .7rem; padding: .55rem .55rem .75rem; margin-bottom: .25rem; border-bottom: 1px solid var(--cinema-line); }
+.cinema-user-summary .cinema-user-avatar { width: 2.6rem; }
+.cinema-user-summary div { display: grid; min-width: 0; }
+.cinema-user-summary strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cinema-user-summary small { color: var(--cinema-muted); }
+.cinema-account .cinema-user-dropdown :is(a, button) { display: flex; align-items: center; gap: .65rem; width: 100%; padding: .6rem .65rem; border: 0; border-radius: calc(var(--radius-sm) - 2px); color: var(--cinema-ink); background: transparent; text-align: left; font: inherit; font-size: .86rem; text-decoration: none; }
+.cinema-account .cinema-user-dropdown :is(a, button):hover, .cinema-account .cinema-user-dropdown :is(a, button):focus-visible { background: color-mix(in srgb, var(--cinema-red) 22%, var(--cinema-surface)); }
+.cinema-account .cinema-user-dropdown a[aria-current] { color: var(--cinema-gold); }
+.cinema-account .cinema-user-dropdown .cinema-user-logout { margin-top: .25rem; border-top: 1px solid var(--cinema-line); border-radius: 0 0 calc(var(--radius-sm) - 2px) calc(var(--radius-sm) - 2px); color: var(--cinema-muted); }
+.cinema-user-logout:disabled { opacity: .55; cursor: wait; }

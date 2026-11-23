@@ -2,19 +2,19 @@ import { useLayoutEffect } from 'react'
 import { motion, useReducedMotion } from 'motion/react'
 import { Link, useLocation, useNavigate, useOutlet } from 'react-router-dom'
 import CinemaIcon from './CinemaIcon'
+import UserMenu from './UserMenu'
 import './Cinema.css'
 
+// Películas, Series y Anime se filtran desde el propio Catálogo, así que la
+// barra lateral solo lleva las secciones principales.
 const cinemaLinks = [
   { path: '/', label: 'Inicio', icon: 'home' },
   { path: '/catalogo', label: 'Catálogo', icon: 'film' },
-  { path: '/catalogo?tipo=pelicula', label: 'Películas', icon: 'film' },
-  { path: '/catalogo?tipo=serie', label: 'Series', icon: 'screen' },
-  { path: '/catalogo?tipo=anime', label: 'Anime', icon: 'spark' },
+  { path: '/cines', label: 'Cines', icon: 'pin' },
 ]
 
 const billboardLinks = [
   { path: '/catalogo?estado=proximo_estreno', label: 'Estrenos', icon: 'clock' },
-  { path: '/cines', label: 'Cines', icon: 'pin' },
 ]
 
 function NavGroup({ label, links, pathname, search }) {
@@ -45,8 +45,6 @@ export default function MainLayout({ currentUser, onLogout, isLoading }) {
     window.scrollTo(0, 0)
   }, [pathname])
 
-  const account = currentUser ? { path: '/perfil', label: 'Mi perfil' } : { path: '/acceso', label: 'Ingresar' }
-
   function submitSearch(event) {
     event.preventDefault()
     const term = new FormData(event.currentTarget).get('q').trim()
@@ -66,14 +64,12 @@ export default function MainLayout({ currentUser, onLogout, isLoading }) {
           <button type="submit" aria-label="Buscar"><CinemaIcon name="search" /></button>
         </form>
         <div className="cinema-account">
-          <Link to={account.path} aria-current={pathname === account.path ? 'page' : undefined}>
-            <CinemaIcon name="user" weight={pathname === account.path ? 'fill' : 'regular'} /><span>{account.label}</span>
-          </Link>
-          {currentUser && <Link to="/mensajes">Mensajes</Link>}
-          {currentUser && (
-            <button type="button" onClick={onLogout} disabled={isLoading}>
-              {isLoading ? 'Cerrando…' : 'Cerrar sesión'}
-            </button>
+          {currentUser ? (
+            <UserMenu user={currentUser} onLogout={onLogout} isLoading={isLoading} />
+          ) : (
+            <Link to="/acceso" aria-current={pathname === '/acceso' ? 'page' : undefined}>
+              <CinemaIcon name="user" weight={pathname === '/acceso' ? 'fill' : 'regular'} /><span>Ingresar</span>
+            </Link>
           )}
         </div>
       </header>
