@@ -1,10 +1,67 @@
-import { useEffect, useState } from 'react'
-import { Link } from 'react-router-dom'
-import { ProfileCollection } from './PublicProfileView'
-import { getListas } from '../services/api'
+import { useState } from 'react'
+import { Link, useSearchParams } from 'react-router-dom'
+import { updateProfile } from '../services/api'
 import CinemaIcon from './CinemaIcon'
 import ProfileEditForm from './ProfileEditForm'
+import FavoritasEditor from './FavoritasEditor'
 import ChangePasswordModal from './ChangePasswordModal'
+
+const SECCIONES = [
+  { id: 'perfil', label: 'Perfil', description: 'Avatar, banner, biografía y favoritas', icon: 'user' },
+  { id: 'preferencias', label: 'Preferencias', description: 'Cómo ves las puntuaciones', icon: 'settings' },
+  { id: 'cuenta', label: 'Cuenta', description: 'Correo y contraseña', icon: 'key' },
+]
+
+const ESCALAS = [
+  { value: 10, title: '1 a 10 puntos', example: '8/10', description: 'Una nota exacta para cada título.' },
+  { value: 5, title: '5 estrellas', example: '★★★★½', description: 'Estrellas con medias, como en Letterboxd.' },
+]
+
+/** Sección "Preferencias": escala de puntuación como tarjetas seleccionables. */
+function Preferencias({ currentUser, onProfileSaved }) {
+  const [status, setStatus] = useState({ loading: false, error: '' })
+  const actual = Number(currentUser.escala_calificacion) || 10
+
+  async function choose(value) {
+    if (value === actual || status.loading) return
+    setStatus({ loading: true, error: '' })
+    try {
+      onProfileSaved(await updateProfile({ escala_calificacion: value }))
+      setStatus({ loading: false, error: '' })
+    } catch (error) {
+      setStatus({ loading: false, error: error.message })
+    }
+  }
+
+  return (
+    <section className="settings-section" aria-labelledby="preferencias-titulo">
+      <h2 id="preferencias-titulo">Preferencias</h2>
+      <div className="settings-field">
+        <span className="settings-label" id="escala-label">Escala de puntuación</span>
+        <small className="settings-hint">Solo cambia cómo ves las notas; las reseñas se guardan siempre de 1 a 10.</small>
+        <div className="settings-choices" role="radiogroup" aria-labelledby="escala-label">
+          {ESCALAS.map(({ value, title, example, description }) => (
+            <button
+              key={value}
+              type="button"
+              role="radio"
+              aria-checked={actual === value}
+              className="settings-choice"
+              disabled={status.loading}
+              onClick={() => choose(value)}
+            >
+              <span className="settings-choice-example" aria-hidden="true">{example}</span>
+              <strong>{title}</strong>
+              <small>{description}</small>
+            </button>
+          ))}
+        </div>
+        {status.loading && <p className="settings-hint" role="status">Guardando…</p>}
+        {status.error && <p role="alert">{status.error}</p>}
+      </div>
+    </section>
+  )
+}
 
 export default function ProfileView({
   currentUser,
@@ -21,21 +78,16 @@ export default function ProfileView({
   onChangePasswordSubmit,
   onResetPasswordInputs,
 }) {
-  const [watchlist, setWatchlist] = useState()
-  const [listError, setListError] = useState('')
-  const [attempt, setAttempt] = useState(0)
-  useEffect(() => {
-    let active = true
-    getListas({ tipo:'por_ver', usuario:currentUser.username }).then(data => {
-      if (active) { setWatchlist(data.results[0] || null); setListError('') }
-    }).catch(error => { if (active) setListError(error.message) })
-    return () => { active = false }
-  }, [currentUser.username, attempt])
-  const [editing, setEditing] = useState(false)
-  const [failedAvatar, setFailedAvatar] = useState(null)
+  const [query, setQuery] = useSearchParams()
+  const seccion = SECCIONES.some(({ id }) => id === query.get('seccion')) ? query.get('seccion') : 'perfil'
+  const perfilPublico = `/usuarios/${encodeURIComponent(currentUser.username)}`
+
+  function select(id) {
+    setQuery(id === 'perfil' ? {} : { seccion: id }, { replace: true })
+  }
 
   return (
-    <main className="cinema-page cinema-profile cinema-profile-settings">
+    <main className="cinema-page settings-page">
       {showChangePasswordModal && (
         <ChangePasswordModal
           currentPasswordInput={currentPasswordInput}
@@ -53,46 +105,52 @@ export default function ProfileView({
         />
       )}
 
-      <header className="cinema-profile-header">
-        <div className="cinema-profile-identity">
-          <div className="cinema-profile-avatar">
-            {currentUser.avatar && currentUser.avatar !== failedAvatar ? (
-              <img src={currentUser.avatar} alt="" onError={() => setFailedAvatar(currentUser.avatar)} />
-            ) : <span aria-hidden="true">{(currentUser.nombre || currentUser.username || 'U').charAt(0).toUpperCase()}</span>}
-          </div>
-          <div><h1>{currentUser.nombre || currentUser.username}</h1><p>@{currentUser.username}</p></div>
-        </div>
-        <div className="cinema-profile-actions">
-          <button type="button" aria-expanded={editing} aria-controls="editar-perfil" onClick={() => setEditing(!editing)}>
-            <CinemaIcon name="edit" /> {editing ? 'Cancelar edición' : 'Editar perfil'}
-          </button>
-          <Link to={`/usuarios/${encodeURIComponent(currentUser.username)}`}>
-            <CinemaIcon name="external" /> Ver perfil público
+      <aside className="settings-nav">
+        <h1>Ajustes</h1>
+        <nav aria-label="Secciones de ajustes">
+          {SECCIONES.map(({ id, label, description, icon }) => (
+            <button key={id} type="button" aria-current={seccion === id ? 'page' : undefined} onClick={() => select(id)}>
+              <CinemaIcon name={icon} weight={seccion === id ? 'fill' : 'regular'} />
+              <span><strong>{label}</strong><small>{description}</small></span>
+            </button>
+          ))}
+          <Link to={perfilPublico}>
+            <CinemaIcon name="external" />
+            <span><strong>Ver perfil público</strong><small>Así te ven los demás</small></span>
           </Link>
-        </div>
-        {currentUser.biografia && <p className="cinema-profile-bio">{currentUser.biografia}</p>}
-      </header>
-      <section className="cinema-profile-panel">
-        <h2>Datos de la cuenta</h2>
-        <dl className="cinema-settings-details">
-          <div><dt>Correo</dt><dd>{currentUser.email || 'Sin correo registrado'}</dd></div>
-          <div><dt>Escala de puntuación</dt><dd>{currentUser.escala_calificacion === 5 ? '5 estrellas (con medias)' : '1 a 10 puntos'}</dd></div>
-        </dl>
-        <div className="cinema-profile-actions">
-          <button type="button" onClick={() => setShowChangePasswordModal(true)}>Cambiar contraseña</button>
-        </div>
-      </section>
-      {listError ? <p role="alert">{listError} <button onClick={() => setAttempt(attempt + 1)}>Reintentar</button></p> :
-        watchlist === undefined ? <p role="status">Cargando Por ver…</p> : <ProfileCollection list={watchlist} title="Por ver" />}
-      <div id="editar-perfil">
-        {editing && (
-          <ProfileEditForm currentUser={currentUser} onSaved={(data) => {
-            setEditing(false)
-            onProfileSaved(data)
-          }} />
+        </nav>
+      </aside>
+
+      <div className="settings-content">
+        {seccion === 'perfil' && (
+          <>
+            <ProfileEditForm key={currentUser.username} currentUser={currentUser} onSaved={onProfileSaved} />
+            <FavoritasEditor username={currentUser.username} />
+          </>
+        )}
+        {seccion === 'preferencias' && <Preferencias currentUser={currentUser} onProfileSaved={onProfileSaved} />}
+        {seccion === 'cuenta' && (
+          <section className="settings-section" aria-labelledby="cuenta-titulo">
+            <h2 id="cuenta-titulo">Cuenta</h2>
+            <dl className="settings-details">
+              <div><dt>Correo</dt><dd>{currentUser.email || 'Sin correo registrado'}</dd></div>
+              <div><dt>Usuario</dt><dd>@{currentUser.username}</dd></div>
+              {currentUser.date_joined && (
+                <div><dt>Miembro desde</dt><dd>{new Date(currentUser.date_joined).toLocaleDateString('es-CO', { day: 'numeric', month: 'long', year: 'numeric' })}</dd></div>
+              )}
+            </dl>
+            <div className="settings-field">
+              <span className="settings-label">Contraseña</span>
+              <small className="settings-hint">Usa al menos 8 caracteres y no la repitas en otros sitios.</small>
+              <div>
+                <button type="button" className="settings-button" onClick={() => setShowChangePasswordModal(true)}>
+                  <CinemaIcon name="key" /> Cambiar contraseña
+                </button>
+              </div>
+            </div>
+          </section>
         )}
       </div>
     </main>
   )
 }
-

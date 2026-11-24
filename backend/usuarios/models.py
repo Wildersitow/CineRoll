@@ -11,6 +11,8 @@ class Usuario(AbstractUser):
     # está vacío para que varios usuarios sin correo no choquen con la restricción.
     email = models.EmailField("correo electrónico", unique=True, null=True, blank=True)
     avatar = models.URLField(blank=True)
+    # Imagen ancha que se muestra en la cabecera del perfil público (estilo Letterboxd).
+    banner = models.URLField(blank=True)
     biografia = models.TextField(blank=True, max_length=500)
     # Solo es una preferencia de visualización: las reseñas SIEMPRE se guardan de 1 a 10.
     escala_calificacion = models.PositiveSmallIntegerField(

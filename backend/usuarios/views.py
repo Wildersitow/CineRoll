@@ -12,6 +12,7 @@ from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework_simplejwt.views import TokenObtainPairView
 
 from social.models import Resena, SugerenciaEdicion
+from social.resenas import anotar_resenas
 from social.serializers import ResenaSerializer, SugerenciaEdicionSerializer
 
 from .serializers import (
@@ -210,11 +211,12 @@ class UsuarioResenasPublicasView(ListAPIView):
             usuario = get_object_or_404(Usuario, pk=int(identificador))
         else:
             usuario = get_object_or_404(Usuario, username=str(identificador))
-        return (
+        return anotar_resenas(
             Resena.objects.visibles()
             .filter(usuario=usuario)
             .select_related("media", "usuario")
-            .order_by("-fecha_creacion", "-id")
+            .order_by("-fecha_creacion", "-id"),
+            self.request.user,
         )
 
 
@@ -228,11 +230,12 @@ class MisResenasView(ListAPIView):
     permission_classes = [IsAuthenticated]
 
     def get_queryset(self):
-        return (
+        return anotar_resenas(
             Resena.objects.visibles()
             .filter(usuario=self.request.user)
             .select_related("media", "usuario")
-            .order_by("-fecha_creacion", "-id")
+            .order_by("-fecha_creacion", "-id"),
+            self.request.user,
         )
 
 

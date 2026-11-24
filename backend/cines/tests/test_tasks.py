@@ -8,7 +8,7 @@ from django.utils import timezone
 
 from cines.models import Cine, Funcion
 from cines.services import CarteleraScrapeResult, ScraperError
-from backend.usuarios.tasks import limpiar_cartelera_vencida, scrape_cartelera_task
+from cines.tasks import limpiar_cartelera_vencida, scrape_cartelera_task
 from media.models import Media
 
 

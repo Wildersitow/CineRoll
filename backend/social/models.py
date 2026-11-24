@@ -266,3 +266,86 @@ class SugerenciaEdicion(models.Model):
     def __str__(self):
         return f"Sugerencia de {self.usuario} sobre {self.media} ({self.campo})"
 
+
+
+class RegistroTitulo(models.Model):
+    """
+    Cómo lleva un usuario un título: si ya lo vio o lo está viendo, y si le gustó.
+    "Pendiente" no se guarda aquí: es estar en la lista Por ver del usuario.
+    """
+
+    class Estado(models.TextChoices):
+        VISTO = "visto", "Visto"
+        VIENDO = "viendo", "Viendo"
+
+    usuario = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="registros"
+    )
+    media = models.ForeignKey(
+        "media.Media", on_delete=models.CASCADE, related_name="registros"
+    )
+    estado = models.CharField(max_length=10, choices=Estado.choices, blank=True)
+    me_gusta = models.BooleanField(default=False)
+    fecha_actualizacion = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-fecha_actualizacion", "-id"]
+        verbose_name = "registro de título"
+        verbose_name_plural = "registros de títulos"
+        constraints = [
+            models.UniqueConstraint(
+                fields=["usuario", "media"], name="social_registro_unico"
+            ),
+        ]
+
+    def __str__(self):
+        return f"{self.usuario} · {self.media}: {self.estado or 'sin estado'}"
+
+
+class LikeResena(models.Model):
+    """Un "me gusta" de un usuario a una reseña."""
+
+    usuario = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="likes_resenas"
+    )
+    resena = models.ForeignKey(Resena, on_delete=models.CASCADE, related_name="likes")
+    fecha = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-fecha", "-id"]
+        verbose_name = "me gusta de reseña"
+        verbose_name_plural = "me gusta de reseñas"
+        constraints = [
+            models.UniqueConstraint(
+                fields=["usuario", "resena"], name="social_like_resena_unico"
+            ),
+        ]
+
+    def __str__(self):
+        return f"{self.usuario} ♥ reseña {self.resena_id}"
+
+
+class ComentarioResena(models.Model):
+    """Comentario de un usuario debajo de una reseña."""
+
+    resena = models.ForeignKey(
+        Resena, on_delete=models.CASCADE, related_name="comentarios"
+    )
+    usuario = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="comentarios_resenas",
+    )
+    texto = models.TextField()
+    fecha_creacion = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["fecha_creacion", "id"]
+        verbose_name = "comentario de reseña"
+        verbose_name_plural = "comentarios de reseñas"
+        indexes = [
+            models.Index(fields=["resena", "fecha_creacion"], name="social_coment_resena_idx"),
+        ]
+
+    def __str__(self):
+        return f"{self.usuario} en reseña {self.resena_id}"

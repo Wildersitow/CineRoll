@@ -4,8 +4,11 @@ from django.template.response import TemplateResponse
 from rest_framework.exceptions import ValidationError
 
 from social.models import (
+    ComentarioResena,
+    LikeResena,
     ElementoLista,
     Lista,
+    RegistroTitulo,
     ReporteResena,
     Resena,
     Seguimiento,
@@ -231,3 +234,24 @@ class ReporteResenaAdmin(admin.ModelAdmin):
             pk__in=queryset.values("resena_id"), oculta=False
         ).update(oculta=True)
         self.message_user(request, f"{cantidad} reseña(s) reportada(s) ocultada(s).")
+
+
+@admin.register(RegistroTitulo)
+class RegistroTituloAdmin(admin.ModelAdmin):
+    list_display = ("usuario", "media", "estado", "me_gusta", "fecha_actualizacion")
+    list_filter = ("estado", "me_gusta")
+    search_fields = ("usuario__username", "media__titulo")
+    raw_id_fields = ("usuario", "media")
+
+
+@admin.register(ComentarioResena)
+class ComentarioResenaAdmin(admin.ModelAdmin):
+    list_display = ("usuario", "resena", "fecha_creacion")
+    search_fields = ("usuario__username", "texto")
+    raw_id_fields = ("usuario", "resena")
+
+
+@admin.register(LikeResena)
+class LikeResenaAdmin(admin.ModelAdmin):
+    list_display = ("usuario", "resena", "fecha")
+    raw_id_fields = ("usuario", "resena")

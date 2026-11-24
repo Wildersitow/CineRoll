@@ -8,20 +8,25 @@ from social.seguimiento import (
 )
 from social.views import (
     AprobarSugerenciaView,
+    ComentarioResenaDetailView,
     ListaDetailView,
     ListaElementoDetailView,
     ListaElementoListCreateView,
     ListaListCreateView,
+    MediaEstadisticasView,
     MediaMisListasView,
     MediaResenaListCreateView,
     MediaResenaResumenView,
     MediaSugerenciaListCreateView,
+    MiRegistroMediaView,
     MiResenaMediaView,
     MisListasView,
     RechazarSugerenciaView,
-    ResenasListView,
-    ResenaDetailView,
     ReportarResenaView,
+    ResenaComentariosView,
+    ResenaDetailView,
+    ResenaLikeView,
+    ResenasListView,
     SugerenciasModeracionView,
     UsuarioListasListView,
 )
@@ -58,6 +63,22 @@ urlpatterns = [
         ReportarResenaView.as_view(),
         name="resena-reportar",
     ),
+    path("resenas/<int:pk>/like/", ResenaLikeView.as_view(), name="resena-like"),
+    path(
+        "resenas/<int:pk>/comentarios/",
+        ResenaComentariosView.as_view(),
+        name="resena-comentarios",
+    ),
+    path(
+        "comentarios/<int:pk>/",
+        ComentarioResenaDetailView.as_view(),
+        name="comentario-resena-detail",
+    ),
+    path(
+        "media/<int:media_id>/estadisticas/",
+        MediaEstadisticasView.as_view(),
+        name="media-estadisticas",
+    ),
     path("resenas/<int:pk>/", ResenaDetailView.as_view(), name="resena-detail"),
 
     # Estado del título en las listas del usuario autenticado
@@ -68,6 +89,11 @@ urlpatterns = [
     ),
 
     # Endpoints de listas
+    path(
+        "media/<int:media_id>/mi-registro/",
+        MiRegistroMediaView.as_view(),
+        name="media-mi-registro",
+    ),
     path("listas/", ListaListCreateView.as_view(), name="lista-list-create"),
     path("listas/<int:pk>/", ListaDetailView.as_view(), name="lista-detail"),
     path(

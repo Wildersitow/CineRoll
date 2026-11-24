@@ -6,7 +6,7 @@ from django.test import SimpleTestCase, TestCase
 
 from cines.models import EjecucionScraping
 from cines.services import CarteleraScrapeResult
-from backend.usuarios.tasks import scrape_cartelera_task
+from cines.tasks import scrape_cartelera_task
 from config import celery_app
 
 

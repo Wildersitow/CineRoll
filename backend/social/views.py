@@ -23,8 +23,18 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from media.models import Media
-from social.models import ElementoLista, Lista, ReporteResena, Resena, SugerenciaEdicion
+from social.models import (
+    ComentarioResena,
+    ElementoLista,
+    LikeResena,
+    Lista,
+    RegistroTitulo,
+    ReporteResena,
+    Resena,
+    SugerenciaEdicion,
+)
 from social.serializers import (
+    ComentarioResenaSerializer,
     AgregarElementoSerializer,
     ElementoListaSerializer,
     ListaDetalleSerializer,
@@ -34,6 +44,8 @@ from social.serializers import (
     ResolverSugerenciaSerializer,
     SugerenciaEdicionSerializer,
 )
+from social.registro import actualizar_registro, datos_registro, registrar_resena
+from social.resenas import anotar_resenas, estadisticas_media
 from social.services import resumen_puntuacion
 from social.sugerencias import aprobar_sugerencia, rechazar_sugerencia
 from usuarios.permissions import EsAdministrador, EsAutorOLecturaPublica
@@ -72,10 +84,11 @@ class MediaResenaListCreateView(ListCreateAPIView):
         return context
 
     def get_queryset(self):
-        return (
+        return anotar_resenas(
             Resena.objects.visibles()
             .filter(media=self.get_media())
-            .select_related("usuario", "media")
+            .select_related("usuario", "media"),
+            self.request.user,
         )
 
     def perform_create(self, serializer):
@@ -86,6 +99,7 @@ class MediaResenaListCreateView(ListCreateAPIView):
         try:
             with transaction.atomic():
                 serializer.save(usuario=usuario, media=media)
+                registrar_resena(usuario, media)
         except IntegrityError:  # dos peticiones simultáneas del mismo usuario
             raise ValidationError({"detail": MENSAJE_RESENA_REPETIDA})
 
@@ -118,7 +132,79 @@ class ResenasListView(ListAPIView):
                 )
             queryset = queryset.filter(media_id=int(media_id))
 
-        return queryset.order_by("-fecha_creacion", "-pk")
+        return anotar_resenas(queryset, self.request.user).order_by("-fecha_creacion", "-pk")
+
+
+class ResenaLikeView(APIView):
+    """
+    PUT /api/resenas/<pk>/like/    marca "me gusta" (idempotente).
+    DELETE /api/resenas/<pk>/like/ lo quita.
+    Responde {"resena_id", "me_gusta", "total_likes"}.
+    """
+
+    permission_classes = (IsAuthenticated,)
+
+    def responder(self, request, resena):
+        return Response(
+            {
+                "resena_id": resena.pk,
+                "me_gusta": resena.likes.filter(usuario=request.user).exists(),
+                "total_likes": resena.likes.count(),
+            }
+        )
+
+    def put(self, request, pk):
+        resena = get_object_or_404(Resena.objects.visibles(), pk=pk)
+        LikeResena.objects.get_or_create(usuario=request.user, resena=resena)
+        return self.responder(request, resena)
+
+    def delete(self, request, pk):
+        resena = get_object_or_404(Resena.objects.visibles(), pk=pk)
+        LikeResena.objects.filter(usuario=request.user, resena=resena).delete()
+        return self.responder(request, resena)
+
+
+class ResenaComentariosView(ListCreateAPIView):
+    """GET: comentarios de una reseña (público, paginado, del más antiguo al más nuevo). POST: comentar."""
+
+    serializer_class = ComentarioResenaSerializer
+    permission_classes = (IsAuthenticatedOrReadOnly,)
+
+    def get_resena(self):
+        if not hasattr(self, "_resena"):
+            self._resena = get_object_or_404(Resena.objects.visibles(), pk=self.kwargs["pk"])
+        return self._resena
+
+    def get_queryset(self):
+        return ComentarioResena.objects.filter(resena=self.get_resena()).select_related("usuario")
+
+    def perform_create(self, serializer):
+        serializer.save(usuario=self.request.user, resena=self.get_resena())
+
+
+class ComentarioResenaDetailView(APIView):
+    """DELETE /api/comentarios/<pk>/: lo borra su autor o el autor de la reseña."""
+
+    permission_classes = (IsAuthenticated,)
+
+    def delete(self, request, pk):
+        comentario = get_object_or_404(
+            ComentarioResena.objects.select_related("resena"), pk=pk
+        )
+        if request.user.pk not in (comentario.usuario_id, comentario.resena.usuario_id):
+            raise PermissionDenied("Solo puedes borrar tus comentarios o los de tu reseña.")
+        comentario.delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+class MediaEstadisticasView(APIView):
+    """GET /api/media/<media_id>/estadisticas/: nota media, distribución y actividad."""
+
+    permission_classes = (AllowAny,)
+
+    def get(self, request, media_id):
+        media = get_object_or_404(Media, pk=media_id)
+        return Response(estadisticas_media(media))
 
 
 class MediaResenaResumenView(APIView):
@@ -434,6 +520,48 @@ class MediaMisListasView(APIView):
                 "listas": list(listas_con_titulo),
             },
             status=status.HTTP_200_OK,
+        )
+
+
+class RegistroTituloSerializer(serializers.Serializer):
+    estado = serializers.ChoiceField(
+        choices=[("", "Sin estado"), *RegistroTitulo.Estado.choices], required=False
+    )
+    me_gusta = serializers.BooleanField(required=False)
+    pendiente = serializers.BooleanField(required=False)
+
+
+class MiRegistroMediaView(APIView):
+    """
+    GET /api/media/<media_id>/mi-registro/
+        {"media_id", "estado": ""|"visto"|"viendo", "me_gusta", "pendiente"}
+    PATCH con cualquiera de estado, me_gusta o pendiente; responde igual que GET.
+    "pendiente" equivale a estar en la lista Por ver del usuario.
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, media_id):
+        media = get_object_or_404(Media, pk=media_id)
+        return Response(datos_registro(request.user, media))
+
+    def patch(self, request, media_id):
+        media = get_object_or_404(Media, pk=media_id)
+        serializer = RegistroTituloSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        if not serializer.validated_data:
+            raise ValidationError(
+                {"detail": "Envía al menos uno de: estado, me_gusta, pendiente."}
+            )
+        if (
+            serializer.validated_data.get("estado")
+            and media.estado == Media.Estado.PROXIMO_ESTRENO
+        ):
+            raise ValidationError(
+                {"estado": "Aún no se estrena: puedes dejarlo pendiente o darle me gusta."}
+            )
+        return Response(
+            actualizar_registro(request.user, media, serializer.validated_data)
         )
 
 

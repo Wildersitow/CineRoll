@@ -6,6 +6,8 @@ import CinemaIcon from './CinemaIcon'
 import { MediaSection } from './CatalogView'
 import CurtainOpening from './CurtainOpening'
 import CinemaState from './CinemaState'
+import HeroBanner from './HeroBanner'
+import { cityLabel, isoDate, proximosDias } from '../utils/dias'
 
 const horaFuncion = new Intl.DateTimeFormat('es-CO', {
   timeStyle: 'short',
@@ -16,7 +18,6 @@ const fechaActualizacion = new Intl.DateTimeFormat('es-CO', {
   timeStyle: 'short',
   timeZone: 'America/Bogota',
 })
-const isoDate = new Intl.DateTimeFormat('sv-SE', { dateStyle: 'short', timeZone: 'America/Bogota' })
 const proveedores = { cinepolis: 'Cinépolis', royal_films: 'Royal Films', cineland: 'Cineland', cinemark: 'Cinemark' }
 
 async function loadCinemas(options) {
@@ -31,9 +32,6 @@ async function loadCinemas(options) {
   return cines
 }
 
-function cityLabel(value) {
-  return value === 'bogota' ? 'Bogotá' : value.charAt(0).toLocaleUpperCase('es-CO') + value.slice(1)
-}
 
 function Actualizacion({ providers, failed }) {
   if (!providers.length && !failed) return null
@@ -120,27 +118,100 @@ export default function CinemaDirectory({ home = false }) {
   const providers = (directory.estado || []).filter((item) => !city || city === item.ciudad)
   const byCinema = Map.groupBy(funciones, ({ cine }) => cine.id)
 
+  if (home) {
+    const dias = proximosDias()
+    const today = dias[0].iso
+    const selected = date === 'hoy' || date === today ? 'hoy' : date
+    if (!dias.some((dia) => dia.value === selected)) {
+      dias.push({ value: selected, iso: selected, label: 'Fecha', day: selected.slice(8, 10) })
+    }
+    const diaElegido = dias.find((dia) => dia.value === selected)
+    const cinesCiudad = (directory.cines || []).filter((c) => c.ciudad.toLowerCase().startsWith(city.toLowerCase()))
+    const cineElegido = cinesCiudad.find((c) => String(c.id) === cinema)
+    const cuando = selected === 'hoy' ? 'hoy' : selected === dias[1].value ? 'mañana' : `el ${diaElegido.label} ${diaElegido.day}`
+    const detailSearch = new URLSearchParams({ ciudad: city, fecha: date, ...(cinema && { cine: cinema }) }).toString()
+
+    return (
+      <main className="cinema-page cinema-home">
+        <CurtainOpening />
+        <HeroBanner ciudad={city} etiqueta={`En cartelera hoy · ${cityLabel(city)}`} detailSearch={new URLSearchParams({ ciudad: city, fecha: 'hoy' }).toString()} />
+
+        <section className="cinema-home-picker" aria-labelledby="que-ver">
+          <div className="cinema-home-picker-heading">
+            <div>
+              <h1 id="que-ver">¿Qué vemos {cuando}?</h1>
+              <p>Elige ciudad, día y cine para ver qué películas tienen funciones.</p>
+            </div>
+            <label className="cinema-city-select">
+              <CinemaIcon name="pin" />
+              <span className="cinema-visually-hidden">Ciudad</span>
+              <select value={city} onChange={(event) => select('ciudad', event.target.value)}>
+                {cities.map((name) => <option key={name} value={name}>{cityLabel(name)}</option>)}
+              </select>
+            </label>
+          </div>
+          <div className="cinema-day-pills" role="group" aria-label="Día">
+            {dias.map((dia) => (
+              <button
+                key={dia.value}
+                type="button"
+                aria-pressed={dia.value === selected}
+                onClick={() => select('fecha', dia.value === 'hoy' ? '' : dia.value)}
+              >
+                <small>{dia.label}</small>
+                <strong>{dia.day}</strong>
+              </button>
+            ))}
+          </div>
+          {cinesCiudad.length > 0 && (
+            <div className="cinema-chips" role="group" aria-label="Cine">
+              <button type="button" aria-pressed={!cinema} onClick={() => select('cine', '')}>Todos los cines</button>
+              {cinesCiudad.map((c) => (
+                <button key={c.id} type="button" aria-pressed={String(c.id) === cinema} onClick={() => select('cine', String(c.id))}>
+                  {c.nombre}
+                </button>
+              ))}
+            </div>
+          )}
+          <Actualizacion providers={providers} failed={directory.failed} />
+        </section>
+        {directory.cinemaError && <CinemaState error={directory.cinemaError} title="No pudimos cargar el directorio de cines." retry={() => setAttempt(attempt + 1)} />}
+
+        <MediaSection
+          id="en-cartelera"
+          title={cineElegido ? `En ${cineElegido.nombre}` : `Películas en cartelera ${cuando}`}
+          empty="No hay funciones publicadas para esta selección. Prueba otro día u otro cine."
+          params={{ ciudad: city, fecha: date, cine: cinema, ordering: 'titulo' }}
+          detailSearch={detailSearch}
+        />
+        <MediaSection
+          id="proximos"
+          title="Próximos estrenos"
+          params={{ estado: 'proximo_estreno', ordering: 'fecha_estreno' }}
+          carousel
+          hideEmpty
+          moreTo="/catalogo?estado=proximo_estreno"
+        />
+      </main>
+    )
+  }
+
   return (
     <main className="cinema-page cinema-directory">
-      {home && <CurtainOpening />}
       <header className="cinema-directory-heading">
         <CinemaIcon name="ticket" weight="duotone" />
         <div>
-          <h1>{home ? 'Cartelera de cine' : date === 'hoy' ? 'Funciones de hoy' : 'Funciones por fecha'}</h1>
+          <h1>{date === 'hoy' ? 'Funciones de hoy' : 'Funciones por fecha'}</h1>
           <p>Consulta los horarios publicados por ciudad y cine.</p>
         </div>
       </header>
       <div className="cinema-filters">
         <label><span>Ciudad</span>
           <select value={city} onChange={(event) => select('ciudad', event.target.value)}>
-            {!home && <option value="">Todas las ciudades</option>}
+            <option value="">Todas las ciudades</option>
             {cities.map((name) => <option key={name} value={name}>{cityLabel(name)}</option>)}
           </select>
         </label>
-        {home && <label><span>Cine</span><select value={cinema} onChange={event => select('cine', event.target.value)}>
-          <option value="">Todos los cines</option>
-          {(directory.cines || []).filter(c => c.ciudad.toLowerCase().startsWith(city.toLowerCase())).map(c => <option key={c.id} value={c.id}>{c.nombre}</option>)}
-        </select></label>}
         <label><span>Fecha</span>
           <input type="date" value={date === 'hoy' ? isoDate.format() : date} onChange={(event) => select('fecha', event.target.value)} />
         </label>
@@ -154,10 +225,9 @@ export default function CinemaDirectory({ home = false }) {
           {[0, 1, 2].map((index) => <div key={index} className="cinema-show-skeleton cinema-skeleton" style={{ '--skeleton-delay': `${index * 75}ms` }}><span /><span /></div>)}
         </div>
       </>}
-      {!home && !loading && result.error && <CinemaState error={result.error} title="No pudimos cargar las funciones." message={result.error.status === 400 ? 'Selecciona una fecha válida.' : 'Comprueba la conexión y vuelve a intentarlo.'} retry={() => setAttempt(attempt + 1)} />}
-      {home && <MediaSection id="en-cartelera" title="Películas en cartelera" empty="Sin funciones para esta selección." params={{ ciudad:city, fecha:date, cine:cinema, ordering:"titulo" }} detailSearch={new URLSearchParams({ ciudad:city, fecha:date, ...(cinema && {cine:cinema}) }).toString()} />}
-      {!home && !loading && !result.error && !funciones.length && <p className="cinema-state" role="status">No hay funciones publicadas para esta selección.</p>}
-      {!home && !loading && [...byCinema].map(([id, shows]) => (
+      {!loading && result.error && <CinemaState error={result.error} title="No pudimos cargar las funciones." message={result.error.status === 400 ? 'Selecciona una fecha válida.' : 'Comprueba la conexión y vuelve a intentarlo.'} retry={() => setAttempt(attempt + 1)} />}
+      {!loading && !result.error && !funciones.length && <p className="cinema-state" role="status">No hay funciones publicadas para esta selección.</p>}
+      {!loading && [...byCinema].map(([id, shows]) => (
         <motion.section className="cinema-section cinema-show-list" key={id}
           initial={reduceMotion ? false : { opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.16 }}>
           <header>

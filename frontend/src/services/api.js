@@ -322,6 +322,21 @@ export async function getMedia(params = {}, options = {}) {
 }
 
 /**
+ * Obtiene todos los géneros desde /api/generos/ (recorre todas las páginas).
+ */
+export async function getGeneros(options = {}) {
+  const generos = [];
+  let page = 1;
+  let data;
+  do {
+    data = await leerJson(`/generos/${buildQueryString({ page })}`, { ...options, publicRequest: true }, 'Error al obtener los géneros.');
+    generos.push(...(data.results || []));
+    page++;
+  } while (data.next);
+  return generos;
+}
+
+/**
  * Obtiene la ficha completa de un título desde /api/media/<id>/.
  */
 export async function getMediaDetalle(id, options = {}) {
@@ -347,8 +362,8 @@ export async function getFunciones(params = {}, options = {}) {
   return leerJson(`/funciones/${buildQueryString(params)}`, { ...options, publicRequest: true }, 'Error al obtener las funciones en cartelera.');
 }
 
-export async function getFuncionesDeCine(cineId, params = {}) {
-  return leerJson(`/cines/${cineId}/funciones/${buildQueryString(params)}`, 'Error al obtener las funciones del cine.');
+export async function getFuncionesDeCine(cineId, params = {}, options = {}) {
+  return leerJson(`/cines/${cineId}/funciones/${buildQueryString(params)}`, { ...options, publicRequest: true }, 'Error al obtener las funciones del cine.');
 }
 
 export async function getFuncionesDeMedia(mediaId, params = {}, options = {}) {
@@ -402,6 +417,26 @@ export async function borrarResena(resenaId) {
   }, 'Error al eliminar la reseña.');
 }
 
+/** Nota media, distribución y actividad (vistos, viendo, pendientes, me gusta…) de un título. */
+export async function getEstadisticasMedia(mediaId, options = {}) {
+  return leerJson(`/media/${mediaId}/estadisticas/`, { ...options, publicRequest: true }, 'Error al obtener las estadísticas del título.');
+}
+
+export async function getComentariosResena(resenaId, params = {}, options = {}) {
+  return leerJson(`/resenas/${resenaId}/comentarios/${buildQueryString(params)}`, { ...options, publicRequest: !getStoredAuth() }, 'Error al obtener los comentarios.');
+}
+
+export async function crearComentarioResena(resenaId, texto) {
+  return leerJson(`/resenas/${resenaId}/comentarios/`, {
+    method: 'POST',
+    body: JSON.stringify({ texto }),
+  }, 'No pudimos publicar el comentario.');
+}
+
+export async function borrarComentarioResena(comentarioId) {
+  return leerJson(`/comentarios/${comentarioId}/`, { method: 'DELETE' }, 'No pudimos borrar el comentario.');
+}
+
 export async function getResumenResenas(mediaId) {
   return leerJson(`/media/${mediaId}/resenas/resumen/`, 'Error al obtener el resumen de puntuación.');
 }
@@ -430,12 +465,12 @@ export async function dejarDeSeguir(username) {
   }, `Error al dejar de seguir a @${username}.`);
 }
 
-export async function getSeguidores(username, params = {}) {
-  return leerJson(`/usuarios/${username}/seguidores/${buildQueryString(params)}`, `Error al obtener seguidores de @${username}.`);
+export async function getSeguidores(username, params = {}, options = {}) {
+  return leerJson(`/usuarios/${username}/seguidores/${buildQueryString(params)}`, { ...options, publicRequest: !getStoredAuth() }, `Error al obtener seguidores de @${username}.`);
 }
 
-export async function getSiguiendo(username, params = {}) {
-  return leerJson(`/usuarios/${username}/siguiendo/${buildQueryString(params)}`, `Error al obtener seguidos de @${username}.`);
+export async function getSiguiendo(username, params = {}, options = {}) {
+  return leerJson(`/usuarios/${username}/siguiendo/${buildQueryString(params)}`, { ...options, publicRequest: !getStoredAuth() }, `Error al obtener seguidos de @${username}.`);
 }
 
 export async function getFeed(params = {}) {
@@ -564,6 +599,19 @@ export function notifySessionExpired() {
   if (typeof window !== 'undefined') {
     window.dispatchEvent(new CustomEvent('cineroll:session-expired'))
   }
+}
+
+/** Estado del título para el usuario: { estado: ''|'visto'|'viendo', me_gusta, pendiente }. */
+export async function getMiRegistro(mediaId) {
+  return leerJson(`/media/${mediaId}/mi-registro/`, 'Error al consultar tu registro de este título.');
+}
+
+/** Cambia cualquiera de estado, me_gusta o pendiente y devuelve el registro actualizado. */
+export async function actualizarRegistro(mediaId, cambios) {
+  return leerJson(`/media/${mediaId}/mi-registro/`, {
+    method: 'PATCH',
+    body: JSON.stringify(cambios),
+  }, 'No pudimos guardar el cambio.');
 }
 
 export async function getMisListasDeMedia(mediaId) {

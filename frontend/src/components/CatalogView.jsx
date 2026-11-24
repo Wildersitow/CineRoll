@@ -1,11 +1,10 @@
 import { useEffect, useRef, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
-import { getMedia } from '../services/api'
+import { getGeneros, getMedia } from '../services/api'
 import CinemaState from './CinemaState'
 import CinemaIcon from './CinemaIcon'
 import FilmCard from './FilmCard'
 import Pagination from './Pagination'
-import CurtainOpening from './CurtainOpening'
 
 const filters = { pelicula: 'Películas', serie: 'Series', anime: 'Anime' }
 
@@ -42,7 +41,7 @@ function Showtimes({ shows }) {
   ))
 }
 
-export function MediaSection({ id, title, params, carousel = false, empty, detailSearch }) {
+export function MediaSection({ id, title, params, carousel = false, empty, detailSearch, hideEmpty = false, moreTo }) {
   const [query, setQuery] = useSearchParams()
   const page = carousel ? 1 : Math.max(1, Number(query.get('page')) || 1)
   function setPage(value) {
@@ -96,10 +95,14 @@ export function MediaSection({ id, title, params, carousel = false, empty, detai
     element.scrollTo({ left: Math.min(last, Math.max(0, target)) })
   }
 
+  // Las filas del catálogo se ocultan si no tienen títulos (como en Netflix).
+  if (hideEmpty && !loading && !error && !titles.length) return null
+
   return (
     <section className="cinema-section" id={id} aria-labelledby={`${id}-title`}>
       <div className="cinema-section-heading">
         <h2 id={`${id}-title`}>{title}</h2>
+        {moreTo && !loading && titles.length > 0 && <Link className="cinema-more" to={moreTo}>Ver todo <CinemaIcon name="right" /></Link>}
         {carousel && !loading && titles.length > 1 && (
           <div className="cinema-arrows">
             <button type="button" aria-label={`Anterior en ${title}`} aria-controls={`${id}-row`} disabled={edges.start} onClick={() => move(-1)}><CinemaIcon name="left" /></button>
@@ -127,15 +130,59 @@ export function MediaSection({ id, title, params, carousel = false, empty, detai
   )
 }
 
+/** Carga la lista de géneros una sola vez para los chips y las filas. */
+function useGeneros() {
+  const [generos, setGeneros] = useState([])
+  useEffect(() => {
+    const controller = new AbortController()
+    getGeneros({ signal: controller.signal })
+      .then((data) => { if (!controller.signal.aborted) setGeneros(data) })
+      .catch(() => {})
+    return () => controller.abort()
+  }, [])
+  return generos
+}
+
+/** Monta la fila solo cuando está cerca de verse, para no pedir todo de golpe. */
+function LazyRow({ children }) {
+  const ref = useRef(null)
+  const [visible, setVisible] = useState(() => typeof IntersectionObserver === 'undefined')
+  useEffect(() => {
+    if (visible || !ref.current) return
+    const observer = new IntersectionObserver(([entry]) => {
+      if (entry.isIntersecting) setVisible(true)
+    }, { rootMargin: '600px 0px' })
+    observer.observe(ref.current)
+    return () => observer.disconnect()
+  }, [visible])
+  return visible ? children : <div ref={ref} className="cinema-row-placeholder" aria-hidden="true" />
+}
+
+function catalogLink(query, changes) {
+  const next = new URLSearchParams(query)
+  for (const [key, value] of Object.entries(changes)) {
+    if (value) next.set(key, value)
+    else next.delete(key)
+  }
+  next.delete('page')
+  const text = next.toString()
+  return text ? `/catalogo?${text}` : '/catalogo'
+}
+
+function slug(text) {
+  return text.normalize('NFKD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '-')
+}
+
 export default function CatalogView() {
   const [query] = useSearchParams()
+  const generos = useGeneros()
   const search = query.get('q')?.trim()
   const type = Object.hasOwn(filters, query.get('tipo')) ? query.get('tipo') : undefined
   const state = query.get('estado') === 'proximo_estreno' ? 'proximo_estreno' : undefined
-  const filtered = search || type || state
-  const title = search ? `Resultados para “${search}”` : filters[type] || 'Próximos estrenos'
+  const genre = query.get('genero')?.trim() || undefined
 
-  if (filtered) {
+  if (search || state) {
+    const title = search ? `Resultados para “${search}”` : 'Próximos estrenos'
     return (
       <main className="cinema-page cinema-catalog">
         <h1>{title}</h1>
@@ -144,22 +191,60 @@ export default function CatalogView() {
     )
   }
 
+  const typeLabel = type ? filters[type] : 'Todo el catálogo'
+  const genreName = genre && (generos.find((item) => slug(item.nombre) === slug(genre))?.nombre || genre)
+
   return (
-    <main className="cinema-page">
-      <CurtainOpening />
-      <section className="cinema-hero" aria-labelledby="cinema-title">
-        <div className="cinema-hero-copy">
-          <span className="cinema-hero-label">Cartelera local</span>
-          <h1 id="cinema-title">Se abre<br />el telón<span>.</span></h1>
-          <p>Encuentra qué ver en los cines de tu ciudad y descubre los próximos estrenos.</p>
-          <div className="cinema-hero-actions">
-            <a className="cinema-primary" href="#en-cartelera">Ver cartelera <CinemaIcon name="down" /></a>
-            <Link className="cinema-secondary" to="/cines"><CinemaIcon name="ticket" /> Buscar funciones</Link>
-          </div>
-        </div>
-      </section>
-      <MediaSection id="en-cartelera" title="En cartelera" params={{ estado: 'en_cartelera', ordering: '-fecha_estreno' }} carousel empty="Aún no hay títulos en cartelera." />
-      <MediaSection id="proximos" title="Próximos estrenos" params={{ estado: 'proximo_estreno', ordering: 'fecha_estreno' }} carousel empty="Aún no hay próximos estrenos publicados." />
+    <main className="cinema-page cinema-catalog">
+      <header className="cinema-catalog-heading">
+        <h1>{genreName ? `${type ? filters[type] : 'Títulos'} de ${genreName.toLowerCase()}` : typeLabel}</h1>
+        <nav className="cinema-type-tabs" aria-label="Tipo de título">
+          {[[undefined, 'Todo'], ...Object.entries(filters)].map(([value, label]) => (
+            <Link key={label} to={catalogLink(query, { tipo: value })} aria-current={type === value ? 'page' : undefined}>{label}</Link>
+          ))}
+        </nav>
+        {generos.length > 0 && (
+          <nav className="cinema-chips cinema-genre-chips" aria-label="Géneros">
+            <Link to={catalogLink(query, { genero: undefined })} aria-current={!genre ? 'page' : undefined}>Todos los géneros</Link>
+            {generos.map((item) => (
+              <Link key={item.id} to={catalogLink(query, { genero: item.nombre })} aria-current={genreName === item.nombre ? 'page' : undefined}>{item.nombre}</Link>
+            ))}
+          </nav>
+        )}
+      </header>
+
+      {genre ? (
+        <MediaSection key={query.toString()} id="resultados" title="Todos los títulos" params={{ tipo: type, genero: genre, ordering: 'titulo' }} empty="No hay títulos de este género todavía." />
+      ) : (
+        <>
+          {type ? (
+            <MediaSection key={`recientes-${type}`} id="recientes" title="Lo más reciente" params={{ tipo: type, ordering: '-fecha_estreno' }} carousel hideEmpty empty="" />
+          ) : (
+            <>
+              <MediaSection id="en-cartelera" title="En cartelera" params={{ estado: 'en_cartelera', ordering: '-fecha_estreno' }} carousel hideEmpty empty="" moreTo="/" />
+              {Object.entries(filters).map(([value, label]) => (
+                <MediaSection key={value} id={`tipo-${value}`} title={label} params={{ tipo: value, ordering: '-fecha_estreno' }} carousel hideEmpty empty="" moreTo={catalogLink(query, { tipo: value })} />
+              ))}
+            </>
+          )}
+          {generos
+            // En "Todo" ya hay una fila de Anime por tipo; no se repite como género.
+            .filter((item) => type || !Object.hasOwn(filters, slug(item.nombre)))
+            .map((item) => (
+            <LazyRow key={`${type}-${item.id}`}>
+              <MediaSection
+                id={`genero-${slug(item.nombre)}`}
+                title={item.nombre}
+                params={{ tipo: type, genero: item.nombre, ordering: '-fecha_estreno' }}
+                carousel
+                hideEmpty
+                empty=""
+                moreTo={catalogLink(query, { genero: item.nombre })}
+              />
+            </LazyRow>
+          ))}
+        </>
+      )}
     </main>
   )
 }

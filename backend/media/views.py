@@ -7,6 +7,9 @@ from rest_framework.generics import (
 	RetrieveUpdateDestroyAPIView,
 )
 
+from cines.models import Funcion
+from cines.views import _filter_by_city as filtrar_por_ciudad
+from cines.views import _filter_by_date as filtrar_por_fecha
 from media.models import Genero, Media, Persona
 from usuarios.permissions import EsAdministradorOLecturaPublica
 from media.serializers import (
@@ -68,11 +71,33 @@ class MediaListView(ListCreateAPIView):
 				raise ValidationError({"estado": "Estado de media no válido."})
 			queryset = queryset.filter(estado=estado)
 
+		# Filtros de cartelera: cine, ciudad y fecha se aplican sobre la MISMA
+		# función (p. ej. "tiene función en el cine X el día Y"), por eso se
+		# construye un único queryset de funciones y se filtra por sus media_id.
+		funciones = None
+
 		cine = params.get("cine")
 		if cine is not None:
 			if not cine.isdecimal() or int(cine) < 1:
 				raise ValidationError({"cine": "Debe ser un identificador de cine válido."})
-			queryset = queryset.filter(funciones__cine_id=int(cine)).distinct()
+			funciones = Funcion.objects.filter(cine_id=int(cine))
+
+		ciudad = params.get("ciudad")
+		if ciudad is not None:
+			funciones = filtrar_por_ciudad(
+				funciones if funciones is not None else Funcion.objects.all(),
+				ciudad,
+			)
+
+		fecha = params.get("fecha")
+		if fecha is not None:
+			funciones = filtrar_por_fecha(
+				funciones if funciones is not None else Funcion.objects.all(),
+				fecha,
+			)
+
+		if funciones is not None:
+			queryset = queryset.filter(id__in=funciones.values("media_id"))
 
 		min_votos = params.get("min_votos")
 		if min_votos is not None:
