@@ -17,9 +17,9 @@ beforeEach(() => {
 test('muestra las favoritas y permite quitar una', async () => {
   removeTituloFromLista.mockResolvedValue(null)
   render(<FavoritasEditor username="ana" />)
-  fireEvent.click(await screen.findByRole('button', { name: 'Quitar Coco de favoritas' }))
+  fireEvent.click(await screen.findByRole('button', { name: 'Quitar Coco de favoritos' }))
   expect(removeTituloFromLista).toHaveBeenCalledWith(5, 3)
-  expect(await screen.findAllByRole('button', { name: 'Añadir una favorita' })).toHaveLength(1)
+  expect(await screen.findAllByRole('button', { name: 'Añadir un favorito' })).toHaveLength(1)
   expect(screen.queryByText('Coco')).not.toBeInTheDocument()
 })
 
@@ -27,11 +27,11 @@ test('busca un título y lo añade en el siguiente hueco', async () => {
   getMedia.mockResolvedValue({ results: [{ id: 3, titulo: 'Coco' }, { id: 8, titulo: 'Dune', poster_url: '', fecha_estreno: '2021-10-21' }] })
   addTituloToLista.mockResolvedValue({})
   render(<FavoritasEditor username="ana" />)
-  fireEvent.click(await screen.findByRole('button', { name: 'Añadir una favorita' }))
+  fireEvent.click(await screen.findByRole('button', { name: 'Añadir un favorito' }))
   fireEvent.change(screen.getByLabelText('Buscar título'), { target: { value: 'du' } })
   // Coco ya está en favoritas, así que no se ofrece de nuevo.
   fireEvent.click(await screen.findByRole('button', { name: /Dune/ }))
   expect(addTituloToLista).toHaveBeenCalledWith(5, 8, 1)
-  expect(await screen.findByRole('button', { name: 'Quitar Dune de favoritas' })).toBeInTheDocument()
+  expect(await screen.findByRole('button', { name: 'Quitar Dune de favoritos' })).toBeInTheDocument()
   expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
 })

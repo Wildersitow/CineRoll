@@ -4,6 +4,7 @@ import { Link, useLocation, useNavigate, useOutlet } from 'react-router-dom'
 import CinemaIcon from './CinemaIcon'
 import SiteFooter from './SiteFooter'
 import UserMenu from './UserMenu'
+import { activePath } from '../utils/navegacion'
 import './Cinema.css'
 
 // Películas, Series y Anime se filtran desde el propio Catálogo, así que la
@@ -18,16 +19,32 @@ const billboardLinks = [
   { path: '/catalogo?estado=proximo_estreno', label: 'Estrenos', icon: 'clock' },
 ]
 
-function NavGroup({ label, links, pathname, search }) {
+function accountLinks(user) {
+  return [
+    { path: `/usuarios/${encodeURIComponent(user.username)}`, label: 'Mi perfil', icon: 'user' },
+    { path: '/mensajes', label: 'Mensajes', icon: 'chat' },
+    { path: '/perfil', label: 'Ajustes', icon: 'settings' },
+  ]
+}
+
+function NavGroup({ label, links, active, reduceMotion }) {
   return (
     <div className="cinema-nav-group" role="group" aria-label={label}>
       <span className="cinema-nav-label" aria-hidden="true">{label}</span>
       {links.map(({ path, label, icon }) => {
-        const active = path === pathname + search || (pathname !== '/' && path === pathname)
+        const isActive = path === active
         return (
-          <Link key={path} to={path} aria-current={active ? 'page' : undefined}>
-            <CinemaIcon name={icon} weight={active ? 'fill' : 'regular'} />
-            {label}
+          <Link key={path} to={path} aria-current={isActive ? 'page' : undefined}>
+            {isActive && (
+              <motion.span
+                layoutId="cinema-nav-activo"
+                className="cinema-nav-indicator"
+                aria-hidden="true"
+                transition={reduceMotion ? { duration: 0 } : { type: 'spring', stiffness: 520, damping: 40 }}
+              />
+            )}
+            <span className="cinema-nav-icon"><CinemaIcon name={icon} weight={isActive ? 'fill' : 'regular'} /></span>
+            <span className="cinema-nav-text">{label}</span>
           </Link>
         )
       })}
@@ -42,6 +59,8 @@ export default function MainLayout({ currentUser, onLogout, isLoading }) {
   const reduceMotion = useReducedMotion()
   const query = new URLSearchParams(search).get('q') || ''
   const searchFieldKey = pathname + search
+  const allLinks = [...cinemaLinks, ...billboardLinks, ...(currentUser ? accountLinks(currentUser) : [])]
+  const active = activePath(allLinks.map(({ path }) => path), pathname, search)
   useLayoutEffect(() => {
     window.scrollTo(0, 0)
   }, [pathname])
@@ -76,9 +95,16 @@ export default function MainLayout({ currentUser, onLogout, isLoading }) {
       </header>
       <aside className="cinema-sidebar">
         <nav aria-label="Navegación principal">
-          <NavGroup label="Explorar" links={cinemaLinks} pathname={pathname} search={search} />
-          <NavGroup label="Cartelera" links={billboardLinks} pathname={pathname} search={search} />
+          <NavGroup label="Explorar" links={cinemaLinks} active={active} reduceMotion={reduceMotion} />
+          <NavGroup label="Cartelera" links={billboardLinks} active={active} reduceMotion={reduceMotion} />
+          {currentUser && <NavGroup label="Tu espacio" links={accountLinks(currentUser)} active={active} reduceMotion={reduceMotion} />}
         </nav>
+        {!currentUser && pathname !== '/acceso' && (
+          <div className="cinema-sidebar-cta">
+            <p>Reseña lo que ves, arma listas y sigue a otros cinéfilos.</p>
+            <Link to="/acceso">Crear cuenta</Link>
+          </div>
+        )}
       </aside>
       <div className="cinema-content" id="contenido" tabIndex={-1}>
         <motion.div
