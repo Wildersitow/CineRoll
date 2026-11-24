@@ -24,6 +24,7 @@ test('edita el perfil y envía la escala como número', async () => {
     first_name: 'Ana',
     last_name: '',
     avatar: '',
+    banner: '',
     biografia: saved.biografia,
     escala_calificacion: 5,
   })

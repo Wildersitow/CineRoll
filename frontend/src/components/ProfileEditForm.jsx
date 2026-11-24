@@ -26,6 +26,7 @@ export default function ProfileEditForm({ currentUser, onSaved }) {
       <label className="input-group">Nombre<input name="first_name" maxLength={150} defaultValue={currentUser.first_name || ''} /></label>
       <label className="input-group">Apellido<input name="last_name" maxLength={150} defaultValue={currentUser.last_name || ''} /></label>
       <label className="input-group">URL del avatar<input name="avatar" type="url" maxLength={200} defaultValue={currentUser.avatar || ''} /></label>
+      <label className="input-group">URL del banner<input name="banner" type="url" maxLength={200} placeholder="https://… (imagen ancha, ideal 1500×500)" defaultValue={currentUser.banner || ''} /></label>
       <label className="input-group">
         Biografía
         <textarea name="biografia" rows={4} maxLength={BIO_LIMIT} value={biografia} onChange={(event) => setBiografia(event.target.value)} aria-describedby="bio-length" />

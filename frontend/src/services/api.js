@@ -322,6 +322,21 @@ export async function getMedia(params = {}, options = {}) {
 }
 
 /**
+ * Obtiene todos los géneros desde /api/generos/ (recorre todas las páginas).
+ */
+export async function getGeneros(options = {}) {
+  const generos = [];
+  let page = 1;
+  let data;
+  do {
+    data = await leerJson(`/generos/${buildQueryString({ page })}`, { ...options, publicRequest: true }, 'Error al obtener los géneros.');
+    generos.push(...(data.results || []));
+    page++;
+  } while (data.next);
+  return generos;
+}
+
+/**
  * Obtiene la ficha completa de un título desde /api/media/<id>/.
  */
 export async function getMediaDetalle(id, options = {}) {
@@ -347,8 +362,8 @@ export async function getFunciones(params = {}, options = {}) {
   return leerJson(`/funciones/${buildQueryString(params)}`, { ...options, publicRequest: true }, 'Error al obtener las funciones en cartelera.');
 }
 
-export async function getFuncionesDeCine(cineId, params = {}) {
-  return leerJson(`/cines/${cineId}/funciones/${buildQueryString(params)}`, 'Error al obtener las funciones del cine.');
+export async function getFuncionesDeCine(cineId, params = {}, options = {}) {
+  return leerJson(`/cines/${cineId}/funciones/${buildQueryString(params)}`, { ...options, publicRequest: true }, 'Error al obtener las funciones del cine.');
 }
 
 export async function getFuncionesDeMedia(mediaId, params = {}, options = {}) {
@@ -430,12 +445,12 @@ export async function dejarDeSeguir(username) {
   }, `Error al dejar de seguir a @${username}.`);
 }
 
-export async function getSeguidores(username, params = {}) {
-  return leerJson(`/usuarios/${username}/seguidores/${buildQueryString(params)}`, `Error al obtener seguidores de @${username}.`);
+export async function getSeguidores(username, params = {}, options = {}) {
+  return leerJson(`/usuarios/${username}/seguidores/${buildQueryString(params)}`, { ...options, publicRequest: !getStoredAuth() }, `Error al obtener seguidores de @${username}.`);
 }
 
-export async function getSiguiendo(username, params = {}) {
-  return leerJson(`/usuarios/${username}/siguiendo/${buildQueryString(params)}`, `Error al obtener seguidos de @${username}.`);
+export async function getSiguiendo(username, params = {}, options = {}) {
+  return leerJson(`/usuarios/${username}/siguiendo/${buildQueryString(params)}`, { ...options, publicRequest: !getStoredAuth() }, `Error al obtener seguidos de @${username}.`);
 }
 
 export async function getFeed(params = {}) {

@@ -14,13 +14,13 @@ export default function UserMenu({ user, onLogout, isLoading }) {
   const root = useRef(null)
   const trigger = useRef(null)
   const menuId = useId()
-  const { pathname } = useLocation()
+  const { pathname, search } = useLocation()
   const reduceMotion = useReducedMotion()
 
   // Cerrar al cambiar de página.
-  const [lastPath, setLastPath] = useState(pathname)
-  if (lastPath !== pathname) {
-    setLastPath(pathname)
+  const [lastPath, setLastPath] = useState(pathname + search)
+  if (lastPath !== pathname + search) {
+    setLastPath(pathname + search)
     setOpen(false)
   }
 
@@ -49,8 +49,11 @@ export default function UserMenu({ user, onLogout, isLoading }) {
     <img src={user.avatar} alt="" onError={() => setFailedAvatar(user.avatar)} />
   ) : <span aria-hidden="true">{initial}</span>
 
+  const perfil = `/usuarios/${encodeURIComponent(user.username)}`
   const links = [
-    { to: `/usuarios/${encodeURIComponent(user.username)}`, label: 'Mi perfil', icon: 'user' },
+    { to: perfil, label: 'Mi perfil', icon: 'user' },
+    { to: `${perfil}?tab=listas`, label: 'Mis listas', icon: 'list' },
+    { to: `${perfil}?tab=red`, label: 'Amigos', icon: 'users' },
     { to: '/mensajes', label: 'Mensajes', icon: 'chat' },
     { to: '/perfil', label: 'Configuración', icon: 'settings' },
   ]
@@ -90,7 +93,7 @@ export default function UserMenu({ user, onLogout, isLoading }) {
               </div>
             </div>
             {links.map(({ to, label, icon }) => (
-              <Link key={to} to={to} role="menuitem" aria-current={pathname === to ? 'page' : undefined}>
+              <Link key={to} to={to} role="menuitem" aria-current={pathname + search === to ? 'page' : undefined}>
                 <CinemaIcon name={icon} /> {label}
               </Link>
             ))}

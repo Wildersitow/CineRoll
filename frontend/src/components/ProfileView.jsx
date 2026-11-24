@@ -53,7 +53,7 @@ export default function ProfileView({
         />
       )}
 
-      <header className="cinema-profile-header">
+      <header className="cinema-profile-header" style={currentUser.banner ? { backgroundImage: `linear-gradient(90deg, #100c0df0 30%, #100c0d99), url("${currentUser.banner}")`, backgroundSize: 'cover', backgroundPosition: 'center' } : undefined}>
         <div className="cinema-profile-identity">
           <div className="cinema-profile-avatar">
             {currentUser.avatar && currentUser.avatar !== failedAvatar ? (

@@ -71,6 +71,17 @@ class PerfilPublicoTests(APITestCase):
                 self.assertNotIn("is_staff", res.data)
                 self.assertNotIn("is_superuser", res.data)
 
+    def test_perfil_publico_incluye_banner(self):
+        self.usuario.banner = "https://example.com/banner.jpg"
+        self.usuario.save()
+
+        response = self.client.get(
+            reverse("usuarios_perfil_publico", kwargs={"username": self.usuario.username})
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["banner"], "https://example.com/banner.jpg")
+
     def test_resenas_publicas_de_un_usuario(self):
         """Lista pública de reseñas de un usuario (solo visibles)."""
         url = reverse("usuarios_resenas_publicas", kwargs={"username": self.usuario.username})

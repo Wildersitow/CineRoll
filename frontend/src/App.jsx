@@ -19,6 +19,7 @@ import RutaProtegida from './components/RutaProtegida'
 
 const MediaDetailView = lazy(() => import('./components/MediaDetailView'))
 const CinemaDirectory = lazy(() => import('./components/CinemaDirectory'))
+const CinesView = lazy(() => import('./components/CinesView'))
 const ProfileView = lazy(() => import('./components/ProfileView'))
 const PublicProfileView = lazy(() => import('./components/PublicProfileView'))
 
@@ -335,7 +336,7 @@ export default function App() {
           />
           <Route
             path="cines"
-            element={<Suspense fallback={<p className="cinema-page" role="status">Cargando Cines…</p>}><CinemaDirectory /></Suspense>}
+            element={<Suspense fallback={<p className="cinema-page" role="status">Cargando cines…</p>}><CinesView /></Suspense>}
           />
           <Route
             path="usuarios/:username"

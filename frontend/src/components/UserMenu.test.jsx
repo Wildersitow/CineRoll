@@ -29,6 +29,8 @@ describe('UserMenu', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Menú de Pepito Perez' }))
     expect(screen.getByRole('menu')).toBeInTheDocument()
     expect(screen.getByRole('menuitem', { name: /Mi perfil/ })).toHaveAttribute('href', '/usuarios/pepe')
+    expect(screen.getByRole('menuitem', { name: /Mis listas/ })).toHaveAttribute('href', '/usuarios/pepe?tab=listas')
+    expect(screen.getByRole('menuitem', { name: /Amigos/ })).toHaveAttribute('href', '/usuarios/pepe?tab=red')
     expect(screen.getByRole('menuitem', { name: /Mensajes/ })).toHaveAttribute('href', '/mensajes')
     expect(screen.getByRole('menuitem', { name: /Configuración/ })).toHaveAttribute('href', '/perfil')
   })

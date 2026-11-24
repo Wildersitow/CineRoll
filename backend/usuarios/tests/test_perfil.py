@@ -44,6 +44,23 @@ class PerfilTests(APITestCase):
         self.assertEqual(self.usuario.avatar, "https://example.com/a.png")
         self.assertEqual(response.data["nombre"], "Ana María")
 
+    def test_editar_banner_del_perfil(self):
+        self.client.force_authenticate(self.usuario)
+
+        response = self.client.patch(self.url, {"banner": "https://example.com/banner.jpg"})
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["banner"], "https://example.com/banner.jpg")
+        self.usuario.refresh_from_db()
+        self.assertEqual(self.usuario.banner, "https://example.com/banner.jpg")
+
+    def test_banner_debe_ser_una_url(self):
+        self.client.force_authenticate(self.usuario)
+
+        response = self.client.patch(self.url, {"banner": "no es una url"})
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
     def test_no_puede_cambiar_usuario_ni_permisos(self):
         self.client.force_authenticate(self.usuario)
 
