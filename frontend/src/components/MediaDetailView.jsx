@@ -1,8 +1,12 @@
 import { useEffect, useState } from 'react'
 import { Link, useLocation, useParams, useSearchParams } from 'react-router-dom'
-import { getFuncionesDeMedia, getMediaDetalle, getResenasDeMedia } from '../services/api'
+import { PlayIcon } from '@phosphor-icons/react'
+import { getEstadisticasMedia, getFuncionesDeMedia, getMediaDetalle, getResenasDeMedia } from '../services/api'
 import CinemaState from './CinemaState'
-import FilmActions, { Heart } from './FilmActions'
+import CommunityReviews from './CommunityReviews'
+import FilmActions from './FilmActions'
+import MediaInfoTabs from './MediaInfoTabs'
+import MediaStats from './MediaStats'
 import Pagination from './Pagination'
 import Poster from './Poster'
 
@@ -51,6 +55,7 @@ export default function MediaDetailView({ user }) {
       media: getMediaDetalle(id, options),
       funciones: getFuncionesDeMedia(id, { fecha: date || undefined, cine }, options),
       resenas: getResenasDeMedia(id, {page}, options),
+      estadisticas: getEstadisticasMedia(id, options),
     }
     for (const [name, request] of Object.entries(requests)) {
       request.then(
@@ -85,49 +90,86 @@ export default function MediaDetailView({ user }) {
   const resenas = current.resenas?.value?.results || []
   const fromCinemas = date || city
 
+  const scale = Number(user?.escala_calificacion) === 10 ? 10 : 5
+  const year = media.fecha_estreno?.slice(0, 4)
+  const directores = media.directores || []
+  const fondo = media.backdrop_url || media.poster_url
+
   return (
-    <main className="cinema-page cinema-detail">
-      <Poster url={media.poster_url} eager />
-      <div>
-        <h1>{media.titulo}</h1>
-        <p>{[media.fecha_estreno?.slice(0, 4), media.duracion && `${media.duracion} min`, ...(media.generos || []).map(({ nombre }) => nombre)].filter(Boolean).join(' · ')}</p>
-        {media.promedio_puntuacion != null && <p>{media.promedio_puntuacion}/10 · {media.total_votos} votos</p>}
-        <p>{media.sinopsis || 'Sinopsis aún no disponible.'}</p>
-        {media.directores?.length > 0 && <p>Dirección: {media.directores.map(({ nombre }) => nombre).join(', ')}</p>}
-        {media.reparto?.length > 0 && <p>Reparto: {media.reparto.map(({ nombre }) => nombre).join(', ')}</p>}
-        {media.trailer_url && <p><a href={media.trailer_url}>Ver tráiler</a></p>}
-        <FilmActions key={media.id + (user?.username || '')} media={media} user={user} refresh={() => setRecarga((value) => value + 1)} />
-        {/* Las series y el anime no se proyectan en cines, así que no tienen funciones. */}
-        {media.tipo === 'pelicula' && <section className="cinema-section">
-          <h2>Funciones</h2>
-          {!current.funciones && <p role="status">Cargando horarios…</p>}
-          {current.funciones?.status === 'rejected' && <CinemaState error={current.funciones.value} title="No pudimos consultar los horarios." retry={retry} />}
-          {current.funciones?.status === 'fulfilled' && !funciones.length && <p>{fromCinemas ? 'No hay funciones para esta selección.' : 'No hay funciones próximas para este título.'}</p>}
-          {fromCinemas && <p><Link to={`/media/${id}`}>Ver todas las funciones próximas</Link></p>}
-          {[...Map.groupBy(funciones, show => show.cine.id)].map(([cinemaId, shows]) => (
-            <div key={cinemaId}>
-              <h3>{shows[0].cine.nombre}</h3>
-              <ul>{shows.map(show => (
-                <li key={show.id}>
-                  <time dateTime={show.fecha_hora}>{fechaFuncion.format(new Date(show.fecha_hora))}</time>
-                  <small>{[show.formato, show.sala].filter(Boolean).join(' · ')}</small>
-                  <Prices show={show} />
-                </li>
-              ))}</ul>
+    <main className="cinema-page media-page">
+      {/* Fondo horizontal; si el título no tiene uno, se usa el póster difuminado. */}
+      {fondo && (
+        <div className="media-backdrop" data-desde-poster={!media.backdrop_url || undefined} aria-hidden="true">
+          <img src={fondo} alt="" />
+        </div>
+      )}
+      <div className="media-layout">
+        <aside className="media-aside">
+          <Poster url={media.poster_url} eager />
+          <FilmActions key={media.id + (user?.username || '')} media={media} user={user} refresh={() => setRecarga((value) => value + 1)} />
+          {media.trailer_url && (
+            <a className="media-trailer" href={media.trailer_url} target="_blank" rel="noreferrer">
+              <PlayIcon weight="fill" aria-hidden="true" /> Ver tráiler
+            </a>
+          )}
+        </aside>
+
+        <div className="media-main">
+          <header className="media-header">
+            <div>
+              <h1>{media.titulo}{year && <span className="media-year"> {year}</span>}</h1>
+              {directores.length > 0 && (
+                <p className="media-byline">
+                  {media.tipo === 'pelicula' ? 'Dirigida por ' : 'Creada por '}
+                  {directores.map(({ id: personaId, nombre }, index) => (
+                    <span key={personaId}>{index > 0 && ', '}<a href={`https://www.google.com/search?q=${encodeURIComponent(nombre)}`} target="_blank" rel="noreferrer">{nombre}</a></span>
+                  ))}
+                </p>
+              )}
             </div>
-          ))}
-        </section>}
-        <section className="cinema-section">
-          <h2>Reseñas de la comunidad</h2>
-          {!current.resenas && <p role="status">Cargando reseñas…</p>}
-          {current.resenas?.status === 'rejected' && <CinemaState error={current.resenas.value} title="No pudimos consultar las reseñas." retry={retry} />}
-          {current.resenas?.status === 'fulfilled' && !resenas.length && <p>Aún no hay reseñas publicadas.</p>}
-          <ul>{resenas.map(review => (
-            <li key={review.id}><Link to={`/usuarios/${encodeURIComponent(review.usuario)}`}>{review.usuario}</Link> · {review.puntuacion}/10{review.texto && <p>{review.texto}</p>}<Heart review={review} user={user} /></li>
-          ))}</ul>
-          <Pagination count={current.resenas?.value?.count || 0} page={page} change={n => { const next = new URLSearchParams(query); next.set('resenas', n); setQuery(next, {state:location.state}) }} />
-        </section>
-        <p><Link to={location.state?.origen || (fromCinemas ? { pathname: '/cines', search: query.toString() } : '/')} state={{ poster: location.state?.poster }}>Volver a la cartelera</Link></p>
+            {media.fecha_estreno && (
+              <p className="media-release">
+                <span>{media.estado === 'proximo_estreno' ? 'Se estrena' : 'Estreno'}</span>
+                <strong>{new Date(media.fecha_estreno).toLocaleDateString('es-CO', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' })}</strong>
+              </p>
+            )}
+          </header>
+          <p className="media-synopsis">{media.sinopsis || 'Sinopsis aún no disponible.'}</p>
+
+          <MediaInfoTabs media={media} />
+          <MediaStats stats={current.estadisticas?.status === 'fulfilled' ? current.estadisticas.value : null} media={media} scale={scale} />
+
+          {/* Las series y el anime no se proyectan en cines, así que no tienen funciones. */}
+          {media.tipo === 'pelicula' && <section className="cinema-section media-section">
+            <h2>Funciones</h2>
+            {!current.funciones && <p role="status">Cargando horarios…</p>}
+            {current.funciones?.status === 'rejected' && <CinemaState error={current.funciones.value} title="No pudimos consultar los horarios." retry={retry} />}
+            {current.funciones?.status === 'fulfilled' && !funciones.length && <p>{fromCinemas ? 'No hay funciones para esta selección.' : 'No hay funciones próximas para este título.'}</p>}
+            {fromCinemas && <p><Link to={`/media/${id}`}>Ver todas las funciones próximas</Link></p>}
+            {[...Map.groupBy(funciones, show => show.cine.id)].map(([cinemaId, shows]) => (
+              <div key={cinemaId}>
+                <h3>{shows[0].cine.nombre}</h3>
+                <ul>{shows.map(show => (
+                  <li key={show.id}>
+                    <time dateTime={show.fecha_hora}>{fechaFuncion.format(new Date(show.fecha_hora))}</time>
+                    <small>{[show.formato, show.sala].filter(Boolean).join(' · ')}</small>
+                    <Prices show={show} />
+                  </li>
+                ))}</ul>
+              </div>
+            ))}
+          </section>}
+
+          <section className="cinema-section media-section">
+            <h2>Reseñas de la comunidad{current.resenas?.value?.count > 0 && <span className="media-count"> {current.resenas.value.count}</span>}</h2>
+            {!current.resenas && <p role="status">Cargando reseñas…</p>}
+            {current.resenas?.status === 'rejected' && <CinemaState error={current.resenas.value} title="No pudimos consultar las reseñas." retry={retry} />}
+            {current.resenas?.status === 'fulfilled' && !resenas.length && <p>Aún no hay reseñas publicadas. ¡Sé el primero!</p>}
+            <CommunityReviews reviews={resenas} user={user} scale={scale} />
+            <Pagination count={current.resenas?.value?.count || 0} page={page} change={n => { const next = new URLSearchParams(query); next.set('resenas', n); setQuery(next, {state:location.state}) }} />
+          </section>
+          <p><Link to={location.state?.origen || (fromCinemas ? { pathname: '/cines', search: query.toString() } : '/')} state={{ poster: location.state?.poster }}>Volver a la cartelera</Link></p>
+        </div>
       </div>
     </main>
   )

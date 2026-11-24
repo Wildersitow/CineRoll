@@ -4,6 +4,8 @@ from django.template.response import TemplateResponse
 from rest_framework.exceptions import ValidationError
 
 from social.models import (
+    ComentarioResena,
+    LikeResena,
     ElementoLista,
     Lista,
     RegistroTitulo,
@@ -240,3 +242,16 @@ class RegistroTituloAdmin(admin.ModelAdmin):
     list_filter = ("estado", "me_gusta")
     search_fields = ("usuario__username", "media__titulo")
     raw_id_fields = ("usuario", "media")
+
+
+@admin.register(ComentarioResena)
+class ComentarioResenaAdmin(admin.ModelAdmin):
+    list_display = ("usuario", "resena", "fecha_creacion")
+    search_fields = ("usuario__username", "texto")
+    raw_id_fields = ("usuario", "resena")
+
+
+@admin.register(LikeResena)
+class LikeResenaAdmin(admin.ModelAdmin):
+    list_display = ("usuario", "resena", "fecha")
+    raw_id_fields = ("usuario", "resena")

@@ -31,6 +31,10 @@ class Media(models.Model):
 	fecha_estreno = models.DateField(blank=True, null=True)
 	duracion = models.PositiveSmallIntegerField(blank=True, null=True)
 	poster_url = models.URLField(blank=True)
+	backdrop_url = models.URLField(
+		blank=True,
+		help_text="Imagen horizontal para el fondo de la ficha (ideal 1920 × 1080).",
+	)
 	trailer_url = models.URLField(blank=True)
 	estado = models.CharField(
 		max_length=20,

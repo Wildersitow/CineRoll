@@ -8,6 +8,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from social.models import Resena, Seguimiento
+from social.resenas import anotar_resenas
 from social.serializers import ResenaSerializer
 
 Usuario = get_user_model()
@@ -110,9 +111,10 @@ class FeedActividadView(ListAPIView):
         siguiendo_ids = Seguimiento.objects.filter(
             seguidor=self.request.user
         ).values_list("seguido_id", flat=True)
-        return (
+        return anotar_resenas(
             Resena.objects.visibles()
             .filter(usuario_id__in=siguiendo_ids)
             .select_related("usuario", "media")
-            .order_by("-fecha_creacion", "-id")
+            .order_by("-fecha_creacion", "-id"),
+            self.request.user,
         )

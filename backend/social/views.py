@@ -24,7 +24,9 @@ from rest_framework.views import APIView
 
 from media.models import Media
 from social.models import (
+    ComentarioResena,
     ElementoLista,
+    LikeResena,
     Lista,
     RegistroTitulo,
     ReporteResena,
@@ -32,6 +34,7 @@ from social.models import (
     SugerenciaEdicion,
 )
 from social.serializers import (
+    ComentarioResenaSerializer,
     AgregarElementoSerializer,
     ElementoListaSerializer,
     ListaDetalleSerializer,
@@ -42,6 +45,7 @@ from social.serializers import (
     SugerenciaEdicionSerializer,
 )
 from social.registro import actualizar_registro, datos_registro, registrar_resena
+from social.resenas import anotar_resenas, estadisticas_media
 from social.services import resumen_puntuacion
 from social.sugerencias import aprobar_sugerencia, rechazar_sugerencia
 from usuarios.permissions import EsAdministrador, EsAutorOLecturaPublica
@@ -80,10 +84,11 @@ class MediaResenaListCreateView(ListCreateAPIView):
         return context
 
     def get_queryset(self):
-        return (
+        return anotar_resenas(
             Resena.objects.visibles()
             .filter(media=self.get_media())
-            .select_related("usuario", "media")
+            .select_related("usuario", "media"),
+            self.request.user,
         )
 
     def perform_create(self, serializer):
@@ -127,7 +132,79 @@ class ResenasListView(ListAPIView):
                 )
             queryset = queryset.filter(media_id=int(media_id))
 
-        return queryset.order_by("-fecha_creacion", "-pk")
+        return anotar_resenas(queryset, self.request.user).order_by("-fecha_creacion", "-pk")
+
+
+class ResenaLikeView(APIView):
+    """
+    PUT /api/resenas/<pk>/like/    marca "me gusta" (idempotente).
+    DELETE /api/resenas/<pk>/like/ lo quita.
+    Responde {"resena_id", "me_gusta", "total_likes"}.
+    """
+
+    permission_classes = (IsAuthenticated,)
+
+    def responder(self, request, resena):
+        return Response(
+            {
+                "resena_id": resena.pk,
+                "me_gusta": resena.likes.filter(usuario=request.user).exists(),
+                "total_likes": resena.likes.count(),
+            }
+        )
+
+    def put(self, request, pk):
+        resena = get_object_or_404(Resena.objects.visibles(), pk=pk)
+        LikeResena.objects.get_or_create(usuario=request.user, resena=resena)
+        return self.responder(request, resena)
+
+    def delete(self, request, pk):
+        resena = get_object_or_404(Resena.objects.visibles(), pk=pk)
+        LikeResena.objects.filter(usuario=request.user, resena=resena).delete()
+        return self.responder(request, resena)
+
+
+class ResenaComentariosView(ListCreateAPIView):
+    """GET: comentarios de una reseña (público, paginado, del más antiguo al más nuevo). POST: comentar."""
+
+    serializer_class = ComentarioResenaSerializer
+    permission_classes = (IsAuthenticatedOrReadOnly,)
+
+    def get_resena(self):
+        if not hasattr(self, "_resena"):
+            self._resena = get_object_or_404(Resena.objects.visibles(), pk=self.kwargs["pk"])
+        return self._resena
+
+    def get_queryset(self):
+        return ComentarioResena.objects.filter(resena=self.get_resena()).select_related("usuario")
+
+    def perform_create(self, serializer):
+        serializer.save(usuario=self.request.user, resena=self.get_resena())
+
+
+class ComentarioResenaDetailView(APIView):
+    """DELETE /api/comentarios/<pk>/: lo borra su autor o el autor de la reseña."""
+
+    permission_classes = (IsAuthenticated,)
+
+    def delete(self, request, pk):
+        comentario = get_object_or_404(
+            ComentarioResena.objects.select_related("resena"), pk=pk
+        )
+        if request.user.pk not in (comentario.usuario_id, comentario.resena.usuario_id):
+            raise PermissionDenied("Solo puedes borrar tus comentarios o los de tu reseña.")
+        comentario.delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+class MediaEstadisticasView(APIView):
+    """GET /api/media/<media_id>/estadisticas/: nota media, distribución y actividad."""
+
+    permission_classes = (AllowAny,)
+
+    def get(self, request, media_id):
+        media = get_object_or_404(Media, pk=media_id)
+        return Response(estadisticas_media(media))
 
 
 class MediaResenaResumenView(APIView):

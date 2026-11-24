@@ -8,10 +8,12 @@ from social.seguimiento import (
 )
 from social.views import (
     AprobarSugerenciaView,
+    ComentarioResenaDetailView,
     ListaDetailView,
     ListaElementoDetailView,
     ListaElementoListCreateView,
     ListaListCreateView,
+    MediaEstadisticasView,
     MediaMisListasView,
     MediaResenaListCreateView,
     MediaResenaResumenView,
@@ -20,9 +22,11 @@ from social.views import (
     MiResenaMediaView,
     MisListasView,
     RechazarSugerenciaView,
-    ResenasListView,
-    ResenaDetailView,
     ReportarResenaView,
+    ResenaComentariosView,
+    ResenaDetailView,
+    ResenaLikeView,
+    ResenasListView,
     SugerenciasModeracionView,
     UsuarioListasListView,
 )
@@ -58,6 +62,22 @@ urlpatterns = [
         "resenas/<int:pk>/reportar/",
         ReportarResenaView.as_view(),
         name="resena-reportar",
+    ),
+    path("resenas/<int:pk>/like/", ResenaLikeView.as_view(), name="resena-like"),
+    path(
+        "resenas/<int:pk>/comentarios/",
+        ResenaComentariosView.as_view(),
+        name="resena-comentarios",
+    ),
+    path(
+        "comentarios/<int:pk>/",
+        ComentarioResenaDetailView.as_view(),
+        name="comentario-resena-detail",
+    ),
+    path(
+        "media/<int:media_id>/estadisticas/",
+        MediaEstadisticasView.as_view(),
+        name="media-estadisticas",
     ),
     path("resenas/<int:pk>/", ResenaDetailView.as_view(), name="resena-detail"),
 

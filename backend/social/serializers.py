@@ -2,7 +2,15 @@ from rest_framework import serializers
 
 from media.models import Media
 from media.serializers import MediaWriteSerializer
-from social.models import ElementoLista, Lista, ReporteResena, Resena, SugerenciaEdicion
+from social.models import (
+    ComentarioResena,
+    ElementoLista,
+    Lista,
+    RegistroTitulo,
+    ReporteResena,
+    Resena,
+    SugerenciaEdicion,
+)
 from social.sugerencias import CAMPOS_SUGERENCIA_EDITABLES
 
 
@@ -21,6 +29,12 @@ class ResenaSerializer(serializers.ModelSerializer):
         allow_blank=True,
         max_length=MAX_RESENA_TEXTO_LENGTH,
     )
+    usuario_avatar = serializers.CharField(source="usuario.avatar", read_only=True)
+    total_likes = serializers.SerializerMethodField()
+    me_gusta = serializers.SerializerMethodField()
+    total_comentarios = serializers.SerializerMethodField()
+    estado_autor = serializers.SerializerMethodField()
+    autor_le_gusta = serializers.SerializerMethodField()
 
     class Meta:
         model = Resena
@@ -36,8 +50,50 @@ class ResenaSerializer(serializers.ModelSerializer):
             "texto",
             "fecha_creacion",
             "fecha_actualizacion",
+            "usuario_avatar",
+            "total_likes",
+            "me_gusta",
+            "total_comentarios",
+            "estado_autor",
+            "autor_le_gusta",
         )
         read_only_fields = ("id", "fecha_creacion", "fecha_actualizacion")
+
+    # Los listados anotan estos valores (ver social.resenas.anotar_resenas);
+    # si no vienen anotados, se calculan aquí.
+    def get_total_likes(self, obj):
+        valor = getattr(obj, "total_likes_anotado", None)
+        return valor if valor is not None else obj.likes.count()
+
+    def get_total_comentarios(self, obj):
+        valor = getattr(obj, "total_comentarios_anotado", None)
+        return valor if valor is not None else obj.comentarios.count()
+
+    def get_me_gusta(self, obj):
+        valor = getattr(obj, "me_gusta_anotado", None)
+        if valor is not None:
+            return valor
+        request = self.context.get("request")
+        if not request or not request.user.is_authenticated:
+            return False
+        return obj.likes.filter(usuario=request.user).exists()
+
+    def _registro_autor(self, obj):
+        if not hasattr(obj, "_registro_autor"):
+            obj._registro_autor = RegistroTitulo.objects.filter(
+                usuario_id=obj.usuario_id, media_id=obj.media_id
+            ).values("estado", "me_gusta").first() or {}
+        return obj._registro_autor
+
+    def get_estado_autor(self, obj):
+        if hasattr(obj, "estado_autor_anotado"):
+            return obj.estado_autor_anotado or ""
+        return self._registro_autor(obj).get("estado", "")
+
+    def get_autor_le_gusta(self, obj):
+        if hasattr(obj, "autor_le_gusta_anotado"):
+            return bool(obj.autor_le_gusta_anotado)
+        return bool(self._registro_autor(obj).get("me_gusta"))
 
     def validate_texto(self, value):
         normalized = " ".join(value.split())
@@ -270,3 +326,23 @@ class ResolverSugerenciaSerializer(serializers.Serializer):
         max_length=1000,
     )
 
+
+
+MAX_COMENTARIO_LENGTH = 1000
+
+
+class ComentarioResenaSerializer(serializers.ModelSerializer):
+    usuario = serializers.CharField(source="usuario.username", read_only=True)
+    usuario_avatar = serializers.CharField(source="usuario.avatar", read_only=True)
+    texto = serializers.CharField(max_length=MAX_COMENTARIO_LENGTH)
+
+    class Meta:
+        model = ComentarioResena
+        fields = ("id", "resena", "usuario", "usuario_avatar", "texto", "fecha_creacion")
+        read_only_fields = ("id", "resena", "fecha_creacion")
+
+    def validate_texto(self, value):
+        texto = value.strip()
+        if not texto:
+            raise serializers.ValidationError("El comentario no puede estar vacío.")
+        return texto

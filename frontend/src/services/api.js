@@ -417,6 +417,26 @@ export async function borrarResena(resenaId) {
   }, 'Error al eliminar la reseña.');
 }
 
+/** Nota media, distribución y actividad (vistos, viendo, pendientes, me gusta…) de un título. */
+export async function getEstadisticasMedia(mediaId, options = {}) {
+  return leerJson(`/media/${mediaId}/estadisticas/`, { ...options, publicRequest: true }, 'Error al obtener las estadísticas del título.');
+}
+
+export async function getComentariosResena(resenaId, params = {}, options = {}) {
+  return leerJson(`/resenas/${resenaId}/comentarios/${buildQueryString(params)}`, { ...options, publicRequest: !getStoredAuth() }, 'Error al obtener los comentarios.');
+}
+
+export async function crearComentarioResena(resenaId, texto) {
+  return leerJson(`/resenas/${resenaId}/comentarios/`, {
+    method: 'POST',
+    body: JSON.stringify({ texto }),
+  }, 'No pudimos publicar el comentario.');
+}
+
+export async function borrarComentarioResena(comentarioId) {
+  return leerJson(`/comentarios/${comentarioId}/`, { method: 'DELETE' }, 'No pudimos borrar el comentario.');
+}
+
 export async function getResumenResenas(mediaId) {
   return leerJson(`/media/${mediaId}/resenas/resumen/`, 'Error al obtener el resumen de puntuación.');
 }
