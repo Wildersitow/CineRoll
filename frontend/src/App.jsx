@@ -16,6 +16,7 @@ import { Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-
 import MainLayout from './components/MainLayout'
 import CinemaState from './components/CinemaState'
 import RutaProtegida from './components/RutaProtegida'
+import { UsuariosRecomendados } from './components/Personas'
 
 const MediaDetailView = lazy(() => import('./components/MediaDetailView'))
 const CinemaDirectory = lazy(() => import('./components/CinemaDirectory'))
@@ -31,7 +32,12 @@ function Home() {
   const { search } = useLocation()
   const query = new URLSearchParams(search)
   if (['q', 'tipo', 'estado'].some(key => query.has(key))) return <Navigate replace to={'/catalogo' + search} />
-  return <Suspense fallback={<p role="status">Cargando cartelera…</p>}><CinemaDirectory home /></Suspense>
+  return (
+    <>
+      <Suspense fallback={<p role="status">Cargando cartelera…</p>}><CinemaDirectory home /></Suspense>
+      <div className="cinema-page home-people"><UsuariosRecomendados /></div>
+    </>
+  )
 }
 
 export default function App() {

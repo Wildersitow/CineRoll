@@ -79,7 +79,7 @@ export default function AuthCard({
 
         <div id="auth-panel" role="tabpanel" aria-labelledby={`auth-${activeTab}-tab`}>
           {authError && (
-            <div className="auth-alert-error" role="alert">
+            <div key={authError} className="auth-alert-error" role="alert">
               <svg viewBox="0 0 20 20" fill="currentColor">
                 <path
                   fillRule="evenodd"

@@ -7,7 +7,7 @@ import FavoritasEditor from './FavoritasEditor'
 import ChangePasswordModal from './ChangePasswordModal'
 
 const SECCIONES = [
-  { id: 'perfil', label: 'Perfil', description: 'Avatar, banner, biografía y favoritas', icon: 'user' },
+  { id: 'perfil', label: 'Perfil', description: 'Avatar, banner, biografía y favoritos', icon: 'user' },
   { id: 'preferencias', label: 'Preferencias', description: 'Cómo ves las puntuaciones', icon: 'settings' },
   { id: 'cuenta', label: 'Cuenta', description: 'Correo y contraseña', icon: 'key' },
 ]

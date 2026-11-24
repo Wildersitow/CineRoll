@@ -5,6 +5,7 @@ import CinemaState from './CinemaState'
 import CinemaIcon from './CinemaIcon'
 import FilmCard from './FilmCard'
 import Pagination from './Pagination'
+import { PersonasEncontradas } from './Personas'
 
 const filters = { pelicula: 'Películas', serie: 'Series', anime: 'Anime' }
 
@@ -186,6 +187,7 @@ export default function CatalogView() {
     return (
       <main className="cinema-page cinema-catalog">
         <h1>{title}</h1>
+        {search && <PersonasEncontradas texto={search} />}
         <MediaSection key={query.toString()} id="resultados" title="Títulos" params={{ search, tipo: type, estado: state, ordering: state ? 'fecha_estreno' : 'titulo' }} empty="No encontramos títulos para esta selección." />
       </main>
     )

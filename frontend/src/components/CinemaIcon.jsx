@@ -1,5 +1,5 @@
 import {
-  ArrowDownIcon, ArrowLeftIcon, ArrowSquareOutIcon, CalendarBlankIcon, CurrencyCircleDollarIcon,
+  ArrowDownIcon, ArrowLeftIcon, ArrowUpIcon, AtIcon, EnvelopeSimpleIcon, EyeIcon, EyeSlashIcon, IdentificationCardIcon, LockSimpleIcon, PaperPlaneRightIcon, ArrowSquareOutIcon, CalendarBlankIcon, CurrencyCircleDollarIcon,
   CaretDownIcon, CaretLeftIcon, ChatCircleDotsIcon, GearSixIcon, GlobeIcon, KeyIcon, ListBulletsIcon, MapTrifoldIcon, NavigationArrowIcon, PlayIcon, SignOutIcon, CaretRightIcon, ClockIcon, FilmStripIcon, HouseIcon,
   MagnifyingGlassIcon, MapPinIcon, PencilSimpleIcon, ShareNetworkIcon,
   SparkleIcon, TelevisionIcon, TicketIcon, UserIcon, UsersIcon, WarningCircleIcon,
@@ -36,6 +36,14 @@ const icons = {
   list: ListBulletsIcon,
   users: UsersIcon,
   key: KeyIcon,
+  up: ArrowUpIcon,
+  at: AtIcon,
+  mail: EnvelopeSimpleIcon,
+  eye: EyeIcon,
+  eyeOff: EyeSlashIcon,
+  name: IdentificationCardIcon,
+  lock: LockSimpleIcon,
+  send: PaperPlaneRightIcon,
 }
 
 export default function CinemaIcon({ name, weight = 'regular' }) {

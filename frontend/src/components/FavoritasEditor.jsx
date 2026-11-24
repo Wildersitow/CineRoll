@@ -5,7 +5,7 @@ import Poster from './Poster'
 
 const MAX_FAVORITAS = 4
 
-/** Buscador para elegir un título y añadirlo a favoritas. */
+/** Buscador para elegir un título y añadirlo a favoritos. */
 function Buscador({ onPick, onClose, excluded }) {
   const [term, setTerm] = useState('')
   const [result, setResult] = useState({ term: '', items: [] })
@@ -29,7 +29,7 @@ function Buscador({ onPick, onClose, excluded }) {
   const items = query.length >= 2 && result.term === query ? result.items.filter((item) => !excluded.has(item.id)) : []
 
   return (
-    <div className="favorites-search" role="dialog" aria-label="Añadir a favoritas" onKeyDown={(event) => event.key === 'Escape' && onClose()}>
+    <div className="favorites-search" role="dialog" aria-label="Añadir a favoritos" onKeyDown={(event) => event.key === 'Escape' && onClose()}>
       <div className="favorites-search-bar">
         <CinemaIcon name="search" />
         <input ref={input} type="search" value={term} onChange={(event) => setTerm(event.target.value)} placeholder="Busca una película, serie o anime…" aria-label="Buscar título" />
@@ -53,7 +53,7 @@ function Buscador({ onPick, onClose, excluded }) {
   )
 }
 
-/** Sección "Películas favoritas": 4 huecos que se llenan desde el catálogo. */
+/** Sección "Favoritos": 4 huecos que se llenan desde el catálogo. */
 export default function FavoritasEditor({ username }) {
   const [list, setList] = useState(null)
   const [items, setItems] = useState(null)
@@ -105,12 +105,12 @@ export default function FavoritasEditor({ username }) {
   return (
     <section className="settings-section" aria-labelledby="favoritas-titulo">
       <div className="settings-section-heading">
-        <h2 id="favoritas-titulo">Películas favoritas</h2>
+        <h2 id="favoritas-titulo">Favoritos</h2>
         <small className="settings-hint">Aparecen en tu perfil público. Pasa el ratón sobre un póster para quitarlo.</small>
       </div>
       {error && <p role="alert">{error}</p>}
-      {items === null && !error && <p className="settings-hint" role="status">Cargando favoritas…</p>}
-      {items !== null && !list && <p className="settings-hint">No encontramos tu lista de favoritas.</p>}
+      {items === null && !error && <p className="settings-hint" role="status">Cargando favoritos…</p>}
+      {items !== null && !list && <p className="settings-hint">No encontramos tu lista de favoritos.</p>}
       {items !== null && list && (
         <ul className="favorites-slots" aria-busy={busy || undefined}>
           {Array.from({ length: MAX_FAVORITAS }, (_, index) => {
@@ -120,7 +120,7 @@ export default function FavoritasEditor({ username }) {
                 <li key={item.media_id} className="favorites-slot">
                   <Poster url={item.media_poster_url} />
                   <span className="favorites-slot-title">{item.media_titulo}</span>
-                  <button type="button" className="favorites-remove" onClick={() => remove(item)} disabled={busy} aria-label={`Quitar ${item.media_titulo} de favoritas`}>×</button>
+                  <button type="button" className="favorites-remove" onClick={() => remove(item)} disabled={busy} aria-label={`Quitar ${item.media_titulo} de favoritos`}>×</button>
                 </li>
               )
             }
@@ -128,7 +128,7 @@ export default function FavoritasEditor({ username }) {
             return (
               <li key={`vacio-${index}`} className="favorites-slot favorites-slot-empty">
                 {first && (
-                  <button type="button" onClick={() => setSearching(true)} disabled={busy} aria-label="Añadir una favorita">
+                  <button type="button" onClick={() => setSearching(true)} disabled={busy} aria-label="Añadir un favorito">
                     <span aria-hidden="true">+</span>
                   </button>
                 )}

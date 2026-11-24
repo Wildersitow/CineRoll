@@ -85,7 +85,7 @@ function Favoritas({ list }) {
   const items = (list ? result?.items || [] : []).slice(0, 4)
   return (
     <section className="profile-block">
-      <h2 className="profile-block-title">Películas favoritas</h2>
+      <h2 className="profile-block-title">Favoritos</h2>
       <ul className="profile-favorites">
         {Array.from({ length: 4 }, (_, index) => {
           const item = items[index]
@@ -358,7 +358,7 @@ function ProfileContent({ username, currentUser }) {
           {lists?.error && <CinemaState error={lists.error} title="No pudimos cargar las listas." retry={retry} />}
           {lists?.value && !items.length && <p className="profile-empty">Este perfil aún no tiene listas públicas.</p>}
           {lists?.value && <>
-            {favorites && <ProfileCollection key={favorites.id} list={favorites} title="Favoritas" />}
+            {favorites && <ProfileCollection key={favorites.id} list={favorites} title="Favoritos" />}
             {watchlist && <ProfileCollection key={watchlist.id} list={watchlist} title="Por ver" />}
             {otherLists.map((list) => <ProfileCollection key={list.id} list={list} title={list.nombre} />)}
           </>}

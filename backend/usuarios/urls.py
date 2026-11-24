@@ -1,6 +1,7 @@
 from django.urls import path
 from rest_framework_simplejwt.views import TokenRefreshView
 
+from .descubrir import BuscarUsuariosView, UsuariosRecomendadosView
 from .views import (
     CambiarPasswordView,
     CurrentUserView,
@@ -28,6 +29,14 @@ urlpatterns = [
     path("usuarios/me/password/", CambiarPasswordView.as_view(), name="usuarios_me_password"),
     path("usuarios/me/resenas/", MisResenasView.as_view(), name="usuarios_me_resenas"),
     path("usuarios/me/sugerencias/", MisSugerenciasView.as_view(), name="usuarios_me_sugerencias"),
+
+    # Encontrar personas: búsqueda y recomendados
+    path("usuarios/", BuscarUsuariosView.as_view(), name="usuarios_buscar"),
+    path(
+        "recomendaciones/usuarios/",
+        UsuariosRecomendadosView.as_view(),
+        name="usuarios_recomendados",
+    ),
 
     # Perfil público y reseñas de otros usuarios
     path("usuarios/<int:pk>/", PerfilPublicoView.as_view(), name="usuarios_perfil_publico_id"),

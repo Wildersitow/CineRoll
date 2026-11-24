@@ -381,3 +381,89 @@
 .profile-edit textarea {
   resize: vertical;
 }
+
+/* ==========================================================================
+   Fase 5b · Inputs de acceso (AuthField.jsx)
+   ========================================================================== */
+@property --glow-size {
+  syntax: '<length>';
+  inherits: false;
+  initial-value: 0px;
+}
+
+.input-group label { transition: color var(--transition-fast); }
+.input-group:focus-within > label { color: var(--cinema-gold); }
+
+/* Borde que se ilumina siguiendo al cursor (--mx/--my los pone AuthField). */
+.auth-glow { border-radius: var(--radius-sm); }
+.auth-glow::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  padding: 1px;
+  border-radius: inherit;
+  pointer-events: none;
+  background: radial-gradient(var(--glow-size) circle at var(--mx, 50%) var(--my, 50%), var(--cinema-gold), transparent 75%);
+  mask: linear-gradient(#000 0 0) content-box exclude, linear-gradient(#000 0 0);
+  transition: --glow-size .35s ease;
+}
+.auth-glow:hover::before { --glow-size: 9rem; }
+.auth-glow input { transition: border-color var(--transition-fast), background-color var(--transition-fast), box-shadow .25s ease; }
+.auth-glow input:hover { background: color-mix(in srgb, var(--cinema-bg), #fff 3%); }
+.auth-glow input:focus { box-shadow: 0 0 0 4px color-mix(in srgb, var(--cinema-gold) 10%, transparent), 0 8px 24px -12px color-mix(in srgb, var(--cinema-gold) 45%, transparent); }
+
+.auth-field-icon {
+  position: absolute;
+  inset-inline-start: .8rem;
+  z-index: 1;
+  display: flex;
+  color: var(--cinema-muted);
+  pointer-events: none;
+  transition: color var(--transition-fast), transform .25s ease;
+}
+.auth-field-icon svg { width: 1.05rem; height: 1.05rem; }
+.auth-glow:has(.auth-field-icon) input { padding-inline-start: 2.5rem; }
+.auth-glow:focus-within .auth-field-icon { color: var(--cinema-gold); transform: scale(1.1); }
+.auth-glow .smooth-caret { z-index: 1; }
+
+.toggle-password-btn { z-index: 1; }
+.toggle-password-btn:focus-visible { outline: 2px solid var(--cinema-gold); outline-offset: 0; }
+.toggle-password-icon { display: flex; animation: auth-icon-swap .22s ease-out; }
+.toggle-password-icon svg { width: 1.1rem; height: 1.1rem; }
+@keyframes auth-icon-swap { from { opacity: 0; transform: rotate(-35deg) scale(.6); } }
+
+.caps-lock-hint { display: flex; align-items: center; gap: .35rem; color: var(--color-warning); animation: fadeIn .2s ease-out; }
+.caps-lock-hint svg { width: .95rem; height: .95rem; }
+
+/* Botón principal: brillo al pasar y spinner mientras carga. */
+.submit-btn { position: relative; overflow: hidden; display: inline-flex; align-items: center; justify-content: center; gap: .55rem; }
+.submit-btn::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  translate: -110% 0;
+  background: linear-gradient(100deg, transparent 30%, #ffffff40 50%, transparent 70%);
+  transition: translate .6s ease;
+}
+.submit-btn:not(:disabled):hover::after { translate: 110% 0; }
+.submit-btn:not(:disabled):active { transform: scale(.985); }
+.submit-spinner { width: 1rem; height: 1rem; border-radius: 50%; border: 2px solid #ffffff55; border-top-color: #fff; animation: auth-spin .7s linear infinite; }
+@keyframes auth-spin { to { transform: rotate(360deg); } }
+
+/* El aviso de error "tiembla" cada vez que cambia (AuthCard le pone key). */
+.auth-alert-error { animation: auth-shake .42s cubic-bezier(.36, .07, .19, .97) both; }
+@keyframes auth-shake {
+  0% { opacity: 0; transform: translateX(0); }
+  20% { opacity: 1; transform: translateX(-6px); }
+  40% { transform: translateX(5px); }
+  60% { transform: translateX(-3px); }
+  80% { transform: translateX(2px); }
+  100% { transform: translateX(0); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .auth-glow::before, .submit-btn::after { display: none; }
+  .toggle-password-icon, .auth-alert-error, .caps-lock-hint { animation: none; }
+  .submit-spinner { animation-duration: 1.6s; }
+}

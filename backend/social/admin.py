@@ -4,6 +4,7 @@ from django.template.response import TemplateResponse
 from rest_framework.exceptions import ValidationError
 
 from social.models import (
+    Mensaje,
     ComentarioResena,
     LikeResena,
     ElementoLista,
@@ -255,3 +256,11 @@ class ComentarioResenaAdmin(admin.ModelAdmin):
 class LikeResenaAdmin(admin.ModelAdmin):
     list_display = ("usuario", "resena", "fecha")
     raw_id_fields = ("usuario", "resena")
+
+
+@admin.register(Mensaje)
+class MensajeAdmin(admin.ModelAdmin):
+    list_display = ("autor", "destinatario", "media", "fecha")
+    list_filter = ("fecha",)
+    search_fields = ("autor__username", "destinatario__username", "texto")
+    raw_id_fields = ("autor", "destinatario", "media")
