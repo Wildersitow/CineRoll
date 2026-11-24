@@ -324,7 +324,7 @@
 .film-front, .film-back { position:absolute; inset:0; width:100%; height:100%; backface-visibility:hidden; border-radius:var(--radius-sm); overflow:hidden }
 .film-front { border:0; padding:0; background:var(--cinema-surface); cursor:pointer }
 .film-front .cinema-poster { height:100% }
-.film-front > span { position:absolute; bottom:.6rem; left:.5rem; padding:.3rem .6rem; border-radius:1rem; background:#20151bed; color:white }
+.film-front > .film-hint { position:absolute; bottom:.6rem; left:.5rem; padding:.3rem .6rem; border-radius:1rem; background:#20151bed; color:white }
 .film-back { transform:rotateY(180deg); background:var(--cinema-surface); padding:.65rem; display:flex; flex-direction:column; align-items:start; gap:.4rem; border:1px solid var(--cinema-line); overflow:auto }
 .film-back p { margin:0; display:-webkit-box; -webkit-line-clamp:3; line-clamp:3; -webkit-box-orient:vertical; overflow:hidden; flex-shrink:0 }
 .film-times { margin-top:.65rem; font-size:.85rem }
@@ -346,7 +346,8 @@
 .rating .lit { color:var(--cinema-gold); transform:translateY(-2px) }
 .rating .half-star { overflow:hidden; width:.5em }
 .rating .half-star span { width:1em; text-align:center }
-.rating .half-star:nth-child(even) span { margin-left:-.5em }
+.rating .half-right span { margin-left:-.5em }
+
 .review-heart { display:inline-flex; gap:.4em; align-items:center }
 .review-heart[aria-pressed="true"] span { color:#ff7990; animation:heart-pulse .24s ease-out }
 @keyframes heart-pulse { 50% {transform:scale(1.28)} }
@@ -363,7 +364,8 @@
 .smooth-caret { pointer-events:none; position:absolute; top:30%; bottom:30%; left:1px; width:2px; background:var(--cinema-gold); transition:transform .09s ease-out }
 .custom-caret { caret-color:transparent }
 @media (hover:hover) and (pointer:fine) and (prefers-reduced-motion:no-preference) {
-  .film-depth:hover .film-turn:not(.flipped) { transform:rotateY(-4deg) rotateX(2deg) }
+  .film-depth:hover .film-turn:not(.flipped) { transform:rotateX(var(--tilt-x, 2deg)) rotateY(var(--tilt-y, -4deg)) scale(1.03); box-shadow:0 22px 40px #000b }
+  .film-depth[data-tilting] .film-turn { transition:transform .08s linear, box-shadow .2s }
 }
 @media (min-height:36rem) and (prefers-reduced-motion:no-preference) {
   .film-footer { position:sticky; bottom:0 }
@@ -700,3 +702,46 @@
   .settings-nav small { display: none; }
   .settings-grid, .settings-choices { grid-template-columns: minmax(0, 1fr); }
 }
+
+/* ===== Fase 5a: microinteracciones ===== */
+/* Brillo holográfico del póster (sigue al ratón) */
+.film-turn { border-radius:var(--radius-sm) }
+.film-glare { position:absolute; inset:0; z-index:1; pointer-events:none; border-radius:inherit; opacity:0; mix-blend-mode:color-dodge; background:
+  radial-gradient(circle at var(--glare-x, 50%) var(--glare-y, 30%), #ffffffb0 0%, #ffffff30 18%, transparent 45%),
+  linear-gradient(115deg, transparent 20%, #ff5ea866 36%, #7cf9ff66 50%, #ffe36b66 64%, transparent 80%);
+  background-size:100% 100%, 220% 220%; background-position:center, calc(var(--glare-x, 50%) * 1.2) calc(var(--glare-y, 50%) * 1.2); transition:opacity .25s }
+.film-depth[data-tilting] .film-turn:not(.flipped) .film-glare { opacity:.55 }
+.film-front > .film-hint { z-index:2; transition:translate .2s, background-color .2s }
+.film-depth:hover .film-front > .film-hint { background:var(--cinema-red); translate:0 -2px }
+
+/* Corazón de likes con pulso */
+.review-heart { position:relative; overflow:visible; transition:border-color .15s, background-color .15s }
+.review-heart:hover { border-color:#ff799066 }
+.review-heart[aria-pressed="true"] { border-color:#ff799099; background:#ff79901a }
+.review-heart svg { width:1.15rem; height:1.15rem; color:var(--cinema-muted); transition:color .15s }
+.review-heart[aria-pressed="true"] svg { color:#ff5c7c }
+.review-heart[aria-pressed="true"] span { animation:none }
+.heart-icon { position:relative; display:grid; place-items:center }
+.heart-ring { position:absolute; inset:-.35rem; border:2px solid #ff5c7c; border-radius:50%; pointer-events:none }
+.heart-particle { position:absolute; width:.3rem; height:.3rem; border-radius:50%; background:#ff5c7c; pointer-events:none }
+.heart-particle:nth-child(odd) { background:var(--cinema-gold) }
+.heart-count { display:inline-grid; overflow:hidden; min-width:1ch; height:1.3em; line-height:1.3em; font-variant-numeric:tabular-nums }
+.heart-count > span { grid-area:1 / 1 }
+
+/* Estrellas con "peek": burbuja con la nota al pasar el ratón */
+.rating { position:relative; padding-top:2.4rem }
+.rating label:not(.half-star):hover span, .rating label:not(.half-star):focus-within span { transform:scale(1.25) translateY(-2px) }
+.rating .lit { text-shadow:0 0 12px #ffb40066 }
+.rating .rating-peek { position:absolute; top:0; left:calc(var(--peek, .5) * 100%); translate:-50% 0; display:flex; align-items:center; gap:.35rem; padding:.3rem .6rem; font-size:.78rem; font-weight:700; white-space:nowrap; color:#1a1206; background:var(--cinema-gold); border-radius:999px; box-shadow:0 8px 18px #0009; pointer-events:none; transition:left .14s ease-out }
+.rating .rating-peek::after { content:''; position:absolute; left:50%; bottom:-.3rem; translate:-50% 0; border:.35rem solid transparent; border-bottom:0; border-top-color:var(--cinema-gold) }
+.rating .rating-peek strong { font-size:.9rem }
+
+/* Paginación estilo shadcn */
+.cinema-pagination { gap:.3rem; flex-wrap:wrap }
+.cinema-pagination button { display:inline-flex; align-items:center; gap:.35rem; min-width:2.4rem; height:2.4rem; justify-content:center; padding:0 .75rem; font-weight:600; background:transparent; border-color:transparent; transition:background-color .15s, border-color .15s, color .15s }
+.cinema-pagination button:not(:disabled):hover { background:var(--cinema-surface); border-color:var(--cinema-line) }
+.cinema-pagination button[aria-current="page"] { color:var(--cinema-ink); background:var(--cinema-surface); border-color:var(--cinema-gold); box-shadow:0 0 0 1px var(--cinema-gold) inset }
+.cinema-pagination svg { width:1rem; height:1rem }
+.page-number { display:inline-flex; align-items:center; gap:.3rem }
+.page-ellipsis { display:inline-grid; place-items:center; width:2.4rem; color:var(--cinema-muted) }
+.page-compact { color:var(--cinema-muted); font-size:.88rem; padding:0 .5rem }
