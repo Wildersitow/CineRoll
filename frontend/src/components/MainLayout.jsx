@@ -61,7 +61,7 @@ export default function MainLayout({ currentUser, onLogout, isLoading }) {
           <span className="cinema-brand-wordmark" aria-hidden="true" />
         </Link>
         <form key={searchFieldKey} onSubmit={submitSearch} role="search" className="cinema-search">
-          <input type="search" name="q" defaultValue={query} placeholder="Buscar en el catálogo" aria-label="Buscar en el catálogo" />
+          <input type="search" name="q" defaultValue={query} placeholder="Buscar títulos o personas" aria-label="Buscar títulos o personas" />
           <button type="submit" aria-label="Buscar"><CinemaIcon name="search" /></button>
         </form>
         <div className="cinema-account">

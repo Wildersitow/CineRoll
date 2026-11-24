@@ -453,6 +453,20 @@ export async function getPerfilPublico(username, options = {}) {
   return leerJson(`/usuarios/${username}/`, options, `Error al obtener el perfil de @${username}.`);
 }
 
+/**
+ * Busca personas por usuario, nombre o apellido: GET /api/usuarios/?search=.
+ */
+export async function buscarUsuarios(texto, params = {}, options = {}) {
+  return leerJson(`/usuarios/${buildQueryString({ search: texto, ...params })}`, { ...options, publicRequest: !getStoredAuth() }, 'Error al buscar personas.');
+}
+
+/**
+ * Personas recomendadas para seguir: GET /api/recomendaciones/usuarios/.
+ */
+export async function getUsuariosRecomendados(options = {}) {
+  return leerJson('/recomendaciones/usuarios/', { ...options, publicRequest: !getStoredAuth() }, 'Error al obtener usuarios recomendados.');
+}
+
 export async function seguirUsuario(username) {
   return leerJson(`/usuarios/${username}/seguir/`, {
     method: 'POST',

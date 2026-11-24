@@ -1175,3 +1175,49 @@
   .chat-room { height: clamp(24rem, calc(100dvh - 12.5rem), 60rem); padding-inline: .75rem; }
   .chat-msg { max-width: 88%; }
 }
+
+/* ==========================================================================
+   Personas: resultados de búsqueda y usuarios recomendados (Personas.jsx)
+   ========================================================================== */
+.home-people { padding-top: 0; }
+.home-people:empty { display: none; }
+.people-section .cinema-section-heading h2 { display: inline-flex; align-items: center; gap: .5rem; }
+.people-section .cinema-section-heading h2 svg { color: var(--cinema-gold); }
+.people-subtitle { margin: -.5rem 0 1rem; color: var(--cinema-muted); font-size: .9rem; }
+.people-row {
+  list-style: none; display: grid; grid-auto-flow: column; grid-auto-columns: minmax(11.5rem, 13rem);
+  gap: 1rem; overflow-x: auto; padding: .35rem .2rem 1rem; scroll-snap-type: x proximity;
+}
+.person-card {
+  position: relative; display: grid; grid-template-rows: 1fr auto; justify-items: center; gap: .75rem; padding: 1.25rem 1rem 1rem;
+  scroll-snap-align: start; text-align: center;
+  background: linear-gradient(180deg, #ffffff08, transparent 60%), var(--cinema-surface);
+  border: 1px solid var(--cinema-line); border-radius: 16px;
+  transition: transform .22s ease, border-color .22s, box-shadow .22s;
+}
+.person-card:hover { transform: translateY(-4px); border-color: color-mix(in srgb, var(--cinema-gold) 45%, transparent); box-shadow: 0 16px 30px -18px #000; }
+.person-card-link { display: grid; align-content: start; justify-items: center; gap: .15rem; min-width: 0; width: 100%; color: inherit; text-decoration: none; }
+.person-card-link strong { margin-top: .55rem; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.person-card-avatar {
+  display: grid; place-items: center; overflow: hidden; width: 4.5rem; aspect-ratio: 1; border-radius: 50%;
+  font-size: 1.6rem; font-weight: 700; color: #fff;
+  background: linear-gradient(135deg, var(--cinema-red-bright), #5c0910);
+  box-shadow: 0 0 0 2px var(--cinema-surface), 0 0 0 4px color-mix(in srgb, var(--cinema-gold) 55%, transparent);
+  transition: box-shadow .22s;
+}
+.person-card:hover .person-card-avatar { box-shadow: 0 0 0 2px var(--cinema-surface), 0 0 0 4px var(--cinema-gold); }
+.person-card-avatar img { width: 100%; height: 100%; object-fit: cover; }
+.person-card-user { font-size: .8rem; color: var(--cinema-muted); max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
+.person-card-detail { margin-top: .3rem; font-size: .78rem; color: var(--cinema-muted); line-height: 1.35; }
+.person-follow {
+  justify-self: stretch; display: inline-flex; justify-content: center; cursor: pointer;
+  padding: .45rem .9rem; border-radius: 999px; font: inherit; font-size: .85rem; font-weight: 600; text-decoration: none;
+  color: #fff; background: var(--cinema-red); border: 1px solid transparent;
+  transition: background-color .2s, color .2s, border-color .2s, transform .15s;
+}
+.person-follow:hover { background: var(--cinema-red-hover); }
+.person-follow:active { transform: scale(.96); }
+.person-follow[aria-pressed="true"] { background: transparent; color: var(--cinema-ink); border-color: var(--cinema-line); }
+.person-follow[aria-pressed="true"]:hover { border-color: var(--cinema-red-bright); color: #ff8a92; }
+.person-follow:disabled { opacity: .6; cursor: wait; }
+.person-card-me { font-size: .8rem; color: var(--cinema-gold); padding: .45rem 0; }
