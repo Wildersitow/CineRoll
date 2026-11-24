@@ -2,6 +2,7 @@ import { useLayoutEffect } from 'react'
 import { motion, useReducedMotion } from 'motion/react'
 import { Link, useLocation, useNavigate, useOutlet } from 'react-router-dom'
 import CinemaIcon from './CinemaIcon'
+import SiteFooter from './SiteFooter'
 import UserMenu from './UserMenu'
 import './Cinema.css'
 
@@ -88,7 +89,7 @@ export default function MainLayout({ currentUser, onLogout, isLoading }) {
         >
           {outlet}
         </motion.div>
-        <footer className="film-footer"><strong>CineRoll</strong><nav aria-label="Pie de página"><Link to="/">Cartelera</Link><Link to="/catalogo">Catálogo</Link><Link to="/cines">Cines</Link></nav></footer>
+        <SiteFooter user={currentUser} />
       </div>
     </div>
   )

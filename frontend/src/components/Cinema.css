@@ -317,7 +317,7 @@
 
 /* Cartelera, reverso de los pósteres y acciones de ficha. */
 .film-card { height:auto }
-.film-card a, .film-footer a, .conversation a { color:inherit }
+.film-card a { color:inherit }
 .film-depth { perspective:900px }
 .film-turn { position:relative; aspect-ratio:2/3; transform-style:preserve-3d; transition:transform .32s ease }
 .film-turn.flipped { transform:rotateY(180deg) }
@@ -334,10 +334,10 @@
 .film-actions { display:grid; justify-items:start; gap:.75rem; margin-block:1rem }
 .action-grid { display:flex; flex-wrap:wrap; gap:.5rem; animation:action-open .18s ease-out; transform-origin:top left }
 @keyframes action-open { from { opacity:0; transform:translateY(-.4rem) scale(.97) } }
-.film-actions button, .conversation button, .film-back button, .review-heart { cursor:pointer; color:var(--cinema-ink); border:1px solid var(--cinema-line); background:var(--cinema-surface); border-radius:var(--radius-sm); padding:.5rem .75rem; font:inherit }
+.film-actions button, .film-back button, .review-heart { cursor:pointer; color:var(--cinema-ink); border:1px solid var(--cinema-line); background:var(--cinema-surface); border-radius:var(--radius-sm); padding:.5rem .75rem; font:inherit }
 .film-actions button:disabled { opacity:.65 }
 .film-actions fieldset { display:grid; gap:.5rem; border:0; padding:0 }
-.film-actions textarea, .conversation textarea { display:block; width:100%; min-height:5rem; margin-block:.5rem; color:inherit; background:var(--cinema-surface); border:1px solid var(--cinema-line); padding:.7rem; font:inherit }
+.film-actions textarea { display:block; width:100%; min-height:5rem; margin-block:.5rem; color:inherit; background:var(--cinema-surface); border:1px solid var(--cinema-line); padding:.7rem; font:inherit }
 .rating { display:flex; flex-wrap:wrap }
 .rating label { position:relative; cursor:pointer; font-size:1.8rem; line-height:1.4 }
 .rating input { position:absolute; opacity:0; width:100%; height:100%; margin:0 }
@@ -351,14 +351,6 @@
 .review-heart { display:inline-flex; gap:.4em; align-items:center }
 .review-heart[aria-pressed="true"] span { color:#ff7990; animation:heart-pulse .24s ease-out }
 @keyframes heart-pulse { 50% {transform:scale(1.28)} }
-.conversation { max-width:50rem }
-.conversation ol { list-style:none; display:grid; gap:.6rem; padding:0 }
-.conversation li { max-width:85%; justify-self:start; padding:.75rem 1rem; background:var(--cinema-surface); border-radius:1rem; overflow-wrap:anywhere }
-.conversation li.mine { justify-self:end; border:1px solid var(--cinema-line) }
-.conversation li p { margin:.4rem 0; white-space:pre-wrap }
-.conversation time { font-size:.75rem; color:var(--cinema-muted) }
-.film-footer { display:flex; align-items:center; justify-content:space-between; gap:1rem; flex-wrap:wrap; padding:2rem clamp(1rem,4vw,4rem); background:var(--cinema-surface) }
-.film-footer nav { display:flex; gap:1rem }
 .cinema-content { isolation:isolate }
 .cinema-content > div { position:relative; z-index:1; background:var(--cinema-bg,#100c0d); min-height:75vh }
 .smooth-caret { pointer-events:none; position:absolute; top:30%; bottom:30%; left:1px; width:2px; background:var(--cinema-gold); transition:transform .09s ease-out }
@@ -366,10 +358,6 @@
 @media (hover:hover) and (pointer:fine) and (prefers-reduced-motion:no-preference) {
   .film-depth:hover .film-turn:not(.flipped) { transform:rotateX(var(--tilt-x, 2deg)) rotateY(var(--tilt-y, -4deg)) scale(1.03); box-shadow:0 22px 40px #000b }
   .film-depth[data-tilting] .film-turn { transition:transform .08s linear, box-shadow .2s }
-}
-@media (min-height:36rem) and (prefers-reduced-motion:no-preference) {
-  .film-footer { position:sticky; bottom:0 }
-  .film-footer:focus-within { z-index:2 }
 }
 @media (max-width:600px) {
   .page-number { display:none }
@@ -987,4 +975,203 @@
 }
 @media (prefers-reduced-motion: reduce) {
   .review-expand svg, .info-chip, .stats-histogram span { transition:none }
+}
+
+/* ==========================================================================
+   Fase 5b · Pie de página con efecto "reveal" (SiteFooter.jsx)
+   El contenido (z-index 1, fondo opaco) pasa por encima del pie, que queda
+   pegado abajo y se descubre al final de cada página.
+   ========================================================================== */
+.site-footer {
+  position: relative;
+  overflow: hidden;
+  padding: clamp(2.5rem, 5vw, 4rem) var(--cinema-gutter) 1.25rem;
+  background:
+    radial-gradient(120% 90% at 85% 0%, #e50f1c22, transparent 60%),
+    radial-gradient(90% 70% at 0% 100%, #ffb40014, transparent 60%),
+    #150f11;
+  border-top: 1px solid var(--cinema-line);
+}
+.site-footer-top { display: grid; grid-template-columns: minmax(0, 22rem) minmax(0, 1fr); gap: 2rem clamp(2rem, 6vw, 6rem); }
+.site-footer-brand .cinema-brand { color: inherit; text-decoration: none; }
+.site-footer-brand p { margin-top: 1rem; color: var(--cinema-muted); line-height: 1.6; max-width: 34ch; }
+.site-footer-links { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1.5rem; }
+.site-footer-col h2 { font-size: .72rem; text-transform: uppercase; letter-spacing: .14em; color: var(--cinema-gold); margin-bottom: .9rem; }
+.site-footer-col ul { list-style: none; display: grid; gap: .55rem; }
+.site-footer-col a {
+  color: var(--cinema-ink);
+  text-decoration: none;
+  font-size: .92rem;
+  background: linear-gradient(var(--cinema-gold), var(--cinema-gold)) no-repeat 0 100% / 0 1px;
+  transition: background-size .25s ease, color .2s;
+  padding-bottom: 2px;
+}
+.site-footer-col a:hover { background-size: 100% 1px; color: var(--cinema-gold); }
+.site-footer-wordmark {
+  margin: clamp(1.5rem, 4vw, 3rem) 0 .5rem;
+  font-size: clamp(3.5rem, 15vw, 12.5rem);
+  font-weight: 800;
+  line-height: .8;
+  letter-spacing: -.06em;
+  text-align: center;
+  white-space: nowrap;
+  user-select: none;
+  color: transparent;
+  background:
+    linear-gradient(180deg, var(--cinema-gold), var(--cinema-red-bright) 55%, transparent 95%) no-repeat 0 100% / 100% 0,
+    linear-gradient(180deg, #ffffff1c, #ffffff05);
+  -webkit-background-clip: text;
+  background-clip: text;
+  transition: background-size .9s cubic-bezier(.2, .8, .2, 1);
+}
+.site-footer:hover .site-footer-wordmark { background-size: 100% 100%, auto; }
+.site-footer-bottom { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: .75rem 1.5rem; padding-top: 1rem; border-top: 1px solid var(--cinema-line); color: var(--cinema-muted); }
+.site-footer-top-btn {
+  display: inline-flex; align-items: center; gap: .4rem;
+  font: inherit; font-size: .85rem; cursor: pointer;
+  color: var(--cinema-ink); background: #ffffff0d;
+  border: 1px solid var(--cinema-line); border-radius: 999px; padding: .45rem .9rem;
+  transition: background-color .2s, border-color .2s;
+}
+.site-footer-top-btn svg { transition: transform .25s ease; }
+.site-footer-top-btn:hover { background: #ffffff17; border-color: var(--cinema-gold); }
+.site-footer-top-btn:hover svg { transform: translateY(-3px); }
+@media (min-height: 46rem) and (min-width: 761px) and (prefers-reduced-motion: no-preference) {
+  .site-footer { position: sticky; bottom: 0; }
+  .site-footer:focus-within { z-index: 2; }
+}
+@media (max-width: 760px) {
+  .site-footer-top { grid-template-columns: minmax(0, 1fr); }
+}
+@media (max-width: 480px) {
+  .site-footer-links { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+/* ==========================================================================
+   Fase 5b · Chat (ChatView.jsx): bandeja y conversación con burbujas
+   ========================================================================== */
+.chat-avatar {
+  flex: none; display: grid; place-items: center; overflow: hidden;
+  width: 2.5rem; aspect-ratio: 1; border-radius: 50%;
+  background: linear-gradient(135deg, var(--cinema-red-bright), #5c0910);
+  color: #fff; font-weight: 700;
+}
+.chat-avatar img { width: 100%; height: 100%; object-fit: cover; }
+.chat-error { color: #fca5a5; margin: .5rem 0; }
+.chat-status { color: var(--cinema-muted); text-align: center; padding: 2rem 0; }
+.chat-empty { display: grid; justify-items: center; gap: .6rem; padding: 3rem 1rem; color: var(--cinema-muted); text-align: center; }
+.chat-empty svg { width: 2.75rem; height: 2.75rem; color: var(--cinema-gold); opacity: .8; }
+
+.chat-inbox { max-width: 46rem; }
+.chat-inbox-header { margin-bottom: 1.25rem; }
+.chat-inbox-header p { color: var(--cinema-muted); margin-top: .35rem; }
+.chat-inbox-list { list-style: none; display: grid; gap: .5rem; }
+.chat-inbox-item {
+  display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: .9rem;
+  padding: .85rem 1rem; border-radius: 14px; color: inherit; text-decoration: none;
+  background: var(--cinema-surface); border: 1px solid var(--cinema-line);
+  transition: transform .2s ease, border-color .2s, background-color .2s;
+}
+.chat-inbox-item:hover { transform: translateX(4px); border-color: color-mix(in srgb, var(--cinema-gold) 45%, transparent); background: #22191c; }
+.chat-inbox-text { display: grid; min-width: 0; }
+.chat-inbox-user { font-size: .78rem; color: var(--cinema-muted); }
+.chat-inbox-preview { margin-top: .2rem; color: var(--cinema-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: .9rem; }
+.chat-inbox-item time { align-self: start; font-size: .75rem; color: var(--cinema-muted); }
+.chat-inbox-skeleton { display: flex; align-items: center; gap: .9rem; padding: .85rem 1rem; border-radius: 14px; background: var(--cinema-surface); }
+.chat-inbox-skeleton span { display: block; height: 2.5rem; border-radius: 50%; aspect-ratio: 1; background: linear-gradient(90deg, #ffffff0a, #ffffff18, #ffffff0a) 0 0 / 200% 100%; animation: chat-shimmer 1.2s linear infinite; }
+.chat-inbox-skeleton span + span { flex: 1; height: .9rem; border-radius: 6px; aspect-ratio: auto; max-width: 60%; }
+@keyframes chat-shimmer { to { background-position: -200% 0; } }
+
+.chat-room {
+  max-width: 52rem;
+  display: grid; grid-template-rows: auto minmax(0, 1fr) auto auto;
+  height: clamp(26rem, calc(100dvh - 7.5rem), 64rem);
+  padding-bottom: 1rem;
+}
+.chat-room-header { display: flex; align-items: center; gap: .8rem; padding-bottom: .9rem; border-bottom: 1px solid var(--cinema-line); }
+.chat-room-header h1 { font-size: clamp(1.05rem, 2.5vw, 1.35rem); line-height: 1.2; overflow-wrap: anywhere; }
+.chat-room-header p { font-size: .8rem; color: var(--cinema-muted); }
+.chat-room-header p a { color: var(--cinema-gold); }
+.chat-room-title { min-width: 0; }
+.chat-back {
+  flex: none; display: grid; place-items: center; width: 2.4rem; aspect-ratio: 1; border-radius: 50%;
+  color: inherit; background: #ffffff0d; border: 1px solid var(--cinema-line); transition: background-color .2s, transform .2s;
+}
+.chat-back:hover { background: #ffffff1a; transform: translateX(-2px); }
+.chat-room-poster { flex: none; width: 2.4rem; }
+.chat-room-poster .cinema-poster { aspect-ratio: 2 / 3; border-radius: 4px; overflow: hidden; }
+
+.chat-thread-wrap { position: relative; min-height: 0; }
+.chat-thread { height: 100%; overflow-y: auto; overscroll-behavior: contain; padding: .75rem .25rem 1rem; display: flex; flex-direction: column; }
+.chat-messages { list-style: none; display: flex; flex-direction: column; gap: 3px; margin-top: auto; }
+.chat-older {
+  align-self: center; margin-bottom: .5rem; cursor: pointer; font: inherit; font-size: .82rem;
+  color: var(--cinema-ink); background: #ffffff0d; border: 1px solid var(--cinema-line); border-radius: 999px; padding: .4rem .9rem;
+}
+.chat-older:hover { border-color: var(--cinema-gold); }
+.chat-day { align-self: center; margin: 1rem 0 .5rem; }
+.chat-day span { display: inline-block; padding: .25rem .75rem; border-radius: 999px; background: #ffffff0d; color: var(--cinema-muted); font-size: .72rem; letter-spacing: .04em; text-transform: capitalize; }
+
+.chat-msg { display: flex; align-items: flex-end; gap: .5rem; max-width: min(78%, 34rem); }
+.chat-msg.group-start { margin-top: .55rem; }
+.chat-msg.mine { align-self: flex-end; }
+.chat-msg .chat-avatar { width: 2rem; font-size: .8rem; }
+.chat-avatar-gap { flex: none; width: 2rem; }
+.chat-bubble {
+  min-width: 0; padding: .5rem .8rem .4rem; border-radius: 18px;
+  background: #2a2023; border: 1px solid #ffffff0f;
+}
+.chat-bubble p { white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.4; }
+.chat-bubble time { display: block; text-align: end; margin-top: .1rem; font-size: .66rem; color: var(--cinema-muted); }
+.chat-author { display: block; margin-bottom: .1rem; font-size: .75rem; font-weight: 600; color: var(--cinema-gold); text-decoration: none; }
+.chat-msg.mine .chat-bubble { background: linear-gradient(135deg, var(--cinema-red-bright), var(--cinema-red)); border-color: transparent; color: #fff; }
+.chat-msg.mine .chat-bubble time { color: #ffffffb3; }
+/* Esquinas: los mensajes del mismo grupo se "pegan" y el último lleva la colita. */
+.chat-msg.theirs:not(.group-start) .chat-bubble { border-top-left-radius: 6px; }
+.chat-msg.theirs:not(.group-end) .chat-bubble { border-bottom-left-radius: 6px; }
+.chat-msg.theirs.group-end .chat-bubble { border-bottom-left-radius: 3px; }
+.chat-msg.mine:not(.group-start) .chat-bubble { border-top-right-radius: 6px; }
+.chat-msg.mine:not(.group-end) .chat-bubble { border-bottom-right-radius: 6px; }
+.chat-msg.mine.group-end .chat-bubble { border-bottom-right-radius: 3px; }
+.chat-msg.is-new { animation: chat-pop .32s cubic-bezier(.2, .9, .3, 1.25) both; transform-origin: bottom left; }
+.chat-msg.mine.is-new { transform-origin: bottom right; }
+.chat-msg.is-pending .chat-bubble { opacity: .6; }
+@keyframes chat-pop { from { opacity: 0; transform: translateY(10px) scale(.92); } }
+
+.chat-new-pill {
+  position: absolute; left: 50%; bottom: .75rem; translate: -50% 0;
+  display: inline-flex; align-items: center; gap: .35rem; cursor: pointer;
+  font: inherit; font-size: .8rem; font-weight: 600;
+  color: #1a1206; background: var(--cinema-gold); border: 0; border-radius: 999px; padding: .4rem .85rem;
+  box-shadow: 0 8px 20px #0008; animation: chat-pop .25s ease-out;
+}
+
+.chat-composer {
+  display: flex; align-items: flex-end; gap: .5rem; margin-top: .5rem; padding: .35rem .35rem .35rem .5rem;
+  background: var(--cinema-surface); border: 1px solid var(--cinema-line); border-radius: 26px;
+  transition: border-color .2s, box-shadow .2s;
+}
+.chat-composer:focus-within { border-color: color-mix(in srgb, var(--cinema-gold) 60%, transparent); box-shadow: 0 0 0 4px color-mix(in srgb, var(--cinema-gold) 12%, transparent); }
+.chat-composer textarea {
+  flex: 1; min-width: 0; max-height: 9rem; resize: none; overflow-y: auto;
+  padding: .6rem .5rem; border: 0; background: transparent; color: inherit; font: inherit; line-height: 1.4;
+}
+.cinema-shell .chat-composer textarea:focus-visible { outline: none; }
+.chat-composer textarea::placeholder { color: var(--cinema-muted); }
+.chat-counter { align-self: center; font-size: .75rem; color: var(--cinema-gold); font-variant-numeric: tabular-nums; }
+.chat-send {
+  flex: none; display: grid; place-items: center; width: 2.6rem; aspect-ratio: 1; border-radius: 50%; cursor: pointer;
+  border: 0; color: #fff; background: var(--cinema-red-bright);
+  transition: transform .15s ease, background-color .2s, opacity .2s;
+}
+.chat-send svg { width: 1.15rem; height: 1.15rem; transition: transform .2s ease; }
+.chat-send:not(:disabled):hover { background: var(--cinema-red-hover); transform: scale(1.06); }
+.chat-send:not(:disabled):hover svg { transform: translateX(2px) rotate(-12deg); }
+.chat-send:not(:disabled):active { transform: scale(.9); }
+.chat-send:disabled { background: #ffffff14; color: var(--cinema-muted); cursor: not-allowed; }
+.chat-login { margin-top: .75rem; text-align: center; }
+.chat-login a { color: var(--cinema-gold); }
+@media (max-width: 760px) {
+  .chat-room { height: clamp(24rem, calc(100dvh - 12.5rem), 60rem); padding-inline: .75rem; }
+  .chat-msg { max-width: 88%; }
 }

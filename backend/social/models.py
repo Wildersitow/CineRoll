@@ -349,3 +349,61 @@ class ComentarioResena(models.Model):
 
     def __str__(self):
         return f"{self.usuario} en reseña {self.resena_id}"
+
+
+LONGITUD_MAXIMA_MENSAJE = 2000
+
+
+class Mensaje(models.Model):
+    """Mensaje de chat: privado entre dos usuarios o en la sala pública de un título.
+
+    Cada mensaje va a un destinatario o a un título (media), nunca a los dos.
+    `envio` lo genera el navegador para cada envío: si la petición se repite
+    (doble clic, red lenta) no se duplica el mensaje.
+    """
+
+    autor = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="mensajes_enviados"
+    )
+    destinatario = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="mensajes_recibidos",
+        null=True,
+        blank=True,
+    )
+    media = models.ForeignKey(
+        "media.Media",
+        on_delete=models.CASCADE,
+        related_name="mensajes",
+        null=True,
+        blank=True,
+    )
+    texto = models.TextField(max_length=LONGITUD_MAXIMA_MENSAJE)
+    envio = models.UUIDField(null=True, blank=True)
+    fecha = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["id"]
+        verbose_name = "mensaje"
+        verbose_name_plural = "mensajes"
+        constraints = [
+            models.CheckConstraint(
+                condition=(
+                    models.Q(destinatario__isnull=False, media__isnull=True)
+                    | models.Q(destinatario__isnull=True, media__isnull=False)
+                ),
+                name="social_mensaje_un_destino",
+            ),
+            models.UniqueConstraint(
+                fields=["autor", "envio"], name="social_mensaje_envio_unico"
+            ),
+        ]
+        indexes = [
+            models.Index(fields=["autor", "destinatario", "id"], name="social_msj_privado_idx"),
+            models.Index(fields=["media", "id"], name="social_msj_sala_idx"),
+        ]
+
+    def __str__(self):
+        destino = f"@{self.destinatario}" if self.destinatario_id else f"sala {self.media_id}"
+        return f"{self.autor} → {destino}: {self.texto[:40]}"

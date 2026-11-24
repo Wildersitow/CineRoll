@@ -1,5 +1,6 @@
 from django.urls import path
 
+from social.chats import BandejaChatsView, ChatPrivadoView, SalaMediaView
 from social.seguimiento import (
     FeedActividadView,
     SeguidoresListView,
@@ -32,6 +33,14 @@ from social.views import (
 )
 
 urlpatterns = [
+    # Chat: bandeja, conversaciones privadas y sala de cada título
+    path("chats/", BandejaChatsView.as_view(), name="chats-bandeja"),
+    path(
+        "chats/usuarios/<str:username>/",
+        ChatPrivadoView.as_view(),
+        name="chat-privado",
+    ),
+    path("chats/media/<int:media_id>/", SalaMediaView.as_view(), name="chat-sala-media"),
     path("resenas/", ResenasListView.as_view(), name="resenas-list"),
     path(
         "media/<int:media_id>/resenas/propia/",
