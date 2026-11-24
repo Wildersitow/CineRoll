@@ -16,6 +16,7 @@ from social.views import (
     MediaResenaListCreateView,
     MediaResenaResumenView,
     MediaSugerenciaListCreateView,
+    MiRegistroMediaView,
     MiResenaMediaView,
     MisListasView,
     RechazarSugerenciaView,
@@ -68,6 +69,11 @@ urlpatterns = [
     ),
 
     # Endpoints de listas
+    path(
+        "media/<int:media_id>/mi-registro/",
+        MiRegistroMediaView.as_view(),
+        name="media-mi-registro",
+    ),
     path("listas/", ListaListCreateView.as_view(), name="lista-list-create"),
     path("listas/<int:pk>/", ListaDetailView.as_view(), name="lista-detail"),
     path(

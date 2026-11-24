@@ -6,6 +6,7 @@ from rest_framework.exceptions import ValidationError
 from social.models import (
     ElementoLista,
     Lista,
+    RegistroTitulo,
     ReporteResena,
     Resena,
     Seguimiento,
@@ -231,3 +232,11 @@ class ReporteResenaAdmin(admin.ModelAdmin):
             pk__in=queryset.values("resena_id"), oculta=False
         ).update(oculta=True)
         self.message_user(request, f"{cantidad} reseña(s) reportada(s) ocultada(s).")
+
+
+@admin.register(RegistroTitulo)
+class RegistroTituloAdmin(admin.ModelAdmin):
+    list_display = ("usuario", "media", "estado", "me_gusta", "fecha_actualizacion")
+    list_filter = ("estado", "me_gusta")
+    search_fields = ("usuario__username", "media__titulo")
+    raw_id_fields = ("usuario", "media")

@@ -23,7 +23,14 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from media.models import Media
-from social.models import ElementoLista, Lista, ReporteResena, Resena, SugerenciaEdicion
+from social.models import (
+    ElementoLista,
+    Lista,
+    RegistroTitulo,
+    ReporteResena,
+    Resena,
+    SugerenciaEdicion,
+)
 from social.serializers import (
     AgregarElementoSerializer,
     ElementoListaSerializer,
@@ -34,6 +41,7 @@ from social.serializers import (
     ResolverSugerenciaSerializer,
     SugerenciaEdicionSerializer,
 )
+from social.registro import actualizar_registro, datos_registro, registrar_resena
 from social.services import resumen_puntuacion
 from social.sugerencias import aprobar_sugerencia, rechazar_sugerencia
 from usuarios.permissions import EsAdministrador, EsAutorOLecturaPublica
@@ -86,6 +94,7 @@ class MediaResenaListCreateView(ListCreateAPIView):
         try:
             with transaction.atomic():
                 serializer.save(usuario=usuario, media=media)
+                registrar_resena(usuario, media)
         except IntegrityError:  # dos peticiones simultáneas del mismo usuario
             raise ValidationError({"detail": MENSAJE_RESENA_REPETIDA})
 
@@ -434,6 +443,48 @@ class MediaMisListasView(APIView):
                 "listas": list(listas_con_titulo),
             },
             status=status.HTTP_200_OK,
+        )
+
+
+class RegistroTituloSerializer(serializers.Serializer):
+    estado = serializers.ChoiceField(
+        choices=[("", "Sin estado"), *RegistroTitulo.Estado.choices], required=False
+    )
+    me_gusta = serializers.BooleanField(required=False)
+    pendiente = serializers.BooleanField(required=False)
+
+
+class MiRegistroMediaView(APIView):
+    """
+    GET /api/media/<media_id>/mi-registro/
+        {"media_id", "estado": ""|"visto"|"viendo", "me_gusta", "pendiente"}
+    PATCH con cualquiera de estado, me_gusta o pendiente; responde igual que GET.
+    "pendiente" equivale a estar en la lista Por ver del usuario.
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, media_id):
+        media = get_object_or_404(Media, pk=media_id)
+        return Response(datos_registro(request.user, media))
+
+    def patch(self, request, media_id):
+        media = get_object_or_404(Media, pk=media_id)
+        serializer = RegistroTituloSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        if not serializer.validated_data:
+            raise ValidationError(
+                {"detail": "Envía al menos uno de: estado, me_gusta, pendiente."}
+            )
+        if (
+            serializer.validated_data.get("estado")
+            and media.estado == Media.Estado.PROXIMO_ESTRENO
+        ):
+            raise ValidationError(
+                {"estado": "Aún no se estrena: puedes dejarlo pendiente o darle me gusta."}
+            )
+        return Response(
+            actualizar_registro(request.user, media, serializer.validated_data)
         )
 
 

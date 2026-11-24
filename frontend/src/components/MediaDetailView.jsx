@@ -12,10 +12,11 @@ const fechaFuncion = new Intl.DateTimeFormat('es-CO', {
   timeZone: 'America/Bogota',
 })
 
+/** Tarifas de una función, solo si el cine las publicó. */
 function Prices({ show }) {
-  if (!show.tarifas?.length) return <p>Precio no publicado. {show.cine.sitio_web && <a href={show.cine.sitio_web}>Consultar al cine</a>}</p>
-  return <p>{show.tarifas.map(tarifa => {
-    const price = new Intl.NumberFormat('es-CO', { style: 'currency', currency: tarifa.moneda }).format(tarifa.importe)
+  if (!show.tarifas?.length) return null
+  return <p className="show-prices">{show.tarifas.map(tarifa => {
+    const price = new Intl.NumberFormat('es-CO', { style: 'currency', currency: tarifa.moneda, maximumFractionDigits: 0 }).format(tarifa.importe)
     return [tarifa.nombre, price].filter(Boolean).join(' ')
   }).join(' · ')}</p>
 }
@@ -28,6 +29,8 @@ export default function MediaDetailView({ user }) {
   const city = query.get('ciudad')
   const [result, setResult] = useState(null)
   const [attempt, setAttempt] = useState(0)
+  // Recarga en segundo plano (tras reseñar) sin volver a mostrar el esqueleto.
+  const [recarga, setRecarga] = useState(0)
   const cine = query.get('cine')
   const page = Math.max(1, Number(query.get('resenas')) || 1)
   const key = JSON.stringify([id, date, cine, page, attempt, user?.username])
@@ -56,7 +59,7 @@ export default function MediaDetailView({ user }) {
       )
     }
     return () => controller.abort()
-  }, [id, date, cine, page, key])
+  }, [id, date, cine, page, key, recarga])
 
   const current = result?.key === key ? result : null
   const retry = () => setAttempt((value) => value + 1)
@@ -93,9 +96,10 @@ export default function MediaDetailView({ user }) {
         {media.directores?.length > 0 && <p>Dirección: {media.directores.map(({ nombre }) => nombre).join(', ')}</p>}
         {media.reparto?.length > 0 && <p>Reparto: {media.reparto.map(({ nombre }) => nombre).join(', ')}</p>}
         {media.trailer_url && <p><a href={media.trailer_url}>Ver tráiler</a></p>}
-        <FilmActions key={media.id + (user?.username || '')} media={media} user={user} refresh={retry} />
-        <section className="cinema-section">
-          <h2>{query.get('accion') === 'precios' ? 'Precios por función' : 'Funciones'}</h2>
+        <FilmActions key={media.id + (user?.username || '')} media={media} user={user} refresh={() => setRecarga((value) => value + 1)} />
+        {/* Las series y el anime no se proyectan en cines, así que no tienen funciones. */}
+        {media.tipo === 'pelicula' && <section className="cinema-section">
+          <h2>Funciones</h2>
           {!current.funciones && <p role="status">Cargando horarios…</p>}
           {current.funciones?.status === 'rejected' && <CinemaState error={current.funciones.value} title="No pudimos consultar los horarios." retry={retry} />}
           {current.funciones?.status === 'fulfilled' && !funciones.length && <p>{fromCinemas ? 'No hay funciones para esta selección.' : 'No hay funciones próximas para este título.'}</p>}
@@ -107,12 +111,12 @@ export default function MediaDetailView({ user }) {
                 <li key={show.id}>
                   <time dateTime={show.fecha_hora}>{fechaFuncion.format(new Date(show.fecha_hora))}</time>
                   <small>{[show.formato, show.sala].filter(Boolean).join(' · ')}</small>
-                  {query.get('accion') === 'precios' && <Prices show={show} />}
+                  <Prices show={show} />
                 </li>
               ))}</ul>
             </div>
           ))}
-        </section>
+        </section>}
         <section className="cinema-section">
           <h2>Reseñas de la comunidad</h2>
           {!current.resenas && <p role="status">Cargando reseñas…</p>}

@@ -266,3 +266,37 @@ class SugerenciaEdicion(models.Model):
     def __str__(self):
         return f"Sugerencia de {self.usuario} sobre {self.media} ({self.campo})"
 
+
+
+class RegistroTitulo(models.Model):
+    """
+    Cómo lleva un usuario un título: si ya lo vio o lo está viendo, y si le gustó.
+    "Pendiente" no se guarda aquí: es estar en la lista Por ver del usuario.
+    """
+
+    class Estado(models.TextChoices):
+        VISTO = "visto", "Visto"
+        VIENDO = "viendo", "Viendo"
+
+    usuario = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="registros"
+    )
+    media = models.ForeignKey(
+        "media.Media", on_delete=models.CASCADE, related_name="registros"
+    )
+    estado = models.CharField(max_length=10, choices=Estado.choices, blank=True)
+    me_gusta = models.BooleanField(default=False)
+    fecha_actualizacion = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-fecha_actualizacion", "-id"]
+        verbose_name = "registro de título"
+        verbose_name_plural = "registros de títulos"
+        constraints = [
+            models.UniqueConstraint(
+                fields=["usuario", "media"], name="social_registro_unico"
+            ),
+        ]
+
+    def __str__(self):
+        return f"{self.usuario} · {self.media}: {self.estado or 'sin estado'}"

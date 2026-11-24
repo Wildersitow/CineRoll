@@ -581,6 +581,19 @@ export function notifySessionExpired() {
   }
 }
 
+/** Estado del título para el usuario: { estado: ''|'visto'|'viendo', me_gusta, pendiente }. */
+export async function getMiRegistro(mediaId) {
+  return leerJson(`/media/${mediaId}/mi-registro/`, 'Error al consultar tu registro de este título.');
+}
+
+/** Cambia cualquiera de estado, me_gusta o pendiente y devuelve el registro actualizado. */
+export async function actualizarRegistro(mediaId, cambios) {
+  return leerJson(`/media/${mediaId}/mi-registro/`, {
+    method: 'PATCH',
+    body: JSON.stringify(cambios),
+  }, 'No pudimos guardar el cambio.');
+}
+
 export async function getMisListasDeMedia(mediaId) {
   return leerJson(`/media/${mediaId}/mis-listas/`, 'Error al consultar las listas para este título.');
 }
