@@ -89,6 +89,13 @@ describe('FilmActions', () => {
     expect(screen.getByRole('status')).toHaveTextContent('Reseña publicada.')
   })
 
+  it('la ventana de reseña se monta en <body>, fuera del panel lateral', async () => {
+    const { container } = renderActions(pelicula, '/media/7?accion=reseña')
+    const dialogo = await screen.findByRole('dialog', { name: 'Lo vi…' })
+    expect(container).not.toContainElement(dialogo)
+    expect(dialogo.closest('.review-modal-backdrop').parentElement).toBe(document.body)
+  })
+
   it('al elegir estrellas en el panel se abre la reseña con esa nota', async () => {
     renderActions()
     const calificar = await screen.findByRole('radiogroup', { name: 'Calificar' })
