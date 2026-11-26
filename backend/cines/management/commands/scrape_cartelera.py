@@ -22,12 +22,21 @@ class Command(BaseCommand):
             choices=tuple(CITY_PROVIDER_KEYS),
             help="Ciudad canónica (por defecto: bogota).",
         )
+        parser.add_argument(
+            "--sin-crear-peliculas",
+            action="store_true",
+            help=(
+                "No crea fichas para los títulos que no están en el catálogo; "
+                "los deja pendientes de revisión como antes."
+            ),
+        )
 
     def handle(self, *_args, **options):
         try:
             result = scrape_and_save_cartelera(
                 cinema_provider=options["cine"],
                 city_slug=options["ciudad"],
+                crear_peliculas=False if options["sin_crear_peliculas"] else None,
             )
         except (ScraperError, ValueError) as exc:
             raise CommandError(str(exc)) from exc
@@ -39,6 +48,7 @@ class Command(BaseCommand):
                 f"{result.funciones_asociadas} asociadas al catálogo, "
                 f"{result.funciones_creadas} guardadas, "
                 f"{result.funciones_actualizadas} actualizadas, "
+                f"{result.peliculas_creadas} películas creadas automáticamente, "
                 f"{result.titulos_pendientes} pendientes de revisión, "
                 f"{result.peliculas_en_cartelera} películas pasadas a 'en cartelera', "
                 f"{result.estrenos_leidos} próximos estrenos leídos, "
@@ -50,6 +60,11 @@ class Command(BaseCommand):
                 "'fuera de cartelera'."
             )
         )
+
+        if result.peliculas_creadas_mostrar:
+            self.stdout.write("Películas creadas automáticamente (revísalas en el admin):")
+            for title in result.peliculas_creadas_mostrar:
+                self.stdout.write(f"  {title}")
 
         if result.estrenos_sin_coincidencia:
             self.stdout.write("Próximos estrenos sin coincidencia en Media:")

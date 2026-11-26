@@ -41,6 +41,16 @@ class Media(models.Model):
 		choices=Estado.choices,
 		default=Estado.PROXIMO_ESTRENO,
 	)
+	tmdb_id = models.PositiveIntegerField(
+		blank=True,
+		null=True,
+		unique=True,
+		help_text="Identificador en TMDB; evita crear la misma película dos veces.",
+	)
+	creado_automaticamente = models.BooleanField(
+		default=False,
+		help_text="Creada por el scraper de cartelera; conviene revisar sus datos.",
+	)
 	generos = models.ManyToManyField(Genero, related_name="medias", blank=True)
 	personas = models.ManyToManyField(
 		"Persona", through="Credito", related_name="medias", blank=True

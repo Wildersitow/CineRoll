@@ -93,8 +93,12 @@ class ScrapeCarteleraCommandTests(TestCase):
     def test_unknown_title_is_recorded_for_manual_review(self, scrape):
         scrape.return_value = self.cartelera
 
-        call_command("scrape_cartelera", cine="cinemark", ciudad="bogota")
-        call_command("scrape_cartelera", cine="cinemark", ciudad="bogota")
+        call_command(
+            "scrape_cartelera", cine="cinemark", ciudad="bogota", sin_crear_peliculas=True
+        )
+        call_command(
+            "scrape_cartelera", cine="cinemark", ciudad="bogota", sin_crear_peliculas=True
+        )
 
         self.assertEqual(Funcion.objects.count(), 0)
         self.assertEqual(Cine.objects.count(), 0)
@@ -112,7 +116,9 @@ class ScrapeCarteleraCommandTests(TestCase):
             tipo=Media.Tipo.PELICULA,
         )
 
-        call_command("scrape_cartelera", cine="cinemark", ciudad="bogota")
+        call_command(
+            "scrape_cartelera", cine="cinemark", ciudad="bogota", sin_crear_peliculas=True
+        )
         self.assertEqual(Funcion.objects.count(), 0)
 
         TituloPendiente.objects.update(
@@ -381,7 +387,9 @@ class ScrapeCarteleraCommandTests(TestCase):
             estado=Media.Estado.FUERA_CARTELERA,
         )
 
-        call_command("scrape_cartelera", cine="cinemark", ciudad="bogota")
+        call_command(
+            "scrape_cartelera", cine="cinemark", ciudad="bogota", sin_crear_peliculas=True
+        )
 
         media.refresh_from_db()
         self.assertEqual(media.fecha_estreno, date(2026, 12, 17))
@@ -416,7 +424,9 @@ class ScrapeCarteleraCommandTests(TestCase):
             stdout=output,
         )
 
-        scrape.assert_called_once_with(cinema_provider="cinemark", city_slug="BOGOTA")
+        scrape.assert_called_once_with(
+            cinema_provider="cinemark", city_slug="BOGOTA", crear_peliculas=None
+        )
         self.assertIn("10 funciones leídas", output.getvalue())
         self.assertIn("0 funciones futuras obsoletas eliminadas", output.getvalue())
         self.assertIn("Película sin catálogo", output.getvalue())

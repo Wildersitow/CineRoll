@@ -1,5 +1,6 @@
+from collections import Counter
 from collections.abc import Iterable, Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import date, datetime, time
 import logging
 import unicodedata
@@ -7,12 +8,16 @@ import re
 from typing import Callable, NotRequired, TypedDict
 from zoneinfo import ZoneInfo
 
+from decouple import config
+from django.conf import settings
 from django.db import transaction
-from django.db.models import Exists, F, OuterRef, QuerySet
+from django.db.models import Exists, F, OuterRef, Q, QuerySet
 from django.utils import timezone
 
+from cines import tmdb
+from cines.metadata import MovieMetadata, merge_metadata
 from cines.models import Cine, Funcion, TituloPendiente
-from media.models import Media
+from media.models import Credito, Genero, Media, Persona
 
 
 COLOMBIA_TIMEZONE = ZoneInfo("America/Bogota")
@@ -28,25 +33,52 @@ logger = logging.getLogger(__name__)
 TITLE_QUALIFIERS = {
     "2d",
     "3d",
+    "4d",
     "4dx",
     "atmos",
+    "castellano",
+    "dbox",
     "dob",
     "doblada",
     "doblado",
-    "dublado",
+    "doblaje",
+    "dolby",
+    "dub",
     "dublada",
+    "dublado",
+    "eng",
+    "esp",
     "espanol",
-    "castellano",
     "hd",
     "imax",
+    "ingles",
     "lat",
     "latino",
+    "premium",
+    "screenx",
     "sub",
+    "subs",
+    "subt",
     "subtitulada",
     "subtitulado",
+    "subtitulos",
+    "vip",
+    "vo",
+    "vos",
     "vose",
     "xd",
+    "xe",
 }
+# Palabras que algunos cines ponen delante del título ("PREVENTA - Avengers").
+LEADING_TITLE_QUALIFIERS = {"preventa"}
+SMALL_TITLE_WORDS = {
+    "a", "al", "and", "con", "de", "del", "el", "en", "for", "in", "la", "las",
+    "los", "of", "on", "para", "por", "the", "to", "un", "una", "vs", "y",
+}
+# Separador entre título y subtítulo: "Hechizo: Bienvenidos a Hexe".
+SUBTITLE_SEPARATOR = re.compile(r"\s*:\s*|\s+[-–—]\s+")
+MIN_FALLBACK_KEY_LENGTH = 4
+MAX_TMDB_LOOKUPS = 60
 
 class ScraperError(RuntimeError):
     pass
@@ -76,6 +108,8 @@ class UpcomingRelease(TypedDict):
 class CarteleraData:
     funciones: list[NormalizedShowtime]
     proximos_estrenos: list[UpcomingRelease]
+    # Datos de cada película que publica el cine, por título normalizado.
+    peliculas: dict[str, MovieMetadata] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -159,6 +193,8 @@ class CarteleraScrapeResult:
     titulos_pendientes_mostrar: tuple[str, ...]
     funciones_obsoletas_eliminadas: int = 0
     advertencia: str = ""
+    peliculas_creadas: int = 0
+    peliculas_creadas_mostrar: tuple[str, ...] = ()
 
 
 def _fold_tokens(text: str) -> list[str]:
@@ -174,7 +210,20 @@ def normalize_title(title: str) -> str:
     tokens = _fold_tokens(title)
     while tokens and tokens[-1] in TITLE_QUALIFIERS:
         tokens.pop()
+    while len(tokens) > 1 and tokens[0] in LEADING_TITLE_QUALIFIERS:
+        tokens.pop(0)
     return " ".join(tokens)
+
+
+def main_title_key(title: str) -> str | None:
+    """Título sin subtítulo, normalizado; None si el título no tiene subtítulo."""
+    parts = SUBTITLE_SEPARATOR.split(title.strip(), maxsplit=1)
+    if len(parts) < 2:
+        return None
+    main = normalize_title(parts[0])
+    if not main or not normalize_title(parts[1]) or main == normalize_title(title):
+        return None
+    return main
 
 
 def normalize_city(city: str) -> str:
@@ -195,6 +244,54 @@ def format_display_title(raw_title: str, normalized_title: str) -> str:
     if normalize_title(title) != normalized_title:
         return normalized_title
     return title
+
+
+def pretty_title(raw_title: str) -> str:
+    """Título para mostrar: sin sufijos de formato y sin TODO EN MAYÚSCULAS."""
+    tokens = list(re.finditer(r"[^\W_]+", raw_title))
+    while tokens and all(
+        part in TITLE_QUALIFIERS for part in _fold_tokens(tokens[-1].group())
+    ):
+        tokens.pop()
+    start = 0
+    while len(tokens) > 1 and _fold_tokens(tokens[0].group()) == ["preventa"]:
+        tokens.pop(0)
+        start = tokens[0].start()
+    if not tokens:
+        return _clean_text(raw_title)
+    title = raw_title[start: tokens[-1].end()].strip(" -–—:")
+    title = re.sub(r"\s*\(\s*$", "", _clean_text(title))
+    if title.upper() != title:
+        return title
+    return _title_case(title)
+
+
+def _title_case(text: str) -> str:
+    words = text.lower().split(" ")
+    result: list[str] = []
+    capitalize_next = True
+    for word in words:
+        letters = re.sub(r"[^\w]", "", word)
+        if (
+            letters
+            and letters not in SMALL_TITLE_WORDS
+            and not re.search(r"[aeiouyáéíóú]", letters)
+            and not letters.isdigit()
+        ):
+            # Siglas como "BTS" o "LV".
+            formatted = word.upper()
+        elif re.fullmatch(r"[ivxlcdm]+", letters) and len(letters) <= 4 and not capitalize_next:
+            formatted = word.upper()
+        elif capitalize_next or letters not in SMALL_TITLE_WORDS:
+            index = next((i for i, ch in enumerate(word) if ch.isalpha()), None)
+            formatted = (
+                word if index is None else word[:index] + word[index].upper() + word[index + 1:]
+            )
+        else:
+            formatted = word
+        result.append(formatted)
+        capitalize_next = word.endswith((":", ".", "?", "!", "¿", "¡")) or word in {"-", "–", "—"}
+    return " ".join(result)
 
 
 def build_media_index(catalog: Iterable[Media]) -> MediaIndex:
@@ -241,11 +338,113 @@ def match_media_title(
         return None
     return next(iter(matches.values()))
 
+@dataclass
+class _NewTitle:
+    """Título sin ficha en el catálogo, con todas sus variantes de esta corrida."""
+
+    key: str
+    titles: list[str] = field(default_factory=list)
+    alternates: list[str] = field(default_factory=list)
+    metadata: MovieMetadata = field(default_factory=dict)
+    release_date: date | None = None
+    first_showtime: date | None = None
+    has_showtimes: bool = False
+
+
+class _Catalog:
+    """Índices del catálogo de películas que se actualizan durante la corrida."""
+
+    def __init__(self, movies: Iterable[Media], aliases: dict[str, Media]):
+        self.index: MediaIndex = {}
+        self.main_index: MediaIndex = {}
+        self.plain_index: MediaIndex = {}
+        self.by_tmdb: dict[int, Media] = {}
+        self.aliases = dict(aliases)
+        for movie in movies:
+            self.add(movie)
+
+    def add(self, movie: Media) -> None:
+        if movie.tmdb_id:
+            self.by_tmdb[movie.tmdb_id] = movie
+        active = movie.estado != Media.Estado.FUERA_CARTELERA
+        for value in (movie.titulo, movie.titulo_original):
+            if not value:
+                continue
+            normalized = normalize_title(value)
+            if not normalized:
+                continue
+            self.index.setdefault(normalized, {})[movie.pk] = movie
+            if not active:
+                continue
+            main = main_title_key(value)
+            if main is None:
+                self.plain_index.setdefault(normalized, {})[movie.pk] = movie
+            else:
+                self.main_index.setdefault(main, {})[movie.pk] = movie
+
+    def add_alias(self, normalized: str, movie: Media) -> None:
+        if normalized and not self.is_direct(normalized, movie):
+            self.aliases[normalized] = movie
+
+    def is_direct(self, normalized: str, movie: Media) -> bool:
+        return movie.pk in self.index.get(normalized, {})
+
+    def resolve(
+        self,
+        title: str,
+        alternate_title: str | None = None,
+    ) -> tuple[Media | None, bool]:
+        """Devuelve (película, ambigua). Ambigua = varias fichas posibles."""
+        raw_titles = [value for value in (title, alternate_title) if value]
+        keys = {normalize_title(value) for value in raw_titles} - {""}
+        if not keys:
+            return None, False
+
+        matches: dict[int, Media] = {}
+        for key in keys:
+            matches.update(self.index.get(key, {}))
+        if len(matches) == 1:
+            return next(iter(matches.values())), False
+
+        for key in keys:
+            if key in self.aliases:
+                return self.aliases[key], False
+        if matches:
+            return None, True
+
+        # "Hechizo" ↔ "Hechizo: Bienvenidos a Hexe" solo entre películas vigentes.
+        fallback: dict[int, Media] = {}
+        for value in raw_titles:
+            main = main_title_key(value)
+            if main is None:
+                full = normalize_title(value)
+                if len(full) >= MIN_FALLBACK_KEY_LENGTH:
+                    fallback.update(self.main_index.get(full, {}))
+            elif len(main) >= MIN_FALLBACK_KEY_LENGTH:
+                fallback.update(self.plain_index.get(main, {}))
+        if len(fallback) == 1:
+            return next(iter(fallback.values())), False
+        return None, len(fallback) > 1
+
+
+def auto_create_enabled() -> bool:
+    value = getattr(settings, "CARTELERA_CREAR_PELICULAS", None)
+    if value is None:
+        return config("CARTELERA_CREAR_PELICULAS", default=True, cast=bool)
+    return bool(value)
+
+
 def scrape_and_save_cartelera(
     cinema_provider: str,
     city_slug: str = "bogota",
+    crear_peliculas: bool | None = None,
 ) -> CarteleraScrapeResult:
-    """Scrape, match, persist, and clean one cinema's showtimes."""
+    """Scrape, match, persist, and clean one cinema's showtimes.
+
+    Con ``crear_peliculas`` (por defecto, el ajuste CARTELERA_CREAR_PELICULAS,
+    activo si no se define) los títulos sin ficha en el catálogo se crean con los
+    datos del cine y, si hay TMDB_API_KEY, con los de TMDB.
+    """
     city_slug = city_slug.strip().lower()
     try:
         scraper_config = SCRAPERS[cinema_provider]
@@ -263,6 +462,8 @@ def scrape_and_save_cartelera(
             f"No existe configuración de '{cinema_provider}' para la ciudad "
             f"'{city_slug}'."
         )
+    if crear_peliculas is None:
+        crear_peliculas = auto_create_enabled()
 
     cartelera = scraper_config.scrape(provider_city_key)
     website = scraper_config.website
@@ -276,9 +477,27 @@ def scrape_and_save_cartelera(
         {**record, "ciudad": city_slug}
         for record in cartelera.funciones
     ]
-    movies = list(Media.objects.filter(tipo=Media.Tipo.PELICULA))
-    manual_matches = _build_manual_matches()
+    catalog = _Catalog(
+        Media.objects.filter(tipo=Media.Tipo.PELICULA),
+        _build_manual_matches(),
+    )
+    # Fichas de otros tipos con tmdb_id también cuentan, para no repetir el id.
+    for other in Media.objects.exclude(tipo=Media.Tipo.PELICULA).exclude(tmdb_id=None):
+        catalog.by_tmdb[other.tmdb_id] = other
     ignored_titles = _build_ignored_titles()
+
+    new_titles: dict[str, _NewTitle] = {}
+    tmdb_results: dict[str, tmdb.TmdbPelicula | None] = {}
+    if crear_peliculas:
+        new_titles = _collect_new_titles(cartelera, records, catalog, ignored_titles)
+        # Las consultas a TMDB se hacen antes de abrir la transacción.
+        if tmdb.configurado():
+            for key, new_title in list(new_titles.items())[:MAX_TMDB_LOOKUPS]:
+                tmdb_results[key] = tmdb.buscar_pelicula(
+                    new_title.titles + new_title.alternates,
+                    normalize_title,
+                )
+
     matched = 0
     pending = 0
     created_functions = 0
@@ -291,10 +510,36 @@ def scrape_and_save_cartelera(
     expected_future_functions: set[tuple[int, int, datetime, str, str]] = set()
     obsolete_functions_deleted = 0
     synchronization_warning: str | None = None
+    created_media: list[Media] = []
+    remembered_aliases: set[tuple[str, str, str]] = set()
 
     with transaction.atomic():
+        for new_title in new_titles.values():
+            media, created = _resolve_or_create_media(
+                new_title, catalog, tmdb_results.get(new_title.key)
+            )
+            if media is None:
+                continue
+            if created:
+                created_media.append(media)
+            keys = {
+                normalize_title(value)
+                for value in new_title.titles + new_title.alternates
+            } - {""}
+            for key in keys:
+                catalog.add_alias(key, media)
+            # Los títulos pendientes de cualquier cine quedan resueltos con la nueva ficha.
+            TituloPendiente.objects.filter(
+                titulo_normalizado__in=keys,
+                estado=TituloPendiente.Estado.PENDIENTE,
+            ).update(
+                estado=TituloPendiente.Estado.RESUELTO,
+                media_asociada=media,
+                ultima_deteccion=timezone.now(),
+            )
+
         for release in cartelera.proximos_estrenos:
-            media = match_media_title(release["titulo"], movies)
+            media, _ambiguous = catalog.resolve(release["titulo"])
             if media is None:
                 unmatched_releases.append(release["titulo"])
                 continue
@@ -304,28 +549,22 @@ def scrape_and_save_cartelera(
             matched_releases += 1
 
         for record in records:
-            ignored_key = (
-                normalize_title(record["titulo"]),
-                record["cine"],
-                record["ciudad"],
-            )
+            normalized = normalize_title(record["titulo"])
+            ignored_key = (normalized, record["cine"], record["ciudad"])
             if ignored_key in ignored_titles:
                 continue
 
-            media = match_media_title(
+            media, _ambiguous = catalog.resolve(
                 record["titulo"],
-                movies,
                 alternate_title=record.get("titulo_alternativo"),
             )
-            if media is None:
-                media = manual_matches.get(normalize_title(record["titulo"]))
             if media is None:
                 _record_pending(record)
                 pending += 1
                 continue
 
             TituloPendiente.objects.filter(
-                titulo_normalizado=normalize_title(record["titulo"]),
+                Q(titulo_normalizado=normalized) | Q(titulo_original=record["titulo"]),
                 cine_nombre=record["cine"],
                 ciudad=record["ciudad"],
                 estado=TituloPendiente.Estado.PENDIENTE,
@@ -334,6 +573,22 @@ def scrape_and_save_cartelera(
                 media_asociada=media,
                 ultima_deteccion=timezone.now(),
             )
+            alias_key = (normalized, record["cine"], record["ciudad"])
+            if (
+                normalized
+                and alias_key not in remembered_aliases
+                and not catalog.is_direct(normalized, media)
+                and not (
+                    record.get("titulo_alternativo")
+                    and catalog.is_direct(
+                        normalize_title(record["titulo_alternativo"]), media
+                    )
+                )
+            ):
+                # Guarda la equivalencia para no volver a buscarla (ni gastar TMDB).
+                _remember_alias(record, normalized, media)
+                remembered_aliases.add(alias_key)
+
             cinema = _get_or_create_cinema(record, cinema_cache, website)
             scheduled_at = datetime.combine(record["fecha"], record["hora"])
             _, created = Funcion.objects.update_or_create(
@@ -404,25 +659,227 @@ def scrape_and_save_cartelera(
     )
 
     return CarteleraScrapeResult(
-    cine=cinema_provider,
-    ciudad=city_slug,
-    funciones_leidas=len(records),
-    funciones_asociadas=matched,
-    funciones_creadas=created_functions,
-    funciones_actualizadas=updated_functions,
-    titulos_pendientes=pending,
-    peliculas_en_cartelera=now_showing,
-    estrenos_leidos=len(cartelera.proximos_estrenos),
-    estrenos_asociados=matched_releases,
-    funciones_vencidas_eliminadas=deleted_functions,
-    peliculas_fuera_cartelera=expired_media,
-    estrenos_sin_coincidencia=tuple(unmatched_releases),
-    titulos_pendientes_mostrar=tuple(
-        f"#{item.pk} {item.titulo_original} — {item.cine_nombre} ({item.ciudad})"
-        for item in pending_titles
-    ),
-    funciones_obsoletas_eliminadas=obsolete_functions_deleted,
-    advertencia=synchronization_warning or "",
+        cine=cinema_provider,
+        ciudad=city_slug,
+        funciones_leidas=len(records),
+        funciones_asociadas=matched,
+        funciones_creadas=created_functions,
+        funciones_actualizadas=updated_functions,
+        titulos_pendientes=pending,
+        peliculas_en_cartelera=now_showing,
+        estrenos_leidos=len(cartelera.proximos_estrenos),
+        estrenos_asociados=matched_releases,
+        funciones_vencidas_eliminadas=deleted_functions,
+        peliculas_fuera_cartelera=expired_media,
+        estrenos_sin_coincidencia=tuple(unmatched_releases),
+        titulos_pendientes_mostrar=tuple(
+            f"#{item.pk} {item.titulo_original} — {item.cine_nombre} ({item.ciudad})"
+            for item in pending_titles
+        ),
+        funciones_obsoletas_eliminadas=obsolete_functions_deleted,
+        advertencia=synchronization_warning or "",
+        peliculas_creadas=len(created_media),
+        peliculas_creadas_mostrar=tuple(
+            f"#{media.pk} {media.titulo}"
+            + (" (con datos de TMDB)" if media.tmdb_id else "")
+            for media in created_media
+        ),
+    )
+
+
+def _collect_new_titles(
+    cartelera: CarteleraData,
+    records: list[NormalizedShowtime],
+    catalog: _Catalog,
+    ignored_titles: set[tuple[str, str, str]],
+) -> dict[str, _NewTitle]:
+    """Agrupa los títulos sin ficha; las variantes que normalizan igual van juntas."""
+    new_titles: dict[str, _NewTitle] = {}
+
+    def collect(title: str, alternate: str | None) -> _NewTitle | None:
+        media, ambiguous = catalog.resolve(title, alternate)
+        if media is not None or ambiguous:
+            return None
+        key = normalize_title(title)
+        if not key:
+            return None
+        group = new_titles.setdefault(key, _NewTitle(key=key))
+        if title not in group.titles:
+            group.titles.append(title)
+        if alternate and alternate not in group.alternates:
+            group.alternates.append(alternate)
+        for candidate in (title, alternate):
+            if candidate:
+                group.metadata = merge_metadata(
+                    group.metadata,
+                    cartelera.peliculas.get(normalize_title(candidate)),
+                )
+        return group
+
+    for release in cartelera.proximos_estrenos:
+        group = collect(release["titulo"], None)
+        if group is not None and group.release_date is None:
+            group.release_date = release["fecha_estreno"]
+
+    for record in records:
+        ignored_key = (normalize_title(record["titulo"]), record["cine"], record["ciudad"])
+        if ignored_key in ignored_titles:
+            continue
+        group = collect(record["titulo"], record.get("titulo_alternativo"))
+        if group is not None:
+            group.has_showtimes = True
+            if group.first_showtime is None or record["fecha"] < group.first_showtime:
+                group.first_showtime = record["fecha"]
+    return new_titles
+
+
+def _resolve_or_create_media(
+    new_title: _NewTitle,
+    catalog: _Catalog,
+    tmdb_movie: "tmdb.TmdbPelicula | None",
+) -> tuple[Media | None, bool]:
+    """Busca otra vez (puede haberse creado en esta corrida) y si no, crea la ficha."""
+    for title in new_title.titles:
+        alternate = new_title.alternates[0] if new_title.alternates else None
+        media, ambiguous = catalog.resolve(title, alternate)
+        if media is not None:
+            return media, False
+        if ambiguous:
+            return None, False
+
+    if tmdb_movie is not None:
+        existing = catalog.by_tmdb.get(tmdb_movie.tmdb_id)
+        if existing is not None:
+            return existing, False
+        # El catálogo puede tenerla con el título que usa TMDB, aún sin tmdb_id.
+        existing, ambiguous = catalog.resolve(
+            tmdb_movie.titulo, tmdb_movie.titulo_original or None
+        )
+        if ambiguous:
+            return None, False
+        if existing is not None:
+            if existing.tmdb_id is None:
+                existing.tmdb_id = tmdb_movie.tmdb_id
+                existing.save(update_fields=["tmdb_id"])
+                catalog.by_tmdb[tmdb_movie.tmdb_id] = existing
+            return existing, False
+
+    media = _create_media(new_title, tmdb_movie)
+    catalog.add(media)
+    return media, True
+
+
+def _create_media(
+    new_title: _NewTitle,
+    tmdb_movie: "tmdb.TmdbPelicula | None",
+) -> Media:
+    metadata = new_title.metadata
+    display_titles = [pretty_title(title) for title in new_title.titles]
+    # Si algún cine escribe el título con mayúsculas y minúsculas, se prefiere ese.
+    mixed = [title for title, raw in zip(display_titles, new_title.titles) if raw.upper() != raw]
+    titulo = Counter(mixed or display_titles).most_common(1)[0][0]
+    titulo_original = next(
+        (
+            pretty_title(alternate)
+            for alternate in new_title.alternates
+            if normalize_title(alternate) != new_title.key
+        ),
+        "",
+    )
+    sinopsis = metadata.get("sinopsis", "")
+    duracion = metadata.get("duracion")
+    poster_url = metadata.get("poster_url", "")
+    trailer_url = metadata.get("trailer_url", "")
+    backdrop_url = ""
+    fecha_estreno = new_title.release_date or metadata.get("fecha_estreno")
+    generos = list(metadata.get("generos", []))
+    directores: tuple[str, ...] = ()
+    actores: tuple[str, ...] = ()
+
+    if tmdb_movie is not None:
+        titulo = tmdb_movie.titulo or titulo
+        if tmdb_movie.titulo_original and normalize_title(
+            tmdb_movie.titulo_original
+        ) != normalize_title(titulo):
+            titulo_original = tmdb_movie.titulo_original
+        elif normalize_title(titulo_original) == normalize_title(titulo):
+            titulo_original = ""
+        sinopsis = tmdb_movie.sinopsis or sinopsis
+        duracion = tmdb_movie.duracion or duracion
+        poster_url = tmdb_movie.poster_url or poster_url
+        backdrop_url = tmdb_movie.backdrop_url
+        trailer_url = tmdb_movie.trailer_url or trailer_url
+        fecha_estreno = fecha_estreno or tmdb_movie.fecha_estreno
+        generos = list(tmdb_movie.generos) or generos
+        directores = tmdb_movie.directores
+        actores = tmdb_movie.actores
+
+    # Con funciones ya publicadas, la película no puede estrenarse después de la primera.
+    if (
+        new_title.first_showtime
+        and fecha_estreno
+        and fecha_estreno > new_title.first_showtime
+    ):
+        fecha_estreno = new_title.first_showtime
+
+    media = Media.objects.create(
+        titulo=_truncate(titulo, TITLE_MAX_LENGTH),
+        titulo_original=_truncate(titulo_original, TITLE_MAX_LENGTH),
+        tipo=Media.Tipo.PELICULA,
+        sinopsis=sinopsis,
+        duracion=duracion if duracion and 0 < duracion < 32767 else None,
+        poster_url=poster_url,
+        backdrop_url=backdrop_url,
+        trailer_url=trailer_url,
+        fecha_estreno=fecha_estreno,
+        estado=Media.Estado.PROXIMO_ESTRENO,
+        tmdb_id=tmdb_movie.tmdb_id if tmdb_movie else None,
+        creado_automaticamente=True,
+    )
+    apply_genres_and_credits(media, generos, directores, actores)
+    logger.info("Película creada desde la cartelera: %s (#%s)", media.titulo, media.pk)
+    return media
+
+
+def apply_genres_and_credits(
+    media: Media,
+    generos: Iterable[str],
+    directores: Iterable[str] = (),
+    actores: Iterable[str] = (),
+) -> None:
+    genre_field_length = Genero._meta.get_field("nombre").max_length
+    for nombre in generos:
+        nombre = _truncate(_clean_text(nombre), genre_field_length)
+        if not nombre:
+            continue
+        genero = Genero.objects.filter(nombre__iexact=nombre).first()
+        if genero is None:
+            genero = Genero.objects.create(nombre=nombre)
+        media.generos.add(genero)
+
+    person_field_length = Persona._meta.get_field("nombre").max_length
+    for rol, nombres in ((Credito.Rol.DIRECTOR, directores), (Credito.Rol.ACTOR, actores)):
+        for nombre in nombres:
+            nombre = _truncate(_clean_text(nombre), person_field_length)
+            if not nombre:
+                continue
+            persona = Persona.objects.filter(nombre__iexact=nombre).first()
+            if persona is None:
+                persona = Persona.objects.create(nombre=nombre)
+            Credito.objects.get_or_create(media=media, persona=persona, rol=rol)
+
+
+def _remember_alias(record: NormalizedShowtime, normalized: str, media: Media) -> None:
+    TituloPendiente.objects.update_or_create(
+        titulo_normalizado=normalized,
+        cine_nombre=record["cine"],
+        ciudad=record["ciudad"],
+        defaults={
+            "titulo_original": record["titulo"],
+            "fuente_scraping": record["fuente_scraping"],
+            "estado": TituloPendiente.Estado.RESUELTO,
+            "media_asociada": media,
+        },
     )
 
 
@@ -469,20 +926,25 @@ def _delete_obsolete_future_showtimes(
 
 
 def _build_manual_matches() -> dict[str, Media]:
-    return {
-        pending.titulo_normalizado: pending.media_asociada
-        for pending in TituloPendiente.objects.filter(
-            estado=TituloPendiente.Estado.RESUELTO,
-            media_asociada__isnull=False,
-        ).select_related("media_asociada")
-    }
+    matches: dict[str, Media] = {}
+    for pending in TituloPendiente.objects.filter(
+        estado=TituloPendiente.Estado.RESUELTO,
+        media_asociada__isnull=False,
+    ).select_related("media_asociada"):
+        # También con la normalización actual, por si cambió desde que se guardó.
+        for key in (pending.titulo_normalizado, normalize_title(pending.titulo_original)):
+            if key:
+                matches.setdefault(key, pending.media_asociada)
+    return matches
 
 def _build_ignored_titles() -> set[tuple[str, str, str]]:
-    return set(
-        TituloPendiente.objects.filter(
-            estado=TituloPendiente.Estado.IGNORADO
-        ).values_list("titulo_normalizado", "cine_nombre", "ciudad")
-    )
+    ignored: set[tuple[str, str, str]] = set()
+    for normalized, original, cinema, city in TituloPendiente.objects.filter(
+        estado=TituloPendiente.Estado.IGNORADO
+    ).values_list("titulo_normalizado", "titulo_original", "cine_nombre", "ciudad"):
+        ignored.add((normalized, cinema, city))
+        ignored.add((normalize_title(original), cinema, city))
+    return ignored
 
 
 def _mark_now_showing(media_ids: set[int]) -> int:
