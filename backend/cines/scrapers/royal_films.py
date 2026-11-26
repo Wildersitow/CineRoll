@@ -6,15 +6,18 @@ from time import sleep
 from urllib.error import URLError
 from urllib.request import Request, urlopen
 
+from cines.metadata import MovieMetadata, extract_movie_metadata, merge_metadata
 from cines.services import (
     CarteleraData,
     NormalizedShowtime,
     ScraperError,
     normalize_showtimes,
+    normalize_title,
 )
 
 
 ROYAL_FILMS_API_URL = "https://cinemasroyalfilms.com/api"
+ROYAL_FILMS_BASE_URL = "https://cinemasroyalfilms.com/"
 REQUEST_PAUSE_SECONDS = 1.0
 USER_AGENT = "CineRoll cartelera scraper/0.1 (development project)"
 MAX_RESPONSE_BYTES = 8 * 1024 * 1024
@@ -131,7 +134,39 @@ def parse_cartelera_data(
         raise RoyalFilmsScraperError(
             f"No se pudo normalizar la cartelera de Royal Films: {exc}"
         ) from exc
-    return CarteleraData(funciones=normalized, proximos_estrenos=[])
+    return CarteleraData(
+        funciones=normalized,
+        proximos_estrenos=[],
+        peliculas=_parse_billboard_metadata(billboard),
+    )
+
+
+def _parse_billboard_metadata(payload: object) -> dict[str, MovieMetadata]:
+    """Póster, sinopsis, duración... de cada película de la cartelera."""
+    movies_metadata: dict[str, MovieMetadata] = {}
+    data = payload.get("data") if isinstance(payload, dict) else None
+    for entry in data if isinstance(data, list) else []:
+        movie = entry.get("pelicula") if isinstance(entry, dict) else None
+        if not isinstance(movie, dict):
+            continue
+        # Algunos datos (como el género) pueden venir fuera del objeto película.
+        extra = {key: value for key, value in entry.items() if key != "pelicula"}
+        metadata = merge_metadata(
+            extract_movie_metadata(movie, ROYAL_FILMS_BASE_URL),
+            extract_movie_metadata(extra, ROYAL_FILMS_BASE_URL),
+        )
+        if not metadata:
+            continue
+        for field in (
+            "pelicula_titulo",
+            "pelicula_nombre_formato",
+            "pelicula_nombre_original",
+        ):
+            title = movie.get(field)
+            if isinstance(title, str) and normalize_title(title):
+                key = normalize_title(title)
+                movies_metadata[key] = merge_metadata(movies_metadata.get(key), metadata)
+    return movies_metadata
 
 
 def _fetch_json(url: str, timeout: float) -> object:

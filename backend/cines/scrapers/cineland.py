@@ -8,15 +8,18 @@ from urllib.request import Request, urlopen
 from django.utils import timezone
 from decouple import config
 
+from cines.metadata import MovieMetadata, extract_movie_metadata, merge_metadata
 from cines.services import (
     CarteleraData,
     NormalizedShowtime,
     ScraperError,
     normalize_showtimes,
+    normalize_title,
 )
 
 
 CINELAND_CARTELERA_URL = "https://cineland.website/api_point_back.php"
+CINELAND_BASE_URL = "https://cineland.website/"
 CINELAND_CINEMA_NAME = "CineLand C.C. Mayales"
 CINELAND_CITY = "valledupar"
 DEFAULT_THEATER_CODE = "0051"
@@ -84,6 +87,7 @@ def scrape_cartelera_completa(
     sleep(REQUEST_PAUSE_SECONDS)
 
     showtimes: list[dict[str, object]] = []
+    movies_metadata: dict[str, MovieMetadata] = {}
     for day_index in range(days):
         request_date = first_day + timedelta(days=day_index)
         parsed_day = _fetch_day(
@@ -95,6 +99,8 @@ def scrape_cartelera_completa(
             timeout=timeout,
         )
         showtimes.extend(parsed_day.funciones)
+        for key, metadata in parsed_day.peliculas.items():
+            movies_metadata[key] = merge_metadata(movies_metadata.get(key), metadata)
         if day_index < days - 1:
             sleep(REQUEST_PAUSE_SECONDS)
 
@@ -104,7 +110,11 @@ def scrape_cartelera_completa(
         raise CinelandScraperError(
             f"No se pudo normalizar la cartelera de Cineland: {exc}"
         ) from exc
-    return CarteleraData(funciones=normalized, proximos_estrenos=[])
+    return CarteleraData(
+        funciones=normalized,
+        proximos_estrenos=[],
+        peliculas=movies_metadata,
+    )
 
 
 def _auth_settings(
@@ -285,12 +295,20 @@ def parse_cartelera_data(
         )
 
     records: list[dict[str, object]] = []
+    movies_metadata: dict[str, MovieMetadata] = {}
     for movie in movies:
         if not isinstance(movie, dict):
             raise CinelandScraperError("Cineland devolvió una película inválida.")
         original_title = _required_text(
             movie, "nombre_pelicula_original", "película"
         )
+        metadata = extract_movie_metadata(
+            {key: value for key, value in movie.items() if key != "fechas"},
+            CINELAND_BASE_URL,
+        )
+        if metadata and normalize_title(original_title):
+            key = normalize_title(original_title)
+            movies_metadata[key] = merge_metadata(movies_metadata.get(key), metadata)
         dates = _required_list(movie, "fechas", original_title)
 
         for date_record in dates:
@@ -359,7 +377,11 @@ def parse_cartelera_data(
         raise CinelandScraperError(
             f"No se pudo normalizar la cartelera de Cineland: {exc}"
         ) from exc
-    return CarteleraData(funciones=normalized, proximos_estrenos=[])
+    return CarteleraData(
+        funciones=normalized,
+        proximos_estrenos=[],
+        peliculas=movies_metadata,
+    )
 
 
 def _required_list(record: Mapping[str, object], field: str, context: str) -> list[object]:

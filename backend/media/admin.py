@@ -11,8 +11,15 @@ class CreditoInline(admin.TabularInline):
 
 @admin.register(Media)
 class MediaAdmin(admin.ModelAdmin):
-	list_display = ("titulo", "titulo_original", "tipo", "estado", "fecha_estreno")
-	list_filter = ("tipo", "estado", "generos")
+	list_display = (
+		"titulo",
+		"titulo_original",
+		"tipo",
+		"estado",
+		"fecha_estreno",
+		"creado_automaticamente",
+	)
+	list_filter = ("tipo", "estado", "creado_automaticamente", "generos")
 	search_fields = ("titulo", "titulo_original", "sinopsis")
 	filter_horizontal = ("generos",)
 	inlines = (CreditoInline,)

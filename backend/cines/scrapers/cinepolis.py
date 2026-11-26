@@ -6,17 +6,20 @@ from urllib.error import URLError
 from urllib.request import Request, urlopen
 from zoneinfo import ZoneInfo
 
+from cines.metadata import MovieMetadata, extract_movie_metadata, merge_metadata
 from cines.services import (
     CarteleraData,
     NormalizedShowtime,
     ScraperError,
     normalize_showtimes,
+    normalize_title,
 )
 
 
 CINEPOLIS_CARTELERA_URL = (
     "https://cinepolis.com.co/Cartelera.aspx/GetNowPlayingByCity"
 )
+CINEPOLIS_BASE_URL = "https://cinepolis.com.co/"
 USER_AGENT = "CineRoll cartelera scraper/0.1 (development project)"
 MAX_RESPONSE_BYTES = 8 * 1024 * 1024
 
@@ -99,6 +102,7 @@ def parse_cartelera_data(
 
     cinemas = _required_list(data, "Cinemas", "d")
     showtimes: list[dict[str, object]] = []
+    movies_metadata: dict[str, MovieMetadata] = {}
     for cinema in cinemas:
         if not isinstance(cinema, dict):
             raise CinepolisScraperError("Cinépolis devolvió un cine inválido.")
@@ -127,6 +131,7 @@ def parse_cartelera_data(
                     raise CinepolisScraperError(
                         "Cinépolis omitió el título de una película."
                     )
+                _add_metadata(movies_metadata, movie, title, original_title)
 
                 for movie_format in _required_list(movie, "Formats", title):
                     if not isinstance(movie_format, dict):
@@ -179,7 +184,28 @@ def parse_cartelera_data(
         raise CinepolisScraperError(
             f"No se pudo normalizar la cartelera de Cinépolis: {exc}"
         ) from exc
-    return CarteleraData(funciones=normalized, proximos_estrenos=[])
+    return CarteleraData(
+        funciones=normalized,
+        proximos_estrenos=[],
+        peliculas=movies_metadata,
+    )
+
+
+def _add_metadata(
+    movies_metadata: dict[str, MovieMetadata],
+    movie: Mapping[str, object],
+    *titles: object,
+) -> None:
+    metadata = extract_movie_metadata(
+        {key: value for key, value in movie.items() if key != "Formats"},
+        CINEPOLIS_BASE_URL,
+    )
+    if not metadata:
+        return
+    for title in titles:
+        if isinstance(title, str) and normalize_title(title):
+            key = normalize_title(title)
+            movies_metadata[key] = merge_metadata(movies_metadata.get(key), metadata)
 
 
 def _required_list(

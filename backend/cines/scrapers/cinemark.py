@@ -4,16 +4,19 @@ from datetime import date
 from urllib.error import URLError
 from urllib.request import Request, urlopen
 
+from cines.metadata import MovieMetadata, extract_movie_metadata, merge_metadata
 from cines.services import (
     CarteleraData,
     NormalizedShowtime,
     ScraperError,
     UpcomingRelease,
     normalize_showtimes,
+    normalize_title,
 )
 
 
 CINEMARK_CARTELERA_URL = "https://www.cinemark.com.co/cartelera"
+CINEMARK_BASE_URL = "https://www.cinemark.com.co/"
 USER_AGENT = "CineRoll cartelera scraper/0.1 (development project)"
 MAX_RESPONSE_BYTES = 8 * 1024 * 1024
 
@@ -84,7 +87,28 @@ def parse_cartelera_data(
     return CarteleraData(
         funciones=_parse_showtimes(page_props, city_slug, source_url),
         proximos_estrenos=_parse_upcoming_releases(page_props, source_url),
+        peliculas=_parse_movie_metadata(page_props),
     )
+
+
+def _parse_movie_metadata(page_props: dict[str, object]) -> dict[str, MovieMetadata]:
+    """Póster, sinopsis, duración... de cada película, por título normalizado."""
+    movies_metadata: dict[str, MovieMetadata] = {}
+    for section in ("PremieresBillboard", "Presales", "UpcomingReleases"):
+        movies = page_props.get(section, [])
+        if not isinstance(movies, list):
+            continue
+        for movie in movies:
+            if not isinstance(movie, dict):
+                continue
+            metadata = extract_movie_metadata(movie, CINEMARK_BASE_URL)
+            if not metadata:
+                continue
+            for title in (movie.get("TitleAlt"), movie.get("Title")):
+                if isinstance(title, str) and normalize_title(title):
+                    key = normalize_title(title)
+                    movies_metadata[key] = merge_metadata(movies_metadata.get(key), metadata)
+    return movies_metadata
 
 
 def _extract_page_props(html: str, city_slug: str) -> dict[str, object]:

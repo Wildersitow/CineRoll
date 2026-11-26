@@ -1,4 +1,5 @@
 import { useEffect, useId, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { motion, useReducedMotion } from 'motion/react'
 import { TrashIcon, XIcon } from '@phosphor-icons/react'
 import { borrarResena, crearResena, editarResena } from '../services/api'
@@ -11,6 +12,10 @@ const MAX_TEXTO = 5000
 /**
  * Ventana para registrar y reseñar un título, inspirada en el "I watched…"
  * de Letterboxd: póster, texto, estrellas y me gusta en un solo lugar.
+ *
+ * Se monta con un portal en <body>: si se quedara dentro del panel lateral de
+ * la ficha, el backdrop-filter de ese panel convierte el position:fixed del
+ * fondo en "relativo al panel" y la ventana sale aplastada en esa columna.
  */
 export default function ReviewModal({ media, own, scale, initialScore, viendo, liked, likeBusy, burst, onLike, onClose, onSaved, onDeleted }) {
   const [score, setScore] = useState(initialScore || own?.puntuacion || 0)
@@ -61,7 +66,7 @@ export default function ReviewModal({ media, own, scale, initialScore, viendo, l
 
   const year = media.fecha_estreno?.slice(0, 4)
 
-  return (
+  return createPortal(
     <motion.div
       className="review-modal-backdrop"
       onPointerDown={(event) => event.target === event.currentTarget && onClose()}
@@ -140,6 +145,7 @@ export default function ReviewModal({ media, own, scale, initialScore, viendo, l
           </button>
         </footer>
       </motion.form>
-    </motion.div>
+    </motion.div>,
+    document.body,
   )
 }
